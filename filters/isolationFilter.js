@@ -94,7 +94,9 @@ class IsolationGridOverlay {
       const d = star.Distance_from_the_Sun;
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
-    this.cubesData.forEach(cell => computeCellDistances(cell, extendedStars));
+    this.cubesData.forEach(cell => {
+      computeCellDistances(cell, extendedStars);
+    });
     this.computeAdjacentLines();
   }
 
@@ -152,8 +154,8 @@ class IsolationGridOverlay {
     });
   }
 
-  // Updated update() method with safe DOM access
-  update(stars) {
+  // Updated update() method now accepts sceneTC and sceneGlobe to re-add new meshes.
+  update(stars, sceneTC, sceneGlobe) {
     // Safely obtain slider values: if not found, use defaults.
     const isolationSlider = document.getElementById('isolation-slider');
     const toleranceSlider = document.getElementById('isolation-tolerance-slider');
@@ -217,6 +219,17 @@ class IsolationGridOverlay {
         line.visible = false;
       }
     });
+
+    // Re‑add the new cell meshes to the scenes.
+    if (sceneTC && sceneGlobe) {
+      this.cubesData.forEach(cell => {
+        sceneTC.add(cell.tcMesh);
+        sceneGlobe.add(cell.globeMesh);
+      });
+      this.adjacentLines.forEach(obj => {
+        sceneGlobe.add(obj.line);
+      });
+    }
   }
 
   async assignConstellationsToCells() {
@@ -338,7 +351,7 @@ export function initIsolationFilter(minDistance, maxDistance, starArray, gridSiz
   return overlay;
 }
 
-export function updateIsolationFilter(starArray, overlay) {
+export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe) {
   if (!overlay) return;
-  overlay.update(starArray);
+  overlay.update(starArray, sceneTC, sceneGlobe);
 }
