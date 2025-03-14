@@ -1,5 +1,4 @@
-// /script.js
-
+// script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines } from './filters/connectionsFilter.js';
@@ -7,7 +6,7 @@ import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlob
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
-import { updateCloudsOverlay } from './filters/cloudsFilter.js';
+import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct import
 import { ThreeDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
@@ -149,9 +148,17 @@ async function buildAndApplyFilters() {
     enableConnections,
     enableIsolationFilter,
     enableDensityFilter,
+    isolation,
+    isolationTolerance,
+    densityThresholdStars,
+    enableIsolationLabeling,
+    enableDensityLabeling,
     minDistance,
     maxDistance,
-    selectedDustClouds
+    isolationGridSize,
+    densityGridSize,
+    showClouds,
+    dustCloudSelections
   } = filters;
 
   currentFilteredStars = filteredStars;
@@ -190,9 +197,9 @@ async function buildAndApplyFilters() {
   }
 
   // --- Dust Clouds Overlay ---
-  if (filters.showClouds) {
-    // Map the selected dust cloud files to their full paths (assumes they are in the data/ folder)
-    const cloudDataFiles = selectedDustClouds.map(file => 'data/' + file);
+  if (showClouds) {
+    // Build an array of file paths based on the checked dust cloud selections.
+    const cloudDataFiles = dustCloudSelections.map(id => `data/${id}.json`);
     // Update clouds overlay for both maps.
     updateCloudsOverlay(currentFilteredStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
     updateCloudsOverlay(currentGlobeFilteredStars, globeMap.scene, 'Globe', cloudDataFiles);
