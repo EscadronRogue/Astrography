@@ -34,7 +34,7 @@ export async function setupFilterUI(allStars) {
       legend.classList.toggle('active');
       const isActive = legend.classList.contains('active');
       legend.setAttribute('aria-expanded', isActive);
-      fc.style.maxHeight = isActive ? fc.scrollHeight + 'px' : '0px';
+      if (fc) fc.style.maxHeight = isActive ? fc.scrollHeight + 'px' : '0px';
     });
   });
   addConstellationsFieldset();
