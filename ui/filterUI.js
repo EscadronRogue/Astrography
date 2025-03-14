@@ -191,5 +191,3 @@ function addCloudsFieldset() {
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
-
-export { initFilterUI };
