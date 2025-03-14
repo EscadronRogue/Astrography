@@ -17,9 +17,9 @@ async function loadCloudData(cloudFileUrl) {
 
 /**
  * Creates a cloud overlay mesh from the cloud data and the provided star list.
- * It uses all stars in the list whose names match those in the cloud file.
+ * It uses all stars in the list (up to 100LY) whose names match those in the cloud file.
  * @param {Array} cloudData - Array of star objects from the cloud file.
- * @param {Array} starList - Array of star objects (all stars, ignoring distance filtering).
+ * @param {Array} starList - Array of star objects (all stars, ignoring distance filter).
  * @param {string} mapType - Either 'TrueCoordinates' or 'Globe'.
  * @param {THREE.Color} cloudColor - Unique color for this cloud.
  * @returns {THREE.Mesh|null} - A mesh representing the cloud (concave hull), or null if not enough points.
@@ -59,7 +59,7 @@ export async function createCloudOverlay(cloudData, starList, mapType, cloudColo
   // Build a concave hull from the positions.
   let geometry = new ConcaveGeometry(positions);
 
-  // Create a semi‑transparent material with the unique cloud color.
+  // Create a semi-transparent material with the unique cloud color.
   const material = new THREE.MeshBasicMaterial({
     color: cloudColor,
     opacity: 0.05,
@@ -118,13 +118,19 @@ function uniqueColorFromName(name) {
 /**
  * Updates the cloud overlays.
  * For each checked cloud file, it loads the cloud data and creates a concave overlay
- * using the complete star list (ignoring the distance filter) and a unique color.
+ * using the complete star list restricted to stars up to 100LY, and a unique color.
  * @param {Array} starList - Complete array of star objects.
  * @param {THREE.Scene} scene - The scene to add the cloud overlays.
  * @param {string} mapType - 'TrueCoordinates' or 'Globe'.
  * @param {Array} cloudDataFiles - Array of file URLs for cloud data.
  */
 export async function updateCloudsOverlay(starList, scene, mapType, cloudDataFiles) {
+  // Only consider stars with a distance of 100LY or less.
+  const starsWithin100 = starList.filter(star => {
+    const d = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
+    return d <= 100;
+  });
+
   if (!scene.userData.cloudOverlays) {
     scene.userData.cloudOverlays = [];
   } else {
@@ -136,7 +142,7 @@ export async function updateCloudsOverlay(starList, scene, mapType, cloudDataFil
       const cloudData = await loadCloudData(fileUrl);
       const cloudName = getCloudNameFromFileUrl(fileUrl);
       const cloudColor = uniqueColorFromName(cloudName);
-      const overlay = await createCloudOverlay(cloudData, starList, mapType, cloudColor);
+      const overlay = await createCloudOverlay(cloudData, starsWithin100, mapType, cloudColor);
       if (overlay) {
         scene.add(overlay);
         scene.userData.cloudOverlays.push(overlay);
