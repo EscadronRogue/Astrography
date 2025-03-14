@@ -151,39 +151,38 @@ function addCloudsFieldset() {
     }
   });
   
-  // List of dust cloud files and display labels.
-  const dustCloudFiles = [
-    { file: 'Aquila_cloud_data.json', label: 'Aquila' },
-    { file: 'Auriga_cloud_data.json', label: 'Auriga' },
-    { file: 'Blue_cloud_data.json', label: 'Blue Cloud' },
-    { file: 'Ceti_cloud_data.json', label: 'Ceti' },
-    { file: 'Dorado_cloud_data.json', label: 'Dorado' },
-    { file: 'Eridani_cloud_data.json', label: 'Eridani' },
-    { file: 'Galactic_cloud_data.json', label: 'Galactic' },
-    { file: 'Gemini_cloud_data.json', label: 'Gemini' },
-    { file: 'Hyades_cloud_data.json', label: 'Hyades' },
-    { file: 'Leo_cloud_data.json', label: 'Leo' },
-    { file: 'Local_interstellar_cloud.json', label: 'Local Interstellar' },
-    { file: 'Microscopi_cloud_data.json', label: 'Microscopi' },
-    { file: 'North_Galactic_Pole_cloud_data.json', label: 'North Galactic Pole' },
-    { file: 'Ophiucus_cloud_data.json', label: 'Ophiucus' },
-    { file: 'Vela_cloud_data.json', label: 'Vela' }
+  // List of dust clouds with unique id and display name.
+  const dustClouds = [
+    { id: "Aquila_cloud_data", display: "Aquila" },
+    { id: "Auriga_cloud_data", display: "Auriga" },
+    { id: "Blue_cloud_data", display: "Blue" },
+    { id: "Ceti_cloud_data", display: "Ceti" },
+    { id: "Dorado_cloud_data", display: "Dorado" },
+    { id: "Eridani_cloud_data", display: "Eridani" },
+    { id: "Galactic_cloud_data", display: "Galactic" },
+    { id: "Gemini_cloud_data", display: "Gemini" },
+    { id: "Hyades_cloud_data", display: "Hyades" },
+    { id: "Leo_cloud_data", display: "Leo" },
+    { id: "Local_interstellar_cloud", display: "Local Interstellar" },
+    { id: "Microscopi_cloud_data", display: "Microscopi" },
+    { id: "North_Galactic_Pole_cloud_data", display: "North Galactic Pole" },
+    { id: "Ophiucus_cloud_data", display: "Ophiucus" },
+    { id: "Vela_cloud_data", display: "Vela" }
   ];
-
-  // Create a checkbox for each dust cloud.
-  dustCloudFiles.forEach(cloud => {
+  
+  // Create a checkbox for each dust cloud (all off by default)
+  dustClouds.forEach(cloud => {
     const cloudDiv = document.createElement('div');
     cloudDiv.classList.add('filter-item');
     const cloudChk = document.createElement('input');
     cloudChk.type = 'checkbox';
-    cloudChk.id = `dust-cloud-${cloud.file}`;
+    cloudChk.id = `dust-cloud-${cloud.id}`;
     cloudChk.name = 'dust-cloud';
-    cloudChk.value = cloud.file;
-    // Off by default
+    cloudChk.value = cloud.id;
     cloudChk.checked = false;
     const cloudLbl = document.createElement('label');
-    cloudLbl.htmlFor = cloudChk.id;
-    cloudLbl.textContent = cloud.label;
+    cloudLbl.htmlFor = `dust-cloud-${cloud.id}`;
+    cloudLbl.textContent = cloud.display;
     cloudDiv.appendChild(cloudChk);
     cloudDiv.appendChild(cloudLbl);
     contentDiv.appendChild(cloudDiv);
@@ -192,3 +191,5 @@ function addCloudsFieldset() {
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
+
+export { initFilterUI };
