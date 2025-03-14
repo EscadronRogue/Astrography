@@ -56,7 +56,7 @@ export function initFilterUI() {
     isolationGridSlider.value = this.value;
   });
 
-  // Density Filter UI controls – now only the Subdivision Threshold control.
+  // Density Filter UI controls.
   const enableDensityChk = document.getElementById('enable-density-filter');
   const densitySubdivisionSlider = document.getElementById('density-subdivision-percent-slider');
   const densitySubdivisionNumber = document.getElementById('density-subdivision-percent-number');
@@ -131,7 +131,7 @@ function addCloudsFieldset() {
   legend.textContent = 'Dust Clouds';
   fs.appendChild(legend);
   
-  // Create content container similar to other filter categories.
+  // Create a content container similar to other filter categories.
   const contentDiv = document.createElement('div');
   contentDiv.classList.add('filter-content');
   contentDiv.style.maxHeight = '0px';
@@ -179,7 +179,7 @@ function addCloudsFieldset() {
     cloudChk.id = 'dust-cloud-' + cloud.name.replace(/\s+/g, '-').toLowerCase();
     cloudChk.name = 'dust-clouds'; // All checkboxes share this name.
     cloudChk.value = cloud.file;
-    cloudChk.checked = false; // All off by default.
+    cloudChk.checked = false; // Off by default.
     const cloudLbl = document.createElement('label');
     cloudLbl.htmlFor = cloudChk.id;
     cloudLbl.textContent = cloud.name;
