@@ -151,42 +151,19 @@ function addCloudsFieldset() {
     }
   });
   
-  // List of dust clouds with unique id and display name.
-  const dustClouds = [
-    { id: "Aquila_cloud_data", display: "Aquila" },
-    { id: "Auriga_cloud_data", display: "Auriga" },
-    { id: "Blue_cloud_data", display: "Blue" },
-    { id: "Ceti_cloud_data", display: "Ceti" },
-    { id: "Dorado_cloud_data", display: "Dorado" },
-    { id: "Eridani_cloud_data", display: "Eridani" },
-    { id: "Galactic_cloud_data", display: "Galactic" },
-    { id: "Gemini_cloud_data", display: "Gemini" },
-    { id: "Hyades_cloud_data", display: "Hyades" },
-    { id: "Leo_cloud_data", display: "Leo" },
-    { id: "Local_interstellar_cloud", display: "Local Interstellar" },
-    { id: "Microscopi_cloud_data", display: "Microscopi" },
-    { id: "North_Galactic_Pole_cloud_data", display: "North Galactic Pole" },
-    { id: "Ophiucus_cloud_data", display: "Ophiucus" },
-    { id: "Vela_cloud_data", display: "Vela" }
-  ];
-  
-  // Create a checkbox for each dust cloud (all off by default)
-  dustClouds.forEach(cloud => {
-    const cloudDiv = document.createElement('div');
-    cloudDiv.classList.add('filter-item');
-    const cloudChk = document.createElement('input');
-    cloudChk.type = 'checkbox';
-    cloudChk.id = `dust-cloud-${cloud.id}`;
-    cloudChk.name = 'dust-cloud';
-    cloudChk.value = cloud.id;
-    cloudChk.checked = false;
-    const cloudLbl = document.createElement('label');
-    cloudLbl.htmlFor = `dust-cloud-${cloud.id}`;
-    cloudLbl.textContent = cloud.display;
-    cloudDiv.appendChild(cloudChk);
-    cloudDiv.appendChild(cloudLbl);
-    contentDiv.appendChild(cloudDiv);
-  });
+  const cloudDiv = document.createElement('div');
+  cloudDiv.classList.add('filter-item');
+  const cloudChk = document.createElement('input');
+  cloudChk.type = 'checkbox';
+  cloudChk.id = 'enable-clouds';
+  cloudChk.name = 'enable-clouds';
+  cloudChk.checked = false; // off by default
+  const cloudLbl = document.createElement('label');
+  cloudLbl.htmlFor = 'enable-clouds';
+  cloudLbl.textContent = 'Show Dust Clouds';
+  cloudDiv.appendChild(cloudChk);
+  cloudDiv.appendChild(cloudLbl);
+  contentDiv.appendChild(cloudDiv);
   
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
