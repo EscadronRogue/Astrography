@@ -159,8 +159,7 @@ export function applyFilters(allStars) {
         maxDistance: 20,
         isolationGridSize: 0,
         densityGridSize: 0,
-        showClouds: false,
-        dustCloudSelections: []
+        showClouds: false
       };
     }
   }
@@ -187,8 +186,7 @@ export function applyFilters(allStars) {
     maxDistance: formData.get('max-distance'),
     isolationGridSize: parseFloat(formData.get('isolation-grid-size')) || 0,
     densityGridSize: parseFloat(formData.get('density-grid-size')) || 0,
-    dustCloudSelections: formData.getAll('dust-cloud'),
-    showClouds: formData.getAll('dust-cloud').length > 0
+    showClouds: (formData.get('enable-clouds') !== null)
   };
 
   let filteredStars = applyDistanceFilter(allStars, filters);
@@ -236,8 +234,7 @@ export function applyFilters(allStars) {
     maxDistance: filters.maxDistance,
     isolationGridSize: filters.isolationGridSize,
     densityGridSize: filters.densityGridSize,
-    showClouds: filters.showClouds,
-    dustCloudSelections: filters.dustCloudSelections
+    showClouds: filters.showClouds
   };
 }
 
