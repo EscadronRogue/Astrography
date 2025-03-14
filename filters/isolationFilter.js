@@ -38,6 +38,7 @@ class IsolationGridOverlay {
           // Only include cells within the specified distance range.
           if (distFromCenter < this.minDistance || distFromCenter > this.maxDistance) continue;
           
+          // Create the TrueCoordinates cell mesh.
           const geometry = new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize);
           const material = new THREE.MeshBasicMaterial({
             color: 0x0000ff, // Blue color for Isolation Filter
@@ -48,9 +49,7 @@ class IsolationGridOverlay {
           const cubeTC = new THREE.Mesh(geometry, material);
           cubeTC.position.copy(posTC);
 
-          const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
-          const material2 = material.clone();
-          const squareGlobe = new THREE.Mesh(planeGeom, material2);
+          // Compute the projected position on the sphere (Globe) from posTC.
           let projectedPos;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
@@ -64,13 +63,11 @@ class IsolationGridOverlay {
               -radius * Math.cos(dec) * Math.sin(ra)
             );
           }
-          squareGlobe.position.copy(projectedPos);
-          const normal = projectedPos.clone().normalize();
-          squareGlobe.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
 
+          // Build the cell object. Note: No globeMesh is created.
           const cell = {
             tcMesh: cubeTC,
-            globeMesh: squareGlobe,
+            projectedPos, // Use this projected position in place of a globeMesh
             tcPos: posTC,
             grid: {
               ix: Math.round(x / this.gridSize),
@@ -80,6 +77,7 @@ class IsolationGridOverlay {
             active: false
           };
 
+          // Also compute RA/Dec for potential labeling.
           const cellRa = ((posTC.x + halfExt) / (2 * halfExt)) * 360;
           const cellDec = ((posTC.y + halfExt) / (2 * halfExt)) * 180 - 90;
           cell.ra = cellRa;
@@ -123,11 +121,12 @@ class IsolationGridOverlay {
         const neighborKey = `${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`;
         if (cellMap.has(neighborKey)) {
           const neighbor = cellMap.get(neighborKey);
-          const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
+          // Use projectedPos for both cells.
+          const points = getGreatCirclePoints(cell.projectedPos, neighbor.projectedPos, 100, 16);
           const positions = [];
           const colors = [];
-          const c1 = cell.globeMesh.material.color;
-          const c2 = neighbor.globeMesh.material.color;
+          const c1 = cell.tcMesh.material.color;
+          const c2 = neighbor.tcMesh.material.color;
           for (let i = 0; i < points.length; i++) {
             positions.push(points[i].x, points[i].y, points[i].z);
             let t = i / (points.length - 1);
@@ -154,7 +153,8 @@ class IsolationGridOverlay {
     });
   }
 
-  // Updated update() method now accepts sceneTC and sceneGlobe to re-add new meshes.
+  // Updated update() method: it recalculates cell properties, updates each cell’s projectedPos,
+  // and then re-adds the TrueCoordinates cell meshes to sceneTC and the adjacent lines to sceneGlobe.
   update(stars, sceneTC, sceneGlobe) {
     // Safely obtain slider values: if not found, use defaults.
     const isolationSlider = document.getElementById('isolation-slider');
@@ -171,34 +171,46 @@ class IsolationGridOverlay {
       computeCellDistances(cell, extendedStars);
     });
 
-    // Update each cell's active state based on the isolation criteria.
+    // Update each cell's active state and update its projectedPos.
     this.cubesData.forEach(cell => {
       let isoDist = Infinity;
       if (cell.distances && cell.distances.length > toleranceVal) {
         isoDist = cell.distances[toleranceVal];
       }
-      // Show cell if the distance to the Nth nearest star is at least the isolation threshold.
       cell.active = (isoDist >= isolationVal);
       let ratio = cell.tcPos.length() / this.maxDistance;
       if (ratio > 1) ratio = 1;
       const alpha = THREE.MathUtils.lerp(0.1, 0.3, ratio);
       cell.tcMesh.visible = cell.active;
       cell.tcMesh.material.opacity = alpha;
-      cell.globeMesh.visible = cell.active;
-      cell.globeMesh.material.opacity = alpha;
-      const scale = THREE.MathUtils.lerp(20.0, 0.1, ratio);
-      cell.globeMesh.scale.set(scale, scale, 1);
+      // Recompute the projected position from the TrueCoordinates position.
+      const distFromCenter = cell.tcPos.length();
+      let newProj;
+      if (distFromCenter < 1e-6) {
+        newProj = new THREE.Vector3(0, 0, 0);
+      } else {
+        const ra = Math.atan2(-cell.tcPos.z, -cell.tcPos.x);
+        const dec = Math.asin(cell.tcPos.y / distFromCenter);
+        const radius = 100;
+        newProj = new THREE.Vector3(
+          -radius * Math.cos(dec) * Math.cos(ra),
+           radius * Math.sin(dec),
+          -radius * Math.cos(dec) * Math.sin(ra)
+        );
+      }
+      cell.projectedPos = newProj;
     });
 
-    // Update the adjacent lines.
+    // Update the adjacent lines using the updated projectedPos.
+    this.computeAdjacentLines();
     this.adjacentLines.forEach(obj => {
       const { line, cell1, cell2 } = obj;
-      if (cell1.globeMesh.visible && cell2.globeMesh.visible) {
-        const points = getGreatCirclePoints(cell1.globeMesh.position, cell2.globeMesh.position, 100, 16);
+      if (cell1.active && cell2.active) {
+        const points = getGreatCirclePoints(cell1.projectedPos, cell2.projectedPos, 100, 16);
         const positions = [];
         const colors = [];
-        const c1 = cell1.globeMesh.material.color;
-        const c2 = cell2.globeMesh.material.color;
+        const c1 = cell1.tcMesh.material.color;
+        const c2 = cell2.tcMesh.material.color;
         for (let i = 0; i < points.length; i++) {
           positions.push(points[i].x, points[i].y, points[i].z);
           let t = i / (points.length - 1);
@@ -212,7 +224,7 @@ class IsolationGridOverlay {
         line.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         line.geometry.attributes.position.needsUpdate = true;
         line.geometry.attributes.color.needsUpdate = true;
-        const avgScale = (cell1.globeMesh.scale.x + cell2.globeMesh.scale.x) / 2;
+        const avgScale = (cell1.tcMesh.scale.x + cell2.tcMesh.scale.x) / 2;
         line.material.linewidth = avgScale;
         line.visible = true;
       } else {
@@ -220,11 +232,11 @@ class IsolationGridOverlay {
       }
     });
 
-    // Re‑add the new cell meshes to the scenes.
+    // Re‑add the TrueCoordinates cell meshes to the TrueCoordinates scene
+    // and the adjacent lines to the Globe scene.
     if (sceneTC && sceneGlobe) {
       this.cubesData.forEach(cell => {
         sceneTC.add(cell.tcMesh);
-        sceneGlobe.add(cell.globeMesh);
       });
       this.adjacentLines.forEach(obj => {
         sceneGlobe.add(obj.line);
@@ -265,7 +277,7 @@ class IsolationGridOverlay {
     
     this.cubesData.forEach(cell => {
       if (!cell.active) return;
-      const cellPos = cell.globeMesh.position.clone();
+      const cellPos = cell.projectedPos.clone();
       let nearestBoundary = null;
       let minBoundaryDist = Infinity;
       boundaries.forEach(boundary => {
@@ -355,3 +367,5 @@ export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe) {
   if (!overlay) return;
   overlay.update(starArray, sceneTC, sceneGlobe);
 }
+
+export { IsolationGridOverlay };
