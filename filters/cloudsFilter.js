@@ -1,32 +1,36 @@
 // File: /filters/cloudsFilter.js
+
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { ConcaveGeometry } from './ConcaveGeometry.js';
 
 /**
- * Loads a cloud data file (JSON) from the provided URL.
- * @param {string} cloudFileUrl - URL to the cloud JSON file.
- * @returns {Promise<Array>} - Promise resolving to an array of cloud star objects.
+ * Loads cloud data from a JSON file.
+ * @param {string} url - The URL of the cloud data file.
+ * @returns {Promise<Object[]>} - A promise that resolves to the cloud data array.
  */
-async function loadCloudData(cloudFileUrl) {
-  const response = await fetch(cloudFileUrl);
+export async function loadCloudData(url) {
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to load cloud data from ${cloudFileUrl}`);
+    throw new Error(`Failed to load cloud data from ${url}`);
   }
-  return await response.json();
+  const data = await response.json();
+  return data;
 }
 
 /**
- * Creates a cloud overlay mesh from the cloud data and the currently plotted stars.
- * @param {Array} cloudData - Array of star objects from the cloud file.
- * @param {Array} plottedStars - Array of star objects currently visible/plotted.
+ * Creates a cloud overlay mesh from cloud data and plotted stars.
+ * It builds a concave hull from the star positions that match the cloud data.
+ * @param {Object[]} cloudData - The cloud data loaded from file.
+ * @param {Object[]} plottedStars - The array of star objects currently plotted.
  * @param {string} mapType - Either 'TrueCoordinates' or 'Globe'.
- * @returns {THREE.Mesh|null} - A mesh representing the cloud (concave hull), or null if not enough points.
+ * @returns {THREE.Mesh|null} - The resulting mesh overlay or null if not enough points.
  */
 export async function createCloudOverlay(cloudData, plottedStars, mapType) {
   const positions = [];
-  // Get a set of star names from the cloud file.
-  const cloudNames = new Set(cloudData.map(d => d['Star Name']));
-  // Look up each star from the plotted stars (using the common name)
+  // Assume each cloud object has a 'name' property.
+  const cloudNames = new Set(cloudData.map(cloud => cloud.name));
+  
+  // Collect positions from plotted stars that belong to the cloud.
   plottedStars.forEach(star => {
     if (cloudNames.has(star.Common_name_of_the_star)) {
       if (mapType === 'TrueCoordinates') {
@@ -36,63 +40,51 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
       }
     }
   });
-
-  // Identify outlier stars that should be included in the hull
-  const outlierStars = plottedStars.filter(star => {
-    return !cloudNames.has(star.Common_name_of_the_star) && isNearCloudArea(star, positions, mapType);
-  });
-
-  // Add outlier stars to the positions array
-  outlierStars.forEach(star => {
-    if (mapType === 'TrueCoordinates') {
-      if (star.truePosition) positions.push(star.truePosition);
-    } else {
-      if (star.spherePosition) positions.push(star.spherePosition);
-    }
-  });
-
-  // Need at least three points to form a polygon.
-  if (positions.length < 3) return null;
-
-  // Build a concave hull from the positions.
-  let geometry = new ConcaveGeometry(positions);
-
-  // Create a semi-transparent material; you can adjust the color per cloud if desired.
+  
+  // Need at least 3 points to form a valid shape.
+  if (positions.length < 3) {
+    return null;
+  }
+  
+  // Create the concave hull geometry from the positions.
+  const geometry = new ConcaveGeometry(positions);
+  
+  // Create a material with a fixed opacity that does not accumulate with multiple layers.
   const material = new THREE.MeshBasicMaterial({
     color: 0xff6600,
-    opacity: 0.05,
+    opacity: 0.1, // desired per-layer opacity
     transparent: true,
     side: THREE.DoubleSide,
-    depthWrite: false
+    depthWrite: false,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.MaxEquation,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneFactor
   });
+  
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1;
   return mesh;
 }
 
 /**
- * Determines if a star is near the cloud area based on some criteria.
- * @param {Object} star - The star object.
- * @param {Array} positions - Array of positions defining the cloud area.
+ * Updates the cloud overlays on the scene.
+ * Removes any previous overlays and loads new ones from the provided cloud data files.
+ * @param {Object[]} plottedStars - Array of plotted star objects.
+ * @param {THREE.Scene} scene - The Three.js scene to add overlays to.
  * @param {string} mapType - Either 'TrueCoordinates' or 'Globe'.
- * @returns {boolean} - True if the star is near the cloud area, false otherwise.
+ * @param {string[]} cloudDataFiles - Array of URLs for cloud data JSON files.
  */
-function isNearCloudArea(star, positions, mapType) {
-  const thresholdDistance = 5; // Define an appropriate threshold distance
-  if (mapType === 'TrueCoordinates') {
-    return positions.some(pos => star.truePosition && star.truePosition.distanceTo(pos) < thresholdDistance);
-  } else {
-    return positions.some(pos => star.spherePosition && star.spherePosition.distanceTo(pos) < thresholdDistance);
-  }
-}
-
 export async function updateCloudsOverlay(plottedStars, scene, mapType, cloudDataFiles) {
-  if (!scene.userData.cloudOverlays) {
+  // Remove any existing cloud overlays.
+  if (scene.userData.cloudOverlays) {
+    scene.userData.cloudOverlays.forEach(overlay => scene.remove(overlay));
     scene.userData.cloudOverlays = [];
   } else {
-    scene.userData.cloudOverlays.forEach(mesh => scene.remove(mesh));
     scene.userData.cloudOverlays = [];
   }
+  
+  // Load each cloud data file, create the overlay, and add it to the scene.
   for (const fileUrl of cloudDataFiles) {
     try {
       const cloudData = await loadCloudData(fileUrl);
@@ -101,8 +93,8 @@ export async function updateCloudsOverlay(plottedStars, scene, mapType, cloudDat
         scene.add(overlay);
         scene.userData.cloudOverlays.push(overlay);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(`Error processing cloud data from ${fileUrl}:`, error);
     }
   }
 }
