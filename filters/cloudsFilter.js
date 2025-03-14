@@ -23,45 +23,49 @@ async function loadCloudData(cloudFileUrl) {
  * @returns {THREE.Mesh|null} - A mesh representing the cloud overlay, or null if not enough points.
  */
 export async function createCloudOverlay(cloudData, plottedStars, mapType) {
-  // Build a set of cloud star names with trimmed values.
+  // Build a set of cloud star names (trimmed)
   const cloudNames = new Set(cloudData.map(d => d['Star Name'] && d['Star Name'].trim()));
   
-  // Filter plotted stars that belong to this cloud (also trimming the star name).
+  // Filter plotted stars whose common name (trimmed) is in the cloud set.
   const matchingStars = plottedStars.filter(
     star => star.Common_name_of_the_star && cloudNames.has(star.Common_name_of_the_star.trim())
   );
   
   console.log("Creating cloud overlay:");
-  console.log("  Cloud file contains star names:", cloudNames);
+  console.log("  Cloud file star names:", cloudNames);
   console.log("  Matching plotted stars:", matchingStars);
   
-  // If there are fewer than three matching stars, we cannot build an overlay.
   if (matchingStars.length < 3) {
-    console.warn('Not enough matching stars for cloud overlay. Needed at least 3, got:', matchingStars.length);
+    console.warn(`Not enough matching stars for overlay (found ${matchingStars.length}, need at least 3).`);
     return null;
   }
   
-  // Get positions for the matching stars.
+  // Get positions from the matching stars.
   const positions = matchingStars.map(star =>
     mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition
   );
   
-  // Build the concave hull geometry.
   let geometry;
   try {
     geometry = new ConcaveGeometry(positions);
+    if (!geometry.getAttribute('position') || geometry.getAttribute('position').count === 0) {
+      console.warn("ConcaveGeometry resulted in zero vertices.");
+      return null;
+    }
+    console.log("ConcaveGeometry vertex count:", geometry.getAttribute('position').count);
   } catch (e) {
-    console.error("ConcaveGeometry failed:", e);
+    console.error("Error generating ConcaveGeometry:", e);
     return null;
   }
   
-  // Create a material with a temporarily higher opacity for debugging.
+  // Create a semi-transparent material.
   const material = new THREE.MeshBasicMaterial({
     color: 0xff6600,
-    opacity: 0.2, // increased for debugging (originally 0.05)
+    opacity: 0.2, // temporarily higher opacity for testing
     transparent: true,
     side: THREE.DoubleSide,
-    depthWrite: false
+    depthWrite: false,
+    depthTest: false // disable depth testing for debug purposes
   });
   
   const mesh = new THREE.Mesh(geometry, material);
@@ -78,7 +82,7 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
  * @param {Array} cloudDataFiles - Array of file URLs for cloud data JSON files.
  */
 export async function updateCloudsOverlay(plottedStars, scene, mapType, cloudDataFiles) {
-  // Remove any previous cloud overlays.
+  // Remove previous overlays.
   if (scene.userData.cloudOverlays) {
     scene.userData.cloudOverlays.forEach(mesh => scene.remove(mesh));
   }
@@ -86,18 +90,18 @@ export async function updateCloudsOverlay(plottedStars, scene, mapType, cloudDat
   
   console.log("Updating clouds overlay with files:", cloudDataFiles);
   
-  // For each selected cloud file, load its data and create an overlay.
+  // Process each selected cloud file.
   for (const fileUrl of cloudDataFiles) {
     try {
       const cloudData = await loadCloudData(fileUrl);
-      console.log(`Loaded cloud data from ${fileUrl}`, cloudData);
+      console.log(`Loaded cloud data from ${fileUrl}:`, cloudData);
       const overlay = await createCloudOverlay(cloudData, plottedStars, mapType);
       if (overlay) {
         scene.add(overlay);
         scene.userData.cloudOverlays.push(overlay);
         console.log(`Overlay from ${fileUrl} added to scene.`);
       } else {
-        console.warn(`No overlay created from ${fileUrl}`);
+        console.warn(`No overlay created from ${fileUrl}.`);
       }
     } catch (e) {
       console.error(`Error processing ${fileUrl}:`, e);
