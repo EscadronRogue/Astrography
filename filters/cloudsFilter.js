@@ -52,7 +52,7 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
   // Create a material with a fixed opacity that does not accumulate with multiple layers.
   const material = new THREE.MeshBasicMaterial({
     color: 0xff6600,
-    opacity: 0.1, // desired per-layer opacity
+    opacity: 0.5, // desired per-layer opacity
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
