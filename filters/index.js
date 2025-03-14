@@ -17,6 +17,18 @@ import { initIsolationFilter, updateIsolationFilter } from './isolationFilter.js
 import { initDensityFilter, updateDensityFilter } from './densityFilter.js';
 
 let filterForm = null;
+let isolationOverlay = null;
+let densityOverlay = null;
+
+// Helper to compute a grid size from the isolationGridSize slider value.
+function computeIsolationGridSize(sliderValue) {
+  // Example: if sliderValue >= 0, use 2 + sliderValue; if negative, use 2 / (|sliderValue|+1)
+  if (sliderValue >= 0) {
+    return 2 + sliderValue;
+  } else {
+    return 2 / (Math.abs(sliderValue) + 1);
+  }
+}
 
 export async function setupFilterUI(allStars) {
   filterForm = document.getElementById('filters-form');
@@ -211,6 +223,98 @@ export function applyFilters(allStars) {
     constellationOverlay.forEach(mesh => {
       window.globeMap.scene.add(mesh);
     });
+  }
+
+  // --- Isolation Filter Handling ---
+  if (filters.enableIsolationFilter) {
+    // Compute the grid size from the slider value.
+    const gridSize = computeIsolationGridSize(filters.isolationGridSize);
+    // Reinitialize overlay if needed.
+    if (
+      !isolationOverlay ||
+      isolationOverlay.minDistance !== parseFloat(filters.minDistance) ||
+      isolationOverlay.maxDistance !== parseFloat(filters.maxDistance) ||
+      isolationOverlay.gridSize !== gridSize
+    ) {
+      // Remove any existing meshes.
+      if (isolationOverlay) {
+        isolationOverlay.cubesData.forEach(cell => {
+          if (window.trueCoordinatesMap.scene.children.includes(cell.tcMesh)) {
+            window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+          }
+          if (window.globeMap.scene.children.includes(cell.globeMesh)) {
+            window.globeMap.scene.remove(cell.globeMesh);
+          }
+        });
+        isolationOverlay.adjacentLines.forEach(obj => {
+          if (window.globeMap.scene.children.includes(obj.line)) {
+            window.globeMap.scene.remove(obj.line);
+          }
+        });
+      }
+      isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
+      // Add new meshes.
+      isolationOverlay.cubesData.forEach(cell => {
+        window.trueCoordinatesMap.scene.add(cell.tcMesh);
+        window.globeMap.scene.add(cell.globeMesh);
+      });
+      isolationOverlay.adjacentLines.forEach(obj => {
+        window.globeMap.scene.add(obj.line);
+      });
+    }
+    updateIsolationFilter(allStars, isolationOverlay, window.trueCoordinatesMap.scene, window.globeMap.scene);
+  } else {
+    if (isolationOverlay) {
+      isolationOverlay.cubesData.forEach(cell => {
+        window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        window.globeMap.scene.remove(cell.globeMesh);
+      });
+      isolationOverlay.adjacentLines.forEach(obj => {
+        window.globeMap.scene.remove(obj.line);
+      });
+      isolationOverlay = null;
+    }
+  }
+
+  // --- Density Filter Handling ---
+  if (filters.enableDensityFilter) {
+    // For density, assume grid subdivision threshold is taken from the slider.
+    const densityThreshold = filters.densityThresholdStars; // Already a number from slider
+    if (
+      !densityOverlay ||
+      densityOverlay.minDistance !== parseFloat(filters.minDistance) ||
+      densityOverlay.maxDistance !== parseFloat(filters.maxDistance) ||
+      densityOverlay.subdivisionThresholdPercent !== densityThreshold
+    ) {
+      if (densityOverlay) {
+        densityOverlay.cubesData.forEach(cell => {
+          window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+          window.globeMap.scene.remove(cell.globeMesh);
+        });
+        densityOverlay.adjacentLines.forEach(obj => {
+          window.globeMap.scene.remove(obj.line);
+        });
+      }
+      densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, densityThreshold);
+      densityOverlay.cubesData.forEach(cell => {
+        window.trueCoordinatesMap.scene.add(cell.tcMesh);
+      });
+      densityOverlay.adjacentLines.forEach(obj => {
+        window.globeMap.scene.add(obj.line);
+      });
+    }
+    updateDensityFilter(allStars, densityOverlay, window.trueCoordinatesMap.scene, window.globeMap.scene);
+  } else {
+    if (densityOverlay) {
+      densityOverlay.cubesData.forEach(cell => {
+        window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        window.globeMap.scene.remove(cell.globeMesh);
+      });
+      densityOverlay.adjacentLines.forEach(obj => {
+        window.globeMap.scene.remove(obj.line);
+      });
+      densityOverlay = null;
+    }
   }
 
   return {
