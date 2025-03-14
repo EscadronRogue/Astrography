@@ -130,27 +130,20 @@ function addCloudsFieldset() {
   legend.classList.add('collapsible');
   legend.textContent = 'Dust Clouds';
   fs.appendChild(legend);
-  
-  // Create content container without extra classes to avoid conflicts.
+
+  // Create content container (using the same classes as the Constellations fieldset)
   const contentDiv = document.createElement('div');
-  contentDiv.classList.add('filter-content');
+  contentDiv.classList.add('filter-content', 'scrollable-category');
   contentDiv.style.maxHeight = '0px';
-  contentDiv.style.overflow = 'hidden';
-  
+
   // Toggle open/closed state on legend click.
   legend.addEventListener('click', () => {
     legend.classList.toggle('active');
     const isActive = legend.classList.contains('active');
     legend.setAttribute('aria-expanded', isActive);
-    if (isActive) {
-      contentDiv.style.maxHeight = contentDiv.scrollHeight + "px";
-      contentDiv.style.overflow = 'visible';
-    } else {
-      contentDiv.style.maxHeight = "0px";
-      contentDiv.style.overflow = 'hidden';
-    }
+    contentDiv.style.maxHeight = isActive ? contentDiv.scrollHeight + "px" : "0px";
   });
-  
+
   // List of dust cloud files and display labels.
   const dustCloudFiles = [
     { file: 'Aquila_cloud_data.json', label: 'Aquila' },
@@ -188,7 +181,7 @@ function addCloudsFieldset() {
     cloudDiv.appendChild(cloudLbl);
     contentDiv.appendChild(cloudDiv);
   });
-  
+
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
