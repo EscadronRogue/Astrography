@@ -6,102 +6,106 @@ import {
 } from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 
 /**
- * ConcaveGeometry builds a geometry by iterating over each input point and,
- * for each point, identifying the three closest points in terms of real 3D distance.
- * It then creates a quadrilateral (which is triangulated into two triangles)
- * with the four corners being the original point and its three nearest neighbors.
+ * ConcaveGeometry builds a geometry by creating a quadrilateral for each star
+ * by finding its three nearest neighbors in 3D space.
  *
- * Note: This algorithm is designed for small point sets and produces overlapping quadrilaterals.
+ * For each star in the provided points list, the algorithm:
+ *   1. Finds the three closest neighbors (based on Euclidean distance).
+ *   2. Constructs a quadrilateral using the star and its three neighbors.
+ *   3. Orders the four vertices in a consistent (counterclockwise) order on their best‑fit plane.
+ *   4. Triangulates the quadrilateral into two triangles.
+ *   5. Combines all triangles into one BufferGeometry.
+ *
+ * Note: This approach may produce overlapping polygons if stars are close together.
+ * It is intended for visualizing cloud overlays without breaking established functionalities.
  */
 class ConcaveGeometry extends BufferGeometry {
 
-	constructor(points, alpha) {
+	constructor(points) {
 		super();
 		if (!points || points.length < 4) {
 			console.error("ConcaveGeometry: Need at least four points.");
 			return;
 		}
-
-		// This array will hold all vertex positions (each group of three numbers is one vertex).
 		const vertices = [];
-		// This array will hold the indices that define triangles.
 		const indices = [];
 
-		// For each point in the list, find the three closest neighbors.
+		// For each point, find its three nearest neighbors and form a quadrilateral.
 		for (let i = 0; i < points.length; i++) {
 			const p = points[i];
-			const neighbors = [];
-			// Compute distances from point p to all other points.
+			const distances = [];
 			for (let j = 0; j < points.length; j++) {
-				if (j === i) continue;
-				const q = points[j];
-				const d = p.distanceTo(q);
-				neighbors.push({ point: q, distance: d });
+				if (i === j) continue;
+				const d = p.distanceTo(points[j]);
+				distances.push({ index: j, distance: d });
 			}
-			// Sort neighbors by ascending distance.
-			neighbors.sort((a, b) => a.distance - b.distance);
+			distances.sort((a, b) => a.distance - b.distance);
+			if (distances.length < 3) continue;
+			// Get the indices of the three closest neighbors.
+			const neighborIndices = distances.slice(0, 3).map(obj => obj.index);
+			const quadPoints = [p, points[neighborIndices[0]], points[neighborIndices[1]], points[neighborIndices[2]]];
 
-			// If for some reason there are less than three neighbors, skip this point.
-			if (neighbors.length < 3) continue;
+			// Order the quadrilateral's vertices.
+			const orderedPoints = orderPoints(quadPoints);
 
-			// Gather the four points: the current point and its three nearest neighbors.
-			const quadPoints = [p, neighbors[0].point, neighbors[1].point, neighbors[2].point];
-
-			// Compute the centroid of the four points.
-			const centroid = new Vector3(0, 0, 0);
-			quadPoints.forEach(pt => centroid.add(pt));
-			centroid.divideScalar(quadPoints.length);
-
-			// Compute an approximate normal for the plane.
-			// Use the first three points to define the plane.
-			const vecA = new Vector3().subVectors(quadPoints[1], quadPoints[0]);
-			const vecB = new Vector3().subVectors(quadPoints[2], quadPoints[0]);
-			const normal = new Vector3().crossVectors(vecA, vecB).normalize();
-			if (normal.length() < 1e-6) {
-				normal.set(0, 0, 1);
-			}
-
-			// Establish a tangent basis for the plane.
-			// Use the vector from the current point to its nearest neighbor as the tangent.
-			let tangent = new Vector3().subVectors(quadPoints[1], p).normalize();
-			if (Math.abs(tangent.dot(normal)) > 0.99) {
-				// If tangent is nearly parallel to the normal, choose an arbitrary tangent.
-				tangent.set(1, 0, 0);
-			}
-			const bitangent = new Vector3().crossVectors(normal, tangent).normalize();
-
-			// Project each of the 4 points onto the plane and compute its angle relative to the centroid.
-			const ptsWithAngle = quadPoints.map(pt => {
-				const vec = new Vector3().subVectors(pt, centroid);
-				const x = vec.dot(tangent);
-				const y = vec.dot(bitangent);
-				const angle = Math.atan2(y, x);
-				return { pt, angle };
-			});
-
-			// Sort the points by angle in ascending order.
-			ptsWithAngle.sort((a, b) => a.angle - b.angle);
-			const sortedPoints = ptsWithAngle.map(item => item.pt);
-
-			// Store the current base index (number of vertices already added).
-			const baseIndex = vertices.length / 3;
-			// Add the sorted points to the vertices array.
-			sortedPoints.forEach(pt => {
+			// Add vertices for this quadrilateral.
+			const startIndex = vertices.length / 3;
+			orderedPoints.forEach(pt => {
 				vertices.push(pt.x, pt.y, pt.z);
 			});
 
-			// Triangulate the quadrilateral into two triangles:
-			// First triangle: (v0, v1, v2) and second triangle: (v0, v2, v3)
-			indices.push(baseIndex, baseIndex + 1, baseIndex + 2);
-			indices.push(baseIndex, baseIndex + 2, baseIndex + 3);
+			// Triangulate the quadrilateral: two triangles: (0,1,2) and (0,2,3)
+			indices.push(startIndex, startIndex + 1, startIndex + 2);
+			indices.push(startIndex, startIndex + 2, startIndex + 3);
 		}
 
-		// Set the attributes of the geometry.
+		if (vertices.length === 0) {
+			console.error("ConcaveGeometry: No valid quadrilaterals could be formed.");
+			return;
+		}
+
 		this.setAttribute('position', new Float32BufferAttribute(vertices, 3));
 		this.setIndex(indices);
 		this.computeVertexNormals();
 	}
+}
 
+/**
+ * Orders an array of points in a consistent counterclockwise order on the best-fit plane.
+ * @param {Vector3[]} pts - Array of THREE.Vector3 points (assumed to be 4).
+ * @returns {Vector3[]} - Ordered array of points.
+ */
+function orderPoints(pts) {
+	// Compute centroid.
+	const centroid = new Vector3(0, 0, 0);
+	pts.forEach(pt => {
+		centroid.add(pt);
+	});
+	centroid.divideScalar(pts.length);
+
+	// Compute a normal for the best-fit plane using the first two vectors.
+	const v1 = new Vector3().subVectors(pts[0], centroid);
+	const v2 = new Vector3().subVectors(pts[1], centroid);
+	const normal = new Vector3().crossVectors(v1, v2).normalize();
+
+	// Create basis vectors for the plane.
+	const tangent = new Vector3().subVectors(pts[0], centroid).normalize();
+	const bitangent = new Vector3().crossVectors(normal, tangent).normalize();
+
+	// Map each point to an angle relative to the tangent and bitangent.
+	const pointsWithAngle = pts.map(pt => {
+		const v = new Vector3().subVectors(pt, centroid);
+		const x = v.dot(tangent);
+		const y = v.dot(bitangent);
+		let angle = Math.atan2(y, x);
+		// Ensure angle is in [0, 2π]
+		if (angle < 0) angle += 2 * Math.PI;
+		return { pt, angle };
+	});
+
+	// Sort points by angle.
+	pointsWithAngle.sort((a, b) => a.angle - b.angle);
+	return pointsWithAngle.map(item => item.pt);
 }
 
 export { ConcaveGeometry };
