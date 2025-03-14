@@ -1,6 +1,8 @@
 // /filters/cloudsFilter.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { ConcaveGeometry } from './ConcaveGeometry.js';
+// Import ConvexGeometry as a fallback.
+import { ConvexGeometry } from 'https://threejs.org/examples/jsm/geometries/ConvexGeometry.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -40,32 +42,43 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
     return null;
   }
   
-  // Get positions from the matching stars.
+  // Get positions for the matching stars.
   const positions = matchingStars.map(star =>
     mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition
   );
+  
+  console.log("Positions array:", positions);
   
   let geometry;
   try {
     geometry = new ConcaveGeometry(positions);
     if (!geometry.getAttribute('position') || geometry.getAttribute('position').count === 0) {
-      console.warn("ConcaveGeometry resulted in zero vertices.");
-      return null;
+      console.warn("ConcaveGeometry resulted in zero vertices; falling back to ConvexGeometry.");
+      geometry = new ConvexGeometry(positions);
+      console.log("ConvexGeometry vertex count:", geometry.getAttribute('position').count);
+    } else {
+      console.log("ConcaveGeometry vertex count:", geometry.getAttribute('position').count);
     }
-    console.log("ConcaveGeometry vertex count:", geometry.getAttribute('position').count);
   } catch (e) {
     console.error("Error generating ConcaveGeometry:", e);
-    return null;
+    // Fallback to ConvexGeometry in case of error.
+    try {
+      geometry = new ConvexGeometry(positions);
+      console.log("Fallback ConvexGeometry vertex count:", geometry.getAttribute('position').count);
+    } catch (err) {
+      console.error("Fallback ConvexGeometry failed:", err);
+      return null;
+    }
   }
   
   // Create a semi-transparent material.
   const material = new THREE.MeshBasicMaterial({
     color: 0xff6600,
-    opacity: 0.2, // temporarily higher opacity for testing
+    opacity: 0.05,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false,
-    depthTest: false // disable depth testing for debug purposes
+    depthTest: false
   });
   
   const mesh = new THREE.Mesh(geometry, material);
@@ -82,7 +95,7 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
  * @param {Array} cloudDataFiles - Array of file URLs for cloud data JSON files.
  */
 export async function updateCloudsOverlay(plottedStars, scene, mapType, cloudDataFiles) {
-  // Remove previous overlays.
+  // Remove any previous cloud overlays.
   if (scene.userData.cloudOverlays) {
     scene.userData.cloudOverlays.forEach(mesh => scene.remove(mesh));
   }
@@ -90,7 +103,7 @@ export async function updateCloudsOverlay(plottedStars, scene, mapType, cloudDat
   
   console.log("Updating clouds overlay with files:", cloudDataFiles);
   
-  // Process each selected cloud file.
+  // For each selected cloud file, load its data and create an overlay.
   for (const fileUrl of cloudDataFiles) {
     try {
       const cloudData = await loadCloudData(fileUrl);
