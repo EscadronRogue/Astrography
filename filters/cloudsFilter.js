@@ -29,29 +29,43 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
   // Filter the plotted stars that belong to this cloud.
   const matchingStars = plottedStars.filter(star => cloudNames.has(star.Common_name_of_the_star));
   
-  // Need at least three stars to form a polygon.
-  if (matchingStars.length < 3) return null;
+  // If there are no matching stars, there's nothing to overlay.
+  if (matchingStars.length === 0) return null;
   
-  // Get the positions from the matching stars.
-  const positions = matchingStars.map(star =>
-    mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition
-  );
+  // If there are at least three stars, build a concave hull overlay.
+  if (matchingStars.length >= 3) {
+    const positions = matchingStars.map(star =>
+      mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition
+    );
+    const geometry = new ConcaveGeometry(positions);
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xff6600,
+      opacity: 0.05,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 1;
+    return mesh;
+  }
   
-  // Build a concave hull from these positions.
-  const geometry = new ConcaveGeometry(positions);
+  // Fallback: for 1 or 2 stars, create a small sphere at the average position.
+  const avgPos = matchingStars.reduce((acc, star) => {
+    const pos = mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition;
+    return acc.add(pos);
+  }, new THREE.Vector3(0, 0, 0)).divideScalar(matchingStars.length);
   
-  // Create a semi‐transparent material; you can change the color per cloud if needed.
-  const material = new THREE.MeshBasicMaterial({
+  const fallbackGeometry = new THREE.SphereGeometry(1, 16, 16);
+  const fallbackMaterial = new THREE.MeshBasicMaterial({
     color: 0xff6600,
-    opacity: 0.05,
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false
+    opacity: 0.1,
+    transparent: true
   });
-  
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.renderOrder = 1;
-  return mesh;
+  const fallbackMesh = new THREE.Mesh(fallbackGeometry, fallbackMaterial);
+  fallbackMesh.position.copy(avgPos);
+  fallbackMesh.renderOrder = 1;
+  return fallbackMesh;
 }
 
 /**
