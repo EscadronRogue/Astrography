@@ -164,6 +164,8 @@ export function applyFilters(allStars) {
     }
   }
   const formData = new FormData(filterForm);
+  // Read all dust cloud checkboxes (name "dust-cloud")
+  const selectedDustClouds = formData.getAll('dust-cloud');
   const filters = {
     size: formData.get('size'),
     color: formData.get('color'),
@@ -186,7 +188,8 @@ export function applyFilters(allStars) {
     maxDistance: formData.get('max-distance'),
     isolationGridSize: parseFloat(formData.get('isolation-grid-size')) || 0,
     densityGridSize: parseFloat(formData.get('density-grid-size')) || 0,
-    showClouds: (formData.get('enable-clouds') !== null)
+    selectedDustClouds: selectedDustClouds,
+    showClouds: selectedDustClouds.length > 0
   };
 
   let filteredStars = applyDistanceFilter(allStars, filters);
@@ -234,7 +237,8 @@ export function applyFilters(allStars) {
     maxDistance: filters.maxDistance,
     isolationGridSize: filters.isolationGridSize,
     densityGridSize: filters.densityGridSize,
-    showClouds: filters.showClouds
+    showClouds: filters.showClouds,
+    selectedDustClouds: filters.selectedDustClouds
   };
 }
 
