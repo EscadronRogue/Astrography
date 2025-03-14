@@ -60,7 +60,7 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
   // Create a semi-transparent material; you can adjust the color per cloud if desired.
   const material = new THREE.MeshBasicMaterial({
     color: 0xff6600,
-    opacity: 0.01,
+    opacity: 0.05,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false
