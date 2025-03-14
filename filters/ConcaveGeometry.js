@@ -1,99 +1,186 @@
 // File: /filters/ConcaveGeometry.js
-import { BufferGeometry, Float32BufferAttribute, Vector3, MathUtils } from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import {
+	BufferGeometry,
+	Float32BufferAttribute,
+	Vector3
+} from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 
 /**
- * ConcaveGeometry builds a 3D geometry based on local quadrilaterals.
- * For each input point it finds the three closest neighbors (by Euclidean distance)
- * and constructs a quadrilateral by ordering the four points (using a centroid and polar angles).
- * Each quadrilateral is split into two triangles.
+ * ConcaveGeometry builds a 3D concave hull (alpha shape) from a set of points.
+ * It computes all tetrahedra (via brute force) from the points whose circumsphere
+ * radii are below an alpha threshold and whose circumspheres contain no other points.
+ * Then it extracts the boundary faces of the alpha complex and triangulates them.
  *
- * Note: If no quadrilaterals can be formed, the geometry will be empty.
+ * Note: This brute-force algorithm is O(n^4) and is only suitable for small point sets.
  */
 class ConcaveGeometry extends BufferGeometry {
-  constructor(points) {
-    super();
-    if (!points || points.length < 4) {
-      console.error("ConcaveGeometry: Need at least four points.");
-      return;
-    }
 
-    const vertices = [];
-    const indices = [];
-    let indexOffset = 0;
-    const n = points.length;
+	constructor(points, alpha) {
+		super();
+		if (!points || points.length < 4) {
+			console.error("ConcaveGeometry: Need at least four points.");
+			return;
+		}
 
-    // Loop through each point in the list.
-    for (let i = 0; i < n; i++) {
-      const p = points[i];
-      let distances = [];
-      // Compute distance from p to every other point.
-      for (let j = 0; j < n; j++) {
-        if (i === j) continue;
-        const d = p.distanceTo(points[j]);
-        distances.push({ index: j, distance: d });
-      }
-      // Sort by distance (ascending).
-      distances.sort((a, b) => a.distance - b.distance);
-      if (distances.length < 3) continue; // Skip if fewer than 3 neighbors.
+		// Compute centroid of points.
+		const centroid = new Vector3(0, 0, 0);
+		points.forEach(p => centroid.add(p));
+		centroid.divideScalar(points.length);
 
-      // Get the three closest neighbors.
-      const neighborIndices = distances.slice(0, 3).map(obj => obj.index);
-      const quadPoints = [p, points[neighborIndices[0]], points[neighborIndices[1]], points[neighborIndices[2]]];
+		// Compute average distance from centroid.
+		let sumDist = 0;
+		points.forEach(p => {
+			sumDist += p.distanceTo(centroid);
+		});
+		const avgDist = sumDist / points.length;
 
-      // Compute the centroid of the four points.
-      const centroid = new Vector3(0, 0, 0);
-      quadPoints.forEach(pt => centroid.add(pt));
-      centroid.divideScalar(quadPoints.length);
+		// If alpha not provided, choose a default value (tweak factor as needed).
+		if (alpha === undefined || alpha === null) {
+			alpha = avgDist * 1.2;
+		}
 
-      // Compute an approximate local normal using two edges.
-      let normal = new Vector3();
-      {
-        const v1 = new Vector3().subVectors(quadPoints[1], quadPoints[0]);
-        const v2 = new Vector3().subVectors(quadPoints[2], quadPoints[0]);
-        normal = new Vector3().crossVectors(v1, v2).normalize();
-        if (normal.length() === 0) {
-          normal.set(0, 0, 1);
-        }
-      }
+		// Build the alpha complex: find all tetrahedra with circumsphere radius <= alpha
+		// and whose circumsphere is "empty" (no other point inside).
+		const tetrahedra = [];
+		const n = points.length;
+		const eps = 1e-6;
+		for (let i = 0; i < n - 3; i++) {
+			for (let j = i + 1; j < n - 2; j++) {
+				for (let k = j + 1; k < n - 1; k++) {
+					for (let l = k + 1; l < n; l++) {
+						const a = points[i], b = points[j], c = points[k], d = points[l];
+						const sphere = computeCircumsphere(a, b, c, d);
+						if (!sphere) continue; // Degenerate tetrahedron.
+						if (sphere.radius > alpha) continue;
+						// Check if any other point is inside the circumsphere.
+						let empty = true;
+						for (let m = 0; m < n; m++) {
+							if (m === i || m === j || m === k || m === l) continue;
+							if (points[m].distanceTo(sphere.center) < sphere.radius - eps) {
+								empty = false;
+								break;
+							}
+						}
+						if (empty) {
+							tetrahedra.push({ indices: [i, j, k, l], sphere: sphere });
+						}
+					}
+				}
+			}
+		}
 
-      // Compute angles for each of the 4 points relative to the centroid.
-      // Use the vector from centroid to the first point as the reference.
-      const refDir = new Vector3().subVectors(quadPoints[0], centroid).normalize();
-      const pointAngles = quadPoints.map(pt => {
-        const vec = new Vector3().subVectors(pt, centroid).normalize();
-        // Angle between refDir and vec.
-        let angle = Math.acos(MathUtils.clamp(refDir.dot(vec), -1, 1));
-        // Use cross product with the normal to decide on sign.
-        const cross = new Vector3().crossVectors(refDir, vec);
-        if (cross.dot(normal) < 0) {
-          angle = -angle;
-        }
-        return { pt, angle };
-      });
-      // Sort points in ascending order of angle.
-      pointAngles.sort((a, b) => a.angle - b.angle);
-      const ordered = pointAngles.map(pa => pa.pt);
+		// Extract boundary faces from the tetrahedra.
+		// A face is defined by 3 point indices; if a face appears only once across all tetrahedra,
+		// it lies on the boundary of the alpha shape.
+		const faceMap = new Map();
+		function addFace(i1, i2, i3) {
+			const indices = [i1, i2, i3].sort((a, b) => a - b);
+			const key = indices.join('_');
+			if (faceMap.has(key)) {
+				faceMap.set(key, faceMap.get(key) + 1);
+			} else {
+				faceMap.set(key, 1);
+			}
+		}
+		tetrahedra.forEach(tet => {
+			const [i, j, k, l] = tet.indices;
+			addFace(i, j, k);
+			addFace(i, j, l);
+			addFace(i, k, l);
+			addFace(j, k, l);
+		});
 
-      // Create two triangles for the quadrilateral: (0,1,2) and (0,2,3).
-      vertices.push(
-        ordered[0].x, ordered[0].y, ordered[0].z,
-        ordered[1].x, ordered[1].y, ordered[1].z,
-        ordered[2].x, ordered[2].y, ordered[2].z,
-        ordered[3].x, ordered[3].y, ordered[3].z
-      );
-      indices.push(indexOffset, indexOffset + 1, indexOffset + 2);
-      indices.push(indexOffset, indexOffset + 2, indexOffset + 3);
-      indexOffset += 4;
-    }
+		// Collect faces that appear only once.
+		const boundaryFaces = [];
+		faceMap.forEach((count, key) => {
+			if (count === 1) {
+				const indices = key.split('_').map(Number);
+				boundaryFaces.push(indices);
+			}
+		});
 
-    if (vertices.length === 0) {
-      console.error("ConcaveGeometry: No quadrilaterals could be formed from the given points.");
-      return;
-    }
-    this.setAttribute('position', new Float32BufferAttribute(vertices, 3));
-    this.setIndex(indices);
-    this.computeVertexNormals();
-  }
+		// Build geometry from boundary faces.
+		// Each boundary face is a triangle; vertices are taken from the original points.
+		const vertices = [];
+		boundaryFaces.forEach(face => {
+			face.forEach(idx => {
+				const p = points[idx];
+				vertices.push(p.x, p.y, p.z);
+			});
+		});
+
+		this.setAttribute('position', new Float32BufferAttribute(vertices, 3));
+		// Create sequential indices.
+		const indices = [];
+		for (let i = 0; i < vertices.length / 3; i += 3) {
+			indices.push(i, i + 1, i + 2);
+		}
+		this.setIndex(indices);
+		this.computeVertexNormals();
+	}
+
+}
+
+// Computes the circumsphere of the tetrahedron defined by points a, b, c, and d.
+// Returns an object { center: Vector3, radius: number } or null if the tetrahedron is degenerate.
+function computeCircumsphere(a, b, c, d) {
+	// Translate points so that a becomes the origin.
+	const U = new Vector3().subVectors(b, a);
+	const V = new Vector3().subVectors(c, a);
+	const W = new Vector3().subVectors(d, a);
+
+	// Set up the linear system: 2*(p - a)·x = |p|^2 - |a|^2 for p = b, c, d.
+	const b1 = b.x * b.x + b.y * b.y + b.z * b.z - (a.x * a.x + a.y * a.y + a.z * a.z);
+	const b2 = c.x * c.x + c.y * c.y + c.z * c.z - (a.x * a.x + a.y * a.y + a.z * a.z);
+	const b3 = d.x * d.x + d.y * d.y + d.z * d.z - (a.x * a.x + a.y * a.y + a.z * a.z);
+
+	const M = [
+		[2 * U.x, 2 * U.y, 2 * U.z],
+		[2 * V.x, 2 * V.y, 2 * V.z],
+		[2 * W.x, 2 * W.y, 2 * W.z]
+	];
+	const B = [b1, b2, b3];
+
+	const sol = solveLinearSystem(M, B);
+	if (!sol) return null;
+	const center = new Vector3(a.x + sol[0], a.y + sol[1], a.z + sol[2]);
+	const radius = center.distanceTo(a);
+	return { center, radius };
+}
+
+// Solves a 3x3 linear system M * x = B using Cramer's rule.
+// M is a 3x3 array and B is an array of 3 numbers.
+// Returns an array [x, y, z] or null if the system is singular.
+function solveLinearSystem(M, B) {
+	const detM = determinant3x3(M);
+	if (Math.abs(detM) < 1e-12) return null;
+
+	const Mx = [
+		[B[0], M[0][1], M[0][2]],
+		[B[1], M[1][1], M[1][2]],
+		[B[2], M[2][1], M[2][2]]
+	];
+	const My = [
+		[M[0][0], B[0], M[0][2]],
+		[M[1][0], B[1], M[1][2]],
+		[M[2][0], B[2], M[2][2]]
+	];
+	const Mz = [
+		[M[0][0], M[0][1], B[0]],
+		[M[1][0], M[1][1], B[1]],
+		[M[2][0], M[2][1], B[2]]
+	];
+
+	const x = determinant3x3(Mx) / detM;
+	const y = determinant3x3(My) / detM;
+	const z = determinant3x3(Mz) / detM;
+	return [x, y, z];
+}
+
+function determinant3x3(m) {
+	return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+		- m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+		+ m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 }
 
 export { ConcaveGeometry };
