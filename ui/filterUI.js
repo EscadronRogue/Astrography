@@ -131,7 +131,7 @@ function addCloudsFieldset() {
   legend.textContent = 'Dust Clouds';
   fs.appendChild(legend);
   
-  // Create content container without extra classes to avoid conflicts.
+  // Create content container similar to other filter categories.
   const contentDiv = document.createElement('div');
   contentDiv.classList.add('filter-content');
   contentDiv.style.maxHeight = '0px';
@@ -151,20 +151,45 @@ function addCloudsFieldset() {
     }
   });
   
-  const cloudDiv = document.createElement('div');
-  cloudDiv.classList.add('filter-item');
-  const cloudChk = document.createElement('input');
-  cloudChk.type = 'checkbox';
-  cloudChk.id = 'enable-clouds';
-  cloudChk.name = 'enable-clouds';
-  cloudChk.checked = false; // off by default
-  const cloudLbl = document.createElement('label');
-  cloudLbl.htmlFor = 'enable-clouds';
-  cloudLbl.textContent = 'Show Dust Clouds';
-  cloudDiv.appendChild(cloudChk);
-  cloudDiv.appendChild(cloudLbl);
-  contentDiv.appendChild(cloudDiv);
+  // List of dust clouds and corresponding data file paths.
+  const dustClouds = [
+    { name: "Aquila", file: "data/Aquila_cloud_data.json" },
+    { name: "Auriga", file: "data/Auriga_cloud_data.json" },
+    { name: "Blue", file: "data/Blue_cloud_data.json" },
+    { name: "Ceti", file: "data/Ceti_cloud_data.json" },
+    { name: "Dorado", file: "data/Dorado_cloud_data.json" },
+    { name: "Eridani", file: "data/Eridani_cloud_data.json" },
+    { name: "Galactic", file: "data/Galactic_cloud_data.json" },
+    { name: "Gemini", file: "data/Gemini_cloud_data.json" },
+    { name: "Hyades", file: "data/Hyades_cloud_data.json" },
+    { name: "Leo", file: "data/Leo_cloud_data.json" },
+    { name: "Local Interstellar", file: "data/Local_interstellar_cloud.json" },
+    { name: "Microscopi", file: "data/Microscopi_cloud_data.json" },
+    { name: "North Galactic Pole", file: "data/North_Galactic_Pole_cloud_data.json" },
+    { name: "Ophiucus", file: "data/Ophiucus_cloud_data.json" },
+    { name: "Vela", file: "data/Vela_cloud_data.json" }
+  ];
+  
+  // Create a checkbox for each dust cloud.
+  dustClouds.forEach(cloud => {
+    const cloudDiv = document.createElement('div');
+    cloudDiv.classList.add('filter-item');
+    const cloudChk = document.createElement('input');
+    cloudChk.type = 'checkbox';
+    cloudChk.id = 'dust-cloud-' + cloud.name.replace(/\s+/g, '-').toLowerCase();
+    cloudChk.name = 'dust-clouds'; // All checkboxes share this name.
+    cloudChk.value = cloud.file;
+    cloudChk.checked = false; // All off by default.
+    const cloudLbl = document.createElement('label');
+    cloudLbl.htmlFor = cloudChk.id;
+    cloudLbl.textContent = cloud.name;
+    cloudDiv.appendChild(cloudChk);
+    cloudDiv.appendChild(cloudLbl);
+    contentDiv.appendChild(cloudDiv);
+  });
   
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
+
+export { initFilterUI };
