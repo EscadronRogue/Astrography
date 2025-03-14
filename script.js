@@ -1,4 +1,5 @@
-// script.js
+// /script.js
+
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines } from './filters/connectionsFilter.js';
@@ -6,7 +7,7 @@ import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlob
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
-import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct import
+import { updateCloudsOverlay } from './filters/cloudsFilter.js';
 import { ThreeDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
@@ -148,16 +149,9 @@ async function buildAndApplyFilters() {
     enableConnections,
     enableIsolationFilter,
     enableDensityFilter,
-    isolation,
-    isolationTolerance,
-    densityThresholdStars,
-    enableIsolationLabeling,
-    enableDensityLabeling,
     minDistance,
     maxDistance,
-    isolationGridSize,
-    densityGridSize,
-    showClouds
+    selectedDustClouds
   } = filters;
 
   currentFilteredStars = filteredStars;
@@ -195,123 +189,10 @@ async function buildAndApplyFilters() {
     });
   }
 
-  // --- Isolation Filter ---
-  const form = document.getElementById('filters-form');
-  if (enableIsolationFilter) {
-    const isoGridSliderValue = parseFloat(new FormData(form).get('isolation-grid-size') || '0');
-    let isoGridSize;
-    if (isoGridSliderValue >= 0) {
-      isoGridSize = 2 + isoGridSliderValue;
-    } else {
-      isoGridSize = 2 / (Math.abs(isoGridSliderValue) + 1);
-    }
-    if (
-      !isolationOverlay ||
-      isolationOverlay.minDistance !== parseFloat(minDistance) ||
-      isolationOverlay.maxDistance !== parseFloat(maxDistance) ||
-      isolationOverlay.gridSize !== isoGridSize
-    ) {
-      if (isolationOverlay) {
-        isolationOverlay.cubesData.forEach(c => {
-          trueCoordinatesMap.scene.remove(c.tcMesh);
-          globeMap.scene.remove(c.globeMesh);
-        });
-        isolationOverlay.adjacentLines.forEach(obj => {
-          globeMap.scene.remove(obj.line);
-        });
-      }
-      isolationOverlay = initIsolationFilter(minDistance, maxDistance, cachedStars, isoGridSize);
-      isolationOverlay.cubesData.forEach(c => {
-        trueCoordinatesMap.scene.add(c.tcMesh);
-      });
-      isolationOverlay.adjacentLines.forEach(obj => {
-        globeMap.scene.add(obj.line);
-      });
-    }
-    updateIsolationFilter(cachedStars, isolationOverlay);
-    if (enableIsolationLabeling) {
-      isolationOverlay.assignConstellationsToCells().then(() => {
-        isolationOverlay.addRegionLabelsToScene(trueCoordinatesMap.scene, 'TrueCoordinates');
-        isolationOverlay.addRegionLabelsToScene(globeMap.scene, 'Globe');
-      });
-    } else {
-      if (isolationOverlay.regionLabelsGroupTC && isolationOverlay.regionLabelsGroupTC.parent) {
-        isolationOverlay.regionLabelsGroupTC.parent.remove(isolationOverlay.regionLabelsGroupTC);
-      }
-      if (isolationOverlay.regionLabelsGroupGlobe && isolationOverlay.regionLabelsGroupGlobe.parent) {
-        isolationOverlay.regionLabelsGroupGlobe.parent.remove(isolationOverlay.regionLabelsGroupGlobe);
-      }
-    }
-  } else {
-    if (isolationOverlay) {
-      isolationOverlay.cubesData.forEach(c => {
-        trueCoordinatesMap.scene.remove(c.tcMesh);
-        globeMap.scene.remove(c.globeMesh);
-      });
-      isolationOverlay.adjacentLines.forEach(obj => {
-        globeMap.scene.remove(obj.line);
-      });
-      isolationOverlay = null;
-    }
-  }
-
-  // --- Density Filter ---
-  if (enableDensityFilter) {
-    const densitySubdivisionPercent = parseFloat(new FormData(form).get('density-subdivision-percent')) || 5;
-    if (
-      !densityOverlay ||
-      densityOverlay.minDistance !== parseFloat(minDistance) ||
-      densityOverlay.maxDistance !== parseFloat(maxDistance) ||
-      densityOverlay.subdivisionThresholdPercent !== densitySubdivisionPercent
-    ) {
-      if (densityOverlay) {
-        densityOverlay.cubesData.forEach(c => {
-          trueCoordinatesMap.scene.remove(c.tcMesh);
-          globeMap.scene.remove(c.globeMesh);
-        });
-        densityOverlay.adjacentLines.forEach(obj => {
-          globeMap.scene.remove(obj.line);
-        });
-      }
-      densityOverlay = initDensityFilter(minDistance, maxDistance, cachedStars, densitySubdivisionPercent);
-      densityOverlay.cubesData.forEach(c => {
-        trueCoordinatesMap.scene.add(c.tcMesh);
-      });
-      densityOverlay.adjacentLines.forEach(obj => {
-        globeMap.scene.add(obj.line);
-      });
-    }
-    updateDensityFilter(cachedStars, densityOverlay);
-    if (enableDensityLabeling) {
-      densityOverlay.assignConstellationsToCells().then(() => {
-        densityOverlay.addRegionLabelsToScene(trueCoordinatesMap.scene, 'TrueCoordinates');
-        densityOverlay.addRegionLabelsToScene(globeMap.scene, 'Globe');
-      });
-    } else {
-      if (densityOverlay.regionLabelsGroupTC && densityOverlay.regionLabelsGroupTC.parent) {
-        densityOverlay.regionLabelsGroupTC.parent.remove(densityOverlay.regionLabelsGroupTC);
-      }
-      if (densityOverlay.regionLabelsGroupGlobe && densityOverlay.regionLabelsGroupGlobe.parent) {
-        densityOverlay.regionLabelsGroupGlobe.parent.remove(densityOverlay.regionLabelsGroupGlobe);
-      }
-    }
-  } else {
-    if (densityOverlay) {
-      densityOverlay.cubesData.forEach(c => {
-        trueCoordinatesMap.scene.remove(c.tcMesh);
-        globeMap.scene.remove(c.globeMesh);
-      });
-      densityOverlay.adjacentLines.forEach(obj => {
-        globeMap.scene.remove(obj.line);
-      });
-      densityOverlay = null;
-    }
-  }
-
   // --- Dust Clouds Overlay ---
   if (filters.showClouds) {
-    // For simplicity, we assume a fixed array of cloud data files.
-    const cloudDataFiles = ['data/Local_interstellar_cloud.json'];
+    // Map the selected dust cloud files to their full paths (assumes they are in the data/ folder)
+    const cloudDataFiles = selectedDustClouds.map(file => 'data/' + file);
     // Update clouds overlay for both maps.
     updateCloudsOverlay(currentFilteredStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
     updateCloudsOverlay(currentGlobeFilteredStars, globeMap.scene, 'Globe', cloudDataFiles);
