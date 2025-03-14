@@ -200,8 +200,9 @@ async function buildAndApplyFilters() {
     const form = document.getElementById('filters-form');
     // Get the file paths from the checked dust cloud checkboxes.
     const cloudDataFiles = new FormData(form).getAll('dust-clouds');
-    updateCloudsOverlay(currentFilteredStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
-    updateCloudsOverlay(currentGlobeFilteredStars, globeMap.scene, 'Globe', cloudDataFiles);
+    // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
+    updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
+    updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
   }
 
   applyGlobeSurface(globeOpaqueSurface);
