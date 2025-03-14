@@ -157,8 +157,7 @@ async function buildAndApplyFilters() {
     maxDistance,
     isolationGridSize,
     densityGridSize,
-    showClouds,
-    dustCloudSelections
+    showClouds
   } = filters;
 
   currentFilteredStars = filteredStars;
@@ -196,10 +195,123 @@ async function buildAndApplyFilters() {
     });
   }
 
+  // --- Isolation Filter ---
+  const form = document.getElementById('filters-form');
+  if (enableIsolationFilter) {
+    const isoGridSliderValue = parseFloat(new FormData(form).get('isolation-grid-size') || '0');
+    let isoGridSize;
+    if (isoGridSliderValue >= 0) {
+      isoGridSize = 2 + isoGridSliderValue;
+    } else {
+      isoGridSize = 2 / (Math.abs(isoGridSliderValue) + 1);
+    }
+    if (
+      !isolationOverlay ||
+      isolationOverlay.minDistance !== parseFloat(minDistance) ||
+      isolationOverlay.maxDistance !== parseFloat(maxDistance) ||
+      isolationOverlay.gridSize !== isoGridSize
+    ) {
+      if (isolationOverlay) {
+        isolationOverlay.cubesData.forEach(c => {
+          trueCoordinatesMap.scene.remove(c.tcMesh);
+          globeMap.scene.remove(c.globeMesh);
+        });
+        isolationOverlay.adjacentLines.forEach(obj => {
+          globeMap.scene.remove(obj.line);
+        });
+      }
+      isolationOverlay = initIsolationFilter(minDistance, maxDistance, cachedStars, isoGridSize);
+      isolationOverlay.cubesData.forEach(c => {
+        trueCoordinatesMap.scene.add(c.tcMesh);
+      });
+      isolationOverlay.adjacentLines.forEach(obj => {
+        globeMap.scene.add(obj.line);
+      });
+    }
+    updateIsolationFilter(cachedStars, isolationOverlay);
+    if (enableIsolationLabeling) {
+      isolationOverlay.assignConstellationsToCells().then(() => {
+        isolationOverlay.addRegionLabelsToScene(trueCoordinatesMap.scene, 'TrueCoordinates');
+        isolationOverlay.addRegionLabelsToScene(globeMap.scene, 'Globe');
+      });
+    } else {
+      if (isolationOverlay.regionLabelsGroupTC && isolationOverlay.regionLabelsGroupTC.parent) {
+        isolationOverlay.regionLabelsGroupTC.parent.remove(isolationOverlay.regionLabelsGroupTC);
+      }
+      if (isolationOverlay.regionLabelsGroupGlobe && isolationOverlay.regionLabelsGroupGlobe.parent) {
+        isolationOverlay.regionLabelsGroupGlobe.parent.remove(isolationOverlay.regionLabelsGroupGlobe);
+      }
+    }
+  } else {
+    if (isolationOverlay) {
+      isolationOverlay.cubesData.forEach(c => {
+        trueCoordinatesMap.scene.remove(c.tcMesh);
+        globeMap.scene.remove(c.globeMesh);
+      });
+      isolationOverlay.adjacentLines.forEach(obj => {
+        globeMap.scene.remove(obj.line);
+      });
+      isolationOverlay = null;
+    }
+  }
+
+  // --- Density Filter ---
+  if (enableDensityFilter) {
+    const densitySubdivisionPercent = parseFloat(new FormData(form).get('density-subdivision-percent')) || 5;
+    if (
+      !densityOverlay ||
+      densityOverlay.minDistance !== parseFloat(minDistance) ||
+      densityOverlay.maxDistance !== parseFloat(maxDistance) ||
+      densityOverlay.subdivisionThresholdPercent !== densitySubdivisionPercent
+    ) {
+      if (densityOverlay) {
+        densityOverlay.cubesData.forEach(c => {
+          trueCoordinatesMap.scene.remove(c.tcMesh);
+          globeMap.scene.remove(c.globeMesh);
+        });
+        densityOverlay.adjacentLines.forEach(obj => {
+          globeMap.scene.remove(obj.line);
+        });
+      }
+      densityOverlay = initDensityFilter(minDistance, maxDistance, cachedStars, densitySubdivisionPercent);
+      densityOverlay.cubesData.forEach(c => {
+        trueCoordinatesMap.scene.add(c.tcMesh);
+      });
+      densityOverlay.adjacentLines.forEach(obj => {
+        globeMap.scene.add(obj.line);
+      });
+    }
+    updateDensityFilter(cachedStars, densityOverlay);
+    if (enableDensityLabeling) {
+      densityOverlay.assignConstellationsToCells().then(() => {
+        densityOverlay.addRegionLabelsToScene(trueCoordinatesMap.scene, 'TrueCoordinates');
+        densityOverlay.addRegionLabelsToScene(globeMap.scene, 'Globe');
+      });
+    } else {
+      if (densityOverlay.regionLabelsGroupTC && densityOverlay.regionLabelsGroupTC.parent) {
+        densityOverlay.regionLabelsGroupTC.parent.remove(densityOverlay.regionLabelsGroupTC);
+      }
+      if (densityOverlay.regionLabelsGroupGlobe && densityOverlay.regionLabelsGroupGlobe.parent) {
+        densityOverlay.regionLabelsGroupGlobe.parent.remove(densityOverlay.regionLabelsGroupGlobe);
+      }
+    }
+  } else {
+    if (densityOverlay) {
+      densityOverlay.cubesData.forEach(c => {
+        trueCoordinatesMap.scene.remove(c.tcMesh);
+        globeMap.scene.remove(c.globeMesh);
+      });
+      densityOverlay.adjacentLines.forEach(obj => {
+        globeMap.scene.remove(obj.line);
+      });
+      densityOverlay = null;
+    }
+  }
+
   // --- Dust Clouds Overlay ---
-  if (showClouds) {
-    // Build an array of file paths based on the checked dust cloud selections.
-    const cloudDataFiles = dustCloudSelections.map(id => `data/${id}.json`);
+  if (filters.showClouds) {
+    // For simplicity, we assume a fixed array of cloud data files.
+    const cloudDataFiles = ['data/Local_interstellar_cloud.json'];
     // Update clouds overlay for both maps.
     updateCloudsOverlay(currentFilteredStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
     updateCloudsOverlay(currentGlobeFilteredStars, globeMap.scene, 'Globe', cloudDataFiles);
