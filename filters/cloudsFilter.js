@@ -31,28 +31,34 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
     star => star.Common_name_of_the_star && cloudNames.has(star.Common_name_of_the_star.trim())
   );
   
-  // Log the set of names and matched stars for debugging.
-  console.log("Cloud overlay: cloudNames", cloudNames);
-  console.log("Matching stars:", matchingStars);
-
-  // Need at least three stars to form a polygon.
+  console.log("Creating cloud overlay:");
+  console.log("  Cloud file contains star names:", cloudNames);
+  console.log("  Matching plotted stars:", matchingStars);
+  
+  // If there are fewer than three matching stars, we cannot build an overlay.
   if (matchingStars.length < 3) {
-    console.warn('Not enough matching stars for cloud overlay:', matchingStars);
+    console.warn('Not enough matching stars for cloud overlay. Needed at least 3, got:', matchingStars.length);
     return null;
   }
   
-  // Get the positions from the matching stars.
+  // Get positions for the matching stars.
   const positions = matchingStars.map(star =>
     mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition
   );
   
-  // Build a concave hull from these positions.
-  const geometry = new ConcaveGeometry(positions);
+  // Build the concave hull geometry.
+  let geometry;
+  try {
+    geometry = new ConcaveGeometry(positions);
+  } catch (e) {
+    console.error("ConcaveGeometry failed:", e);
+    return null;
+  }
   
-  // Create a semi-transparent material; adjust color if desired.
+  // Create a material with a temporarily higher opacity for debugging.
   const material = new THREE.MeshBasicMaterial({
     color: 0xff6600,
-    opacity: 0.05,
+    opacity: 0.2, // increased for debugging (originally 0.05)
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -60,6 +66,7 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
   
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1;
+  console.log("Overlay mesh created:", mesh);
   return mesh;
 }
 
@@ -77,17 +84,23 @@ export async function updateCloudsOverlay(plottedStars, scene, mapType, cloudDat
   }
   scene.userData.cloudOverlays = [];
   
+  console.log("Updating clouds overlay with files:", cloudDataFiles);
+  
   // For each selected cloud file, load its data and create an overlay.
   for (const fileUrl of cloudDataFiles) {
     try {
       const cloudData = await loadCloudData(fileUrl);
+      console.log(`Loaded cloud data from ${fileUrl}`, cloudData);
       const overlay = await createCloudOverlay(cloudData, plottedStars, mapType);
       if (overlay) {
         scene.add(overlay);
         scene.userData.cloudOverlays.push(overlay);
+        console.log(`Overlay from ${fileUrl} added to scene.`);
+      } else {
+        console.warn(`No overlay created from ${fileUrl}`);
       }
     } catch (e) {
-      console.error(e);
+      console.error(`Error processing ${fileUrl}:`, e);
     }
   }
 }
