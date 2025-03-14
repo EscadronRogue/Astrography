@@ -129,10 +129,11 @@ class IsolationGridOverlay {
           for (let i = 0; i < points.length; i++) {
             positions.push(points[i].x, points[i].y, points[i].z);
             let t = i / (points.length - 1);
-            let r = THREE.MathUtils.lerp(c1.r, c2.r, t);
-            let g = THREE.MathUtils.lerp(c1.g, c2.g, t);
-            let b = THREE.MathUtils.lerp(c1.b, c2.b, t);
-            colors.push(r, g, b);
+            colors.push(
+              THREE.MathUtils.lerp(c1.r, c2.r, t),
+              THREE.MathUtils.lerp(c1.g, c2.g, t),
+              THREE.MathUtils.lerp(c1.b, c2.b, t)
+            );
           }
           const geom = new THREE.BufferGeometry();
           geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -151,7 +152,15 @@ class IsolationGridOverlay {
     });
   }
 
+  // Updated update() method with safe DOM access
   update(stars) {
+    // Safely obtain slider values: if not found, use defaults.
+    const isolationSlider = document.getElementById('isolation-slider');
+    const toleranceSlider = document.getElementById('isolation-tolerance-slider');
+    const isolationVal = isolationSlider ? parseFloat(isolationSlider.value) : 7;
+    const toleranceVal = toleranceSlider ? parseInt(toleranceSlider.value) : 0;
+
+    // Recalculate distances for each cell based on an extended set of stars.
     const extendedStars = stars.filter(star => {
       const d = star.Distance_from_the_Sun;
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
@@ -159,15 +168,15 @@ class IsolationGridOverlay {
     this.cubesData.forEach(cell => {
       computeCellDistances(cell, extendedStars);
     });
-    const isolationVal = parseFloat(document.getElementById('isolation-slider').value) || 7;
-    const toleranceVal = parseInt(document.getElementById('isolation-tolerance-slider').value) || 0;
+
+    // Update each cell's active state based on the isolation criteria.
     this.cubesData.forEach(cell => {
       let isoDist = Infinity;
       if (cell.distances && cell.distances.length > toleranceVal) {
         isoDist = cell.distances[toleranceVal];
       }
-      let showSquare = (isoDist >= isolationVal);
-      cell.active = showSquare;
+      // Show cell if the distance to the Nth nearest star is at least the isolation threshold.
+      cell.active = (isoDist >= isolationVal);
       let ratio = cell.tcPos.length() / this.maxDistance;
       if (ratio > 1) ratio = 1;
       const alpha = THREE.MathUtils.lerp(0.1, 0.3, ratio);
@@ -178,6 +187,8 @@ class IsolationGridOverlay {
       const scale = THREE.MathUtils.lerp(20.0, 0.1, ratio);
       cell.globeMesh.scale.set(scale, scale, 1);
     });
+
+    // Update the adjacent lines.
     this.adjacentLines.forEach(obj => {
       const { line, cell1, cell2 } = obj;
       if (cell1.globeMesh.visible && cell2.globeMesh.visible) {
@@ -189,10 +200,11 @@ class IsolationGridOverlay {
         for (let i = 0; i < points.length; i++) {
           positions.push(points[i].x, points[i].y, points[i].z);
           let t = i / (points.length - 1);
-          let r = THREE.MathUtils.lerp(c1.r, c2.r, t);
-          let g = THREE.MathUtils.lerp(c1.g, c2.g, t);
-          let b = THREE.MathUtils.lerp(c1.b, c2.b, t);
-          colors.push(r, g, b);
+          colors.push(
+            THREE.MathUtils.lerp(c1.r, c2.r, t),
+            THREE.MathUtils.lerp(c1.g, c2.g, t),
+            THREE.MathUtils.lerp(c1.b, c2.b, t)
+          );
         }
         line.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
         line.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
