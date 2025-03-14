@@ -1,8 +1,4 @@
 // File: /filters/cloudsFilter.js
-// This module now supports multiple dust cloud overlays. Each overlay is built from
-// a JSON file (whose URL is passed in) and added to the scene.
-// The logic used for the local interstellar cloud is now generalized to all cloud data files.
-
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { ConcaveGeometry } from './ConcaveGeometry.js';
 
@@ -55,8 +51,8 @@ export async function createCloudOverlay(cloudData, plottedStars, mapType) {
     }
   });
 
-  // Need at least three points to form a polygon.
-  if (positions.length < 3) return null;
+  // Need at least four points to form a polygon.
+  if (positions.length < 4) return null;
 
   // Build a concave hull from the positions.
   let geometry = new ConcaveGeometry(positions);
