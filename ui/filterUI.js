@@ -151,19 +151,43 @@ function addCloudsFieldset() {
     }
   });
   
-  const cloudDiv = document.createElement('div');
-  cloudDiv.classList.add('filter-item');
-  const cloudChk = document.createElement('input');
-  cloudChk.type = 'checkbox';
-  cloudChk.id = 'enable-clouds';
-  cloudChk.name = 'enable-clouds';
-  cloudChk.checked = false; // off by default
-  const cloudLbl = document.createElement('label');
-  cloudLbl.htmlFor = 'enable-clouds';
-  cloudLbl.textContent = 'Show Dust Clouds';
-  cloudDiv.appendChild(cloudChk);
-  cloudDiv.appendChild(cloudLbl);
-  contentDiv.appendChild(cloudDiv);
+  // List of dust cloud files and display labels.
+  const dustCloudFiles = [
+    { file: 'Aquila_cloud_data.json', label: 'Aquila' },
+    { file: 'Auriga_cloud_data.json', label: 'Auriga' },
+    { file: 'Blue_cloud_data.json', label: 'Blue Cloud' },
+    { file: 'Ceti_cloud_data.json', label: 'Ceti' },
+    { file: 'Dorado_cloud_data.json', label: 'Dorado' },
+    { file: 'Eridani_cloud_data.json', label: 'Eridani' },
+    { file: 'Galactic_cloud_data.json', label: 'Galactic' },
+    { file: 'Gemini_cloud_data.json', label: 'Gemini' },
+    { file: 'Hyades_cloud_data.json', label: 'Hyades' },
+    { file: 'Leo_cloud_data.json', label: 'Leo' },
+    { file: 'Local_interstellar_cloud.json', label: 'Local Interstellar' },
+    { file: 'Microscopi_cloud_data.json', label: 'Microscopi' },
+    { file: 'North_Galactic_Pole_cloud_data.json', label: 'North Galactic Pole' },
+    { file: 'Ophiucus_cloud_data.json', label: 'Ophiucus' },
+    { file: 'Vela_cloud_data.json', label: 'Vela' }
+  ];
+
+  // Create a checkbox for each dust cloud.
+  dustCloudFiles.forEach(cloud => {
+    const cloudDiv = document.createElement('div');
+    cloudDiv.classList.add('filter-item');
+    const cloudChk = document.createElement('input');
+    cloudChk.type = 'checkbox';
+    cloudChk.id = `dust-cloud-${cloud.file}`;
+    cloudChk.name = 'dust-cloud';
+    cloudChk.value = cloud.file;
+    // Off by default
+    cloudChk.checked = false;
+    const cloudLbl = document.createElement('label');
+    cloudLbl.htmlFor = cloudChk.id;
+    cloudLbl.textContent = cloud.label;
+    cloudDiv.appendChild(cloudChk);
+    cloudDiv.appendChild(cloudLbl);
+    contentDiv.appendChild(cloudDiv);
+  });
   
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
