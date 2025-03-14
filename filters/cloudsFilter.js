@@ -23,49 +23,44 @@ async function loadCloudData(cloudFileUrl) {
  * @returns {THREE.Mesh|null} - A mesh representing the cloud overlay, or null if not enough points.
  */
 export async function createCloudOverlay(cloudData, plottedStars, mapType) {
-  // Extract the cloud star names from the cloud data.
-  const cloudNames = new Set(cloudData.map(d => d['Star Name']));
+  // Build a set of cloud star names with trimmed values.
+  const cloudNames = new Set(cloudData.map(d => d['Star Name'] && d['Star Name'].trim()));
   
-  // Filter the plotted stars that belong to this cloud.
-  const matchingStars = plottedStars.filter(star => cloudNames.has(star.Common_name_of_the_star));
+  // Filter plotted stars that belong to this cloud (also trimming the star name).
+  const matchingStars = plottedStars.filter(
+    star => star.Common_name_of_the_star && cloudNames.has(star.Common_name_of_the_star.trim())
+  );
   
-  // If there are no matching stars, there's nothing to overlay.
-  if (matchingStars.length === 0) return null;
-  
-  // If there are at least three stars, build a concave hull overlay.
-  if (matchingStars.length >= 3) {
-    const positions = matchingStars.map(star =>
-      mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition
-    );
-    const geometry = new ConcaveGeometry(positions);
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xff6600,
-      opacity: 0.05,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.renderOrder = 1;
-    return mesh;
+  // Log the set of names and matched stars for debugging.
+  console.log("Cloud overlay: cloudNames", cloudNames);
+  console.log("Matching stars:", matchingStars);
+
+  // Need at least three stars to form a polygon.
+  if (matchingStars.length < 3) {
+    console.warn('Not enough matching stars for cloud overlay:', matchingStars);
+    return null;
   }
   
-  // Fallback: for 1 or 2 stars, create a small sphere at the average position.
-  const avgPos = matchingStars.reduce((acc, star) => {
-    const pos = mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition;
-    return acc.add(pos);
-  }, new THREE.Vector3(0, 0, 0)).divideScalar(matchingStars.length);
+  // Get the positions from the matching stars.
+  const positions = matchingStars.map(star =>
+    mapType === 'TrueCoordinates' ? star.truePosition : star.spherePosition
+  );
   
-  const fallbackGeometry = new THREE.SphereGeometry(1, 16, 16);
-  const fallbackMaterial = new THREE.MeshBasicMaterial({
+  // Build a concave hull from these positions.
+  const geometry = new ConcaveGeometry(positions);
+  
+  // Create a semi-transparent material; adjust color if desired.
+  const material = new THREE.MeshBasicMaterial({
     color: 0xff6600,
-    opacity: 0.1,
-    transparent: true
+    opacity: 0.05,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
   });
-  const fallbackMesh = new THREE.Mesh(fallbackGeometry, fallbackMaterial);
-  fallbackMesh.position.copy(avgPos);
-  fallbackMesh.renderOrder = 1;
-  return fallbackMesh;
+  
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 1;
+  return mesh;
 }
 
 /**
