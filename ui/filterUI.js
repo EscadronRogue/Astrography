@@ -179,8 +179,8 @@ function addCloudsFieldset() {
     cloudChk.id = 'dust-cloud-' + cloud.name.replace(/\s+/g, '-').toLowerCase();
     cloudChk.name = 'dust-clouds'; // All checkboxes share this name.
     cloudChk.value = cloud.file;
-    // Check the local interstellar cloud by default, others off.
-    cloudChk.checked = cloud.name.toLowerCase().includes("local interstellar");
+    // All clouds off by default.
+    cloudChk.checked = false;
     const cloudLbl = document.createElement('label');
     cloudLbl.htmlFor = cloudChk.id;
     cloudLbl.textContent = cloud.name;
