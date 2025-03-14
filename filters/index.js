@@ -186,7 +186,6 @@ export function applyFilters(allStars) {
     maxDistance: formData.get('max-distance'),
     isolationGridSize: parseFloat(formData.get('isolation-grid-size')) || 0,
     densityGridSize: parseFloat(formData.get('density-grid-size')) || 0,
-    // Updated: derive dust cloud filter state from checked dust cloud checkboxes.
     showClouds: (formData.getAll('dust-clouds').length > 0)
   };
 
