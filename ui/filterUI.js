@@ -3,7 +3,7 @@
 
 export function initFilterUI() {
   // Toggle sidebar menu on mobile.
-  document.getElementById('menu-toggle').addEventListener('click', function() {
+  document.getElementById('menu-toggle').addEventListener('click', function () {
     document.querySelector('.sidebar').classList.toggle('open');
   });
 
@@ -11,15 +11,15 @@ export function initFilterUI() {
   const enableConnectionsChk = document.getElementById('enable-connections');
   const connectionSlider = document.getElementById('connection-slider');
   const connectionNumber = document.getElementById('connection-number');
-  enableConnectionsChk.addEventListener('change', function() {
+  enableConnectionsChk.addEventListener('change', function () {
     const enabled = this.checked;
     connectionSlider.disabled = !enabled;
     connectionNumber.disabled = !enabled;
   });
-  connectionSlider.addEventListener('input', function() {
+  connectionSlider.addEventListener('input', function () {
     connectionNumber.value = this.value;
   });
-  connectionNumber.addEventListener('input', function() {
+  connectionNumber.addEventListener('input', function () {
     connectionSlider.value = this.value;
   });
 
@@ -30,7 +30,7 @@ export function initFilterUI() {
   const isolationToleranceSlider = document.getElementById('isolation-tolerance-slider');
   const isolationGridSlider = document.getElementById('isolation-grid-slider');
   const isolationGridNumber = document.getElementById('isolation-grid-number');
-  enableIsolationChk.addEventListener('change', function() {
+  enableIsolationChk.addEventListener('change', function () {
     const enabled = this.checked;
     isolationSlider.disabled = !enabled;
     isolationNumber.disabled = !enabled;
@@ -38,21 +38,21 @@ export function initFilterUI() {
     isolationGridSlider.disabled = !enabled;
     isolationGridNumber.disabled = !enabled;
   });
-  isolationSlider.addEventListener('input', function() {
+  isolationSlider.addEventListener('input', function () {
     isolationNumber.value = this.value;
     document.getElementById('isolation-value').textContent = this.value;
   });
-  isolationNumber.addEventListener('input', function() {
+  isolationNumber.addEventListener('input', function () {
     isolationSlider.value = this.value;
     document.getElementById('isolation-value').textContent = this.value;
   });
-  isolationToleranceSlider.addEventListener('input', function() {
+  isolationToleranceSlider.addEventListener('input', function () {
     document.getElementById('isolation-tolerance-value').textContent = this.value;
   });
-  isolationGridSlider.addEventListener('input', function() {
+  isolationGridSlider.addEventListener('input', function () {
     isolationGridNumber.value = this.value;
   });
-  isolationGridNumber.addEventListener('input', function() {
+  isolationGridNumber.addEventListener('input', function () {
     isolationGridSlider.value = this.value;
   });
 
@@ -60,16 +60,16 @@ export function initFilterUI() {
   const enableDensityChk = document.getElementById('enable-density-filter');
   const densitySubdivisionSlider = document.getElementById('density-subdivision-percent-slider');
   const densitySubdivisionNumber = document.getElementById('density-subdivision-percent-number');
-  enableDensityChk.addEventListener('change', function() {
+  enableDensityChk.addEventListener('change', function () {
     const enabled = this.checked;
     densitySubdivisionSlider.disabled = !enabled;
     densitySubdivisionNumber.disabled = !enabled;
   });
-  densitySubdivisionSlider.addEventListener('input', function() {
+  densitySubdivisionSlider.addEventListener('input', function () {
     densitySubdivisionNumber.value = this.value;
     document.getElementById('density-subdivision-percent-value').textContent = this.value;
   });
-  densitySubdivisionNumber.addEventListener('input', function() {
+  densitySubdivisionNumber.addEventListener('input', function () {
     densitySubdivisionSlider.value = this.value;
     document.getElementById('density-subdivision-percent-value').textContent = this.value;
   });
@@ -77,18 +77,18 @@ export function initFilterUI() {
   // Distance slider sync.
   const minDistanceSlider = document.getElementById('min-distance-slider');
   const minDistanceNumber = document.getElementById('min-distance-number');
-  minDistanceSlider.addEventListener('input', function() {
+  minDistanceSlider.addEventListener('input', function () {
     minDistanceNumber.value = this.value;
   });
-  minDistanceNumber.addEventListener('input', function() {
+  minDistanceNumber.addEventListener('input', function () {
     minDistanceSlider.value = this.value;
   });
   const maxDistanceSlider = document.getElementById('max-distance-slider');
   const maxDistanceNumber = document.getElementById('max-distance-number');
-  maxDistanceSlider.addEventListener('input', function() {
+  maxDistanceSlider.addEventListener('input', function () {
     maxDistanceNumber.value = this.value;
   });
-  maxDistanceNumber.addEventListener('input', function() {
+  maxDistanceNumber.addEventListener('input', function () {
     maxDistanceSlider.value = this.value;
   });
 
@@ -97,7 +97,7 @@ export function initFilterUI() {
 
   // Fullscreen button listeners.
   document.querySelectorAll('.fullscreen-btn').forEach(btn => {
-    btn.addEventListener('click', function() {
+    btn.addEventListener('click', function () {
       const mapContainer = this.parentElement;
       const canvas = mapContainer.querySelector('canvas');
       if (document.fullscreenElement) {
@@ -110,7 +110,7 @@ export function initFilterUI() {
     });
   });
 
-  document.addEventListener("fullscreenchange", function() {
+  document.addEventListener("fullscreenchange", function () {
     if (!document.fullscreenElement) {
       document.querySelectorAll('.map-container canvas').forEach(canvas => {
         canvas.style.width = "";
@@ -191,5 +191,3 @@ function addCloudsFieldset() {
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
-
-export { initFilterUI };
