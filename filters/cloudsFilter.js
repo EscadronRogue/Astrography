@@ -15,63 +15,77 @@ async function loadCloudData(cloudFileUrl) {
 }
 
 /**
- * Instead of a concave hull, this function creates a polyline that connects all the stars listed
- * (ignoring whether they are currently plotted). It uses stars up to 100 LY away.
- * @param {Array} cloudData - Array of star objects from the cloud file (should contain "Star Name").
- * @param {Array} completeStarList - Complete array of star objects (ignoring distance filtering).
+ * Creates a cloud overlay by connecting each star (within 100 LY) in the cloud’s list 
+ * to its three closest neighbors (in real 3D distance). 
+ * This method ignores whether the star is currently plotted by any distance filter.
+ * @param {Array} cloudData - Array of star objects from the cloud file.
+ * @param {Array} completeStarList - Complete array of star objects.
  * @param {string} mapType - Either 'TrueCoordinates' or 'Globe'.
  * @param {THREE.Color} cloudColor - Unique color for the cloud overlay.
- * @returns {THREE.Line|null} - A THREE.Line object representing the cloud overlay, or null if fewer than 2 points.
+ * @returns {THREE.LineSegments|null} - A THREE.LineSegments object representing the cloud overlay, or null if fewer than 2 points.
  */
 export async function createCloudOverlay(cloudData, completeStarList, mapType, cloudColor = new THREE.Color(0xff6600)) {
-  const positions = [];
-  // Get a set of star names from the cloud file.
+  // Get the set of star names listed in the cloud data.
   const cloudNames = new Set(cloudData.map(d => d['Star Name']));
+  const cloudStars = [];
   
-  // For each star in the complete list, if its name is in the cloud file and its distance is <= 100 LY, add its position.
+  // From the complete list, filter stars that belong to this cloud and are within 100 LY.
   completeStarList.forEach(star => {
     const distance = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
     if (distance > 100) return;
     if (cloudNames.has(star.Common_name_of_the_star)) {
+      let pos = null;
       if (mapType === 'TrueCoordinates') {
-        if (star.truePosition) positions.push(star.truePosition);
+        if (star.truePosition) pos = star.truePosition;
       } else {
-        if (star.spherePosition) positions.push(star.spherePosition);
+        if (star.spherePosition) pos = star.spherePosition;
+      }
+      if (pos) {
+        cloudStars.push({ star, pos });
       }
     }
   });
-
-  if (positions.length < 2) return null; // Need at least two points to form a line
-
-  // Create a BufferGeometry from the positions array.
-  const geometry = new THREE.BufferGeometry().setFromPoints(positions);
-
-  // Create a very thick line material.
-  // Note: The linewidth property is not supported on most platforms by default.
+  
+  if (cloudStars.length < 2) return null; // Not enough points
+  
+  // For each star in the cloud, compute its three closest neighbors
+  // and add a line segment from the star to each neighbor.
+  const vertices = [];
+  for (let i = 0; i < cloudStars.length; i++) {
+    const current = cloudStars[i];
+    const neighbors = [];
+    for (let j = 0; j < cloudStars.length; j++) {
+      if (i === j) continue;
+      const other = cloudStars[j];
+      const d = current.pos.distanceTo(other.pos);
+      neighbors.push({ other, distance: d });
+    }
+    // Sort by distance and take the closest three
+    neighbors.sort((a, b) => a.distance - b.distance);
+    const k = Math.min(3, neighbors.length);
+    for (let n = 0; n < k; n++) {
+      // Push current position and neighbor position for each connecting line
+      vertices.push(current.pos.x, current.pos.y, current.pos.z);
+      vertices.push(neighbors[n].other.pos.x, neighbors[n].other.pos.y, neighbors[n].other.pos.z);
+    }
+  }
+  
+  // Build the BufferGeometry from the computed vertices.
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  
+  // Create a thick line material.
   const material = new THREE.LineBasicMaterial({
     color: cloudColor,
-    linewidth: 10, // "Very very very thick" – you might need an alternative implementation for thick lines.
+    linewidth: 10, // Very thick – note: many platforms ignore linewidth values >1
     transparent: true,
     opacity: 0.8,
     depthWrite: false
   });
-
-  const line = new THREE.Line(geometry, material);
-  line.renderOrder = 1;
-  return line;
-}
-
-/**
- * Extracts the cloud name from its file URL.
- * E.g., "data/Aquila_cloud_data.json" -> "Aquila"
- * @param {string} fileUrl 
- * @returns {string} Cloud name.
- */
-function getCloudNameFromFileUrl(fileUrl) {
-  const parts = fileUrl.split('/');
-  const filename = parts[parts.length - 1];
-  const cloudName = filename.replace('_cloud_data.json', '').replace('_', ' ');
-  return cloudName;
+  
+  const lineSegments = new THREE.LineSegments(geometry, material);
+  lineSegments.renderOrder = 1;
+  return lineSegments;
 }
 
 /**
@@ -89,9 +103,22 @@ function uniqueColorFromName(name) {
 }
 
 /**
+ * Extracts the cloud name from its file URL.
+ * E.g., "data/Aquila_cloud_data.json" -> "Aquila"
+ * @param {string} fileUrl 
+ * @returns {string} Cloud name.
+ */
+function getCloudNameFromFileUrl(fileUrl) {
+  const parts = fileUrl.split('/');
+  const filename = parts[parts.length - 1];
+  return filename.replace('_cloud_data.json', '').replace('_', ' ');
+}
+
+/**
  * Updates the cloud overlays.
- * For each checked cloud file, it loads the cloud data and creates a polyline overlay
- * using the complete star list (ignoring the distance filter) and a unique color.
+ * For each checked cloud file, it loads the cloud data and creates connecting lines
+ * where each star (within 100 LY) is connected to its three nearest neighbors.
+ * Each cloud is rendered with a unique color.
  * @param {Array} completeStarList - Complete array of star objects.
  * @param {THREE.Scene} scene - The scene to add the cloud overlays.
  * @param {string} mapType - 'TrueCoordinates' or 'Globe'.
