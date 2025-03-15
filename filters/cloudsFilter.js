@@ -1,5 +1,6 @@
 // File: /filters/cloudsFilter.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { getGreatCirclePoints } from '../utils/geometryUtils.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -16,8 +17,10 @@ async function loadCloudData(cloudFileUrl) {
 
 /**
  * Creates a cloud overlay by connecting each star (within 100 LY) in the cloud’s list 
- * to its three closest neighbors (in real 3D distance). 
- * This method ignores whether the star is currently plotted by any distance filter.
+ * to its three closest neighbors (in real 3D distance). For the Globe map, the connecting
+ * lines follow a great‑circle arc so that they adhere to the curvature of the globe.
+ * This method ignores any distance filtering.
+ *
  * @param {Array} cloudData - Array of star objects from the cloud file.
  * @param {Array} completeStarList - Complete array of star objects.
  * @param {string} mapType - Either 'TrueCoordinates' or 'Globe'.
@@ -46,11 +49,11 @@ export async function createCloudOverlay(cloudData, completeStarList, mapType, c
     }
   });
   
-  if (cloudStars.length < 2) return null; // Not enough points
+  if (cloudStars.length < 2) return null; // Need at least two points
   
-  // For each star in the cloud, compute its three closest neighbors
-  // and add a line segment from the star to each neighbor.
   const vertices = [];
+  
+  // For each star in the cloud, compute its three closest neighbors and connect to them.
   for (let i = 0; i < cloudStars.length; i++) {
     const current = cloudStars[i];
     const neighbors = [];
@@ -60,24 +63,34 @@ export async function createCloudOverlay(cloudData, completeStarList, mapType, c
       const d = current.pos.distanceTo(other.pos);
       neighbors.push({ other, distance: d });
     }
-    // Sort by distance and take the closest three
+    // Sort by distance and take the closest three neighbors.
     neighbors.sort((a, b) => a.distance - b.distance);
     const k = Math.min(3, neighbors.length);
     for (let n = 0; n < k; n++) {
-      // Push current position and neighbor position for each connecting line
-      vertices.push(current.pos.x, current.pos.y, current.pos.z);
-      vertices.push(neighbors[n].other.pos.x, neighbors[n].other.pos.y, neighbors[n].other.pos.z);
+      const neighborPos = neighbors[n].other.pos;
+      if (mapType === 'Globe') {
+        // Use the helper function to compute points along a great-circle arc.
+        // Here we assume a sphere radius of 100 and 32 segments.
+        const arcPoints = getGreatCirclePoints(current.pos, neighborPos, 100, 32);
+        for (let p of arcPoints) {
+          vertices.push(p.x, p.y, p.z);
+        }
+      } else {
+        // For TrueCoordinates, simply use a straight line.
+        vertices.push(current.pos.x, current.pos.y, current.pos.z);
+        vertices.push(neighborPos.x, neighborPos.y, neighborPos.z);
+      }
     }
   }
   
-  // Build the BufferGeometry from the computed vertices.
+  // Create BufferGeometry from the vertices.
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   
-  // Create a thick line material.
+  // Create a very thick line material.
   const material = new THREE.LineBasicMaterial({
     color: cloudColor,
-    linewidth: 10, // Very thick – note: many platforms ignore linewidth values >1
+    linewidth: 10, // Note: WebGL may ignore linewidth >1; consider using a fat line implementation if needed.
     transparent: true,
     opacity: 0.8,
     depthWrite: false
@@ -118,6 +131,7 @@ function getCloudNameFromFileUrl(fileUrl) {
  * Updates the cloud overlays.
  * For each checked cloud file, it loads the cloud data and creates connecting lines
  * where each star (within 100 LY) is connected to its three nearest neighbors.
+ * For Globe maps, the lines follow a great‑circle arc.
  * Each cloud is rendered with a unique color.
  * @param {Array} completeStarList - Complete array of star objects.
  * @param {THREE.Scene} scene - The scene to add the cloud overlays.
