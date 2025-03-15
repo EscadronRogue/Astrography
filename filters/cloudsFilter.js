@@ -64,7 +64,7 @@ export async function createCloudOverlay(cloudData, completeStarList, mapType, c
       neighbors.push({ other, distance: d });
     }
     neighbors.sort((a, b) => a.distance - b.distance);
-    const k = Math.min(5, neighbors.length);
+    const k = Math.min(4, neighbors.length);
     for (let n = 0; n < k; n++) {
       const p1 = current.pos;
       const p2 = neighbors[n].other.pos;
