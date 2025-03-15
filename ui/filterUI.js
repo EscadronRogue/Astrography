@@ -142,7 +142,7 @@ function addCloudsFieldset() {
     const isActive = legend.classList.contains('active');
     legend.setAttribute('aria-expanded', isActive);
     if (isActive) {
-      // Delay setting maxHeight to allow rendering so that scrollHeight is computed correctly.
+      // Use a timeout to ensure scrollHeight is computed after render.
       setTimeout(() => {
         contentDiv.style.maxHeight = contentDiv.scrollHeight + "px";
       }, 0);
@@ -194,5 +194,3 @@ function addCloudsFieldset() {
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
-
-export { initFilterUI };
