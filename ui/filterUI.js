@@ -131,23 +131,22 @@ function addCloudsFieldset() {
   legend.textContent = 'Dust Clouds';
   fs.appendChild(legend);
   
-  // Create content container similar to other filter categories.
+  // Create content container with classes matching the constellation category.
   const contentDiv = document.createElement('div');
-  contentDiv.classList.add('filter-content');
+  contentDiv.classList.add('filter-content', 'scrollable-category');
   contentDiv.style.maxHeight = '0px';
-  contentDiv.style.overflow = 'hidden';
   
-  // Toggle open/closed state on legend click.
+  // Toggle open/closed state on legend click (consistent with other filter categories).
   legend.addEventListener('click', () => {
     legend.classList.toggle('active');
     const isActive = legend.classList.contains('active');
     legend.setAttribute('aria-expanded', isActive);
     if (isActive) {
       contentDiv.style.maxHeight = contentDiv.scrollHeight + "px";
-      contentDiv.style.overflow = 'visible';
+      contentDiv.style.overflowY = 'auto';
     } else {
       contentDiv.style.maxHeight = "0px";
-      contentDiv.style.overflow = 'hidden';
+      contentDiv.style.overflowY = 'hidden';
     }
   });
   
@@ -179,7 +178,7 @@ function addCloudsFieldset() {
     cloudChk.id = 'dust-cloud-' + cloud.name.replace(/\s+/g, '-').toLowerCase();
     cloudChk.name = 'dust-clouds'; // All checkboxes share this name.
     cloudChk.value = cloud.file;
-    // All clouds off by default.
+    // All clouds are off by default.
     cloudChk.checked = false;
     const cloudLbl = document.createElement('label');
     cloudLbl.htmlFor = cloudChk.id;
@@ -192,3 +191,5 @@ function addCloudsFieldset() {
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
+
+export { initFilterUI };
