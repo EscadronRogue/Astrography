@@ -142,7 +142,10 @@ function addCloudsFieldset() {
     const isActive = legend.classList.contains('active');
     legend.setAttribute('aria-expanded', isActive);
     if (isActive) {
-      contentDiv.style.maxHeight = contentDiv.scrollHeight + "px";
+      // Delay setting maxHeight to allow rendering so that scrollHeight is computed correctly.
+      setTimeout(() => {
+        contentDiv.style.maxHeight = contentDiv.scrollHeight + "px";
+      }, 0);
       contentDiv.style.overflowY = 'auto';
     } else {
       contentDiv.style.maxHeight = "0px";
@@ -191,3 +194,5 @@ function addCloudsFieldset() {
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
+
+export { initFilterUI };
