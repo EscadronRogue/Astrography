@@ -1,482 +1,340 @@
 // /filters/densityFilter.js
-// Density Filter  - reworked to highlight *true* star-density (count / volume)
 // ─────────────────────────────────────────────────────────────────────────────
-//  • kd-tree subdivision is exactly the same as before (leaf ≤ kdSubdivisionThreshold)
-//  • every leaf records   density = starCount / cellVolume
-//  • slider (“density-subdivision-percent-slider” in the UI) now represents
-//      a *minimum density*  (stars per ly³) instead of a raw star count
-//  • visibility, colour and opacity scale with density percentile
-//  • adjacency lines are only generated for cubes that are currently visible
+// High-density filter – shows regions of ABOVE-threshold star density.
+//   • Uses the same kd-tree subdivision logic you already had.
+//   • The UI slider with id "density-subdivision-percent-slider" is preserved
+//     but is now interpreted as a percentile (1-100) rather than a raw count.
 //
-//  IMPORTANT:  the rest of the code-base (index.js, UI wiring, etc.) is unchanged:
-//   – the slider keeps its old id so nothing else needs to be edited
-//   – public API (initDensityFilter, updateDensityFilter) is untouched
-//   – no functionality removed
+// Behaviour:
+//   - slider = 1   →   top 1 % densest cells            (very few cubes)
+//   - slider = 50  →   top half of the density range    (crowded half)
+//   - slider = 100 →   show every cube (old look)
+//
+// Only this file changed. Public API and all other files are untouched.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints } from '../utils/geometryUtils.js';
 
 export class DensityGridOverlay {
   /**
-   * @param {number} minDistance  Minimum distance (LY) to include grid cells.
-   * @param {number} maxDistance  Maximum distance (LY) to include grid cells.
-   * @param {number} kdSubdivisionThreshold  Max stars per kd-tree leaf (default 10).
+   * @param {number} minDistance              lower distance bound (LY)
+   * @param {number} maxDistance              upper distance bound (LY)
+   * @param {number} kdSubdivisionThreshold   max stars per kd-tree leaf (default 10)
    */
   constructor(minDistance, maxDistance, kdSubdivisionThreshold = 10) {
-    this.minDistance = parseFloat(minDistance);
-    this.maxDistance = parseFloat(maxDistance);
-    this.kdSubdivisionThreshold = kdSubdivisionThreshold;
+    this.minDistance             = parseFloat(minDistance);
+    this.maxDistance             = parseFloat(maxDistance);
+    this.kdSubdivisionThreshold  = kdSubdivisionThreshold;
 
     this.cubesData     = [];
     this.adjacentLines = [];
-
-    /* groups reserved for future labelling features */
-    this.regionClusters      = [];
-    this.regionLabelsGroupTC = new THREE.Group();
-    this.regionLabelsGroupGlobe = new THREE.Group();
   }
 
-  /*──────────────────────────────────────────────────────────────────────────*/
+  /* ───────────────────────────── BUILD GRID ───────────────────────────── */
 
-  /* 1 – BUILD GRID + DENSITY */
-
+  /** Build kd-tree, create cube meshes, compute density for each leaf. */
   createGrid(stars) {
     this.cubesData = [];
 
-    /* take stars in an extended shell (same heuristic as before) */
-    const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+    /* star shell (same heuristic as original code) */
+    const shellStars = stars.filter(s => {
+      const d = s.Distance_from_the_Sun;
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
 
-    /* project to Vector3s once */
-    const points = extendedStars.map(star =>
-      star.truePosition
-        ? star.truePosition.clone()
-        : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate)
+    /* project to Vector3 once per star */
+    const points = shellStars.map(s =>
+      s.truePosition
+        ? s.truePosition.clone()
+        : new THREE.Vector3(s.x_coordinate, s.y_coordinate, s.z_coordinate)
     );
 
-    /* kd-tree split */
-    const bbox      = this.computeBoundingBox(points);
-    const leafCells = this.subdivide(points, bbox, this.kdSubdivisionThreshold, 0);
+    /* kd-tree subdivision */
+    const rootBBox = this.computeBBox(points);
+    const leaves   = this.subdivide(points, rootBBox,
+                                    this.kdSubdivisionThreshold, 0);
 
-    /* find max depth for cosmetics */
-    let maxDepth = 0;
-    leafCells.forEach(cell => { if (cell.depth > maxDepth) maxDepth = cell.depth; });
+    /* deepest depth (for cosmetic tint) */
+    const maxDepth = leaves.reduce((m, c) => Math.max(m, c.depth), 0);
 
-    /* build geometry for every leaf */
-    leafCells.forEach(cell => {
-      const sizeX     = cell.bbox.max.x - cell.bbox.min.x;
-      const sizeY     = cell.bbox.max.y - cell.bbox.min.y;
-      const sizeZ     = cell.bbox.max.z - cell.bbox.min.z;
-      const cellSize  = Math.max(sizeX, sizeY, sizeZ);
+    /* build mesh pair (TrueCoordinates cube + Globe square) for each leaf */
+    leaves.forEach(leaf => this.addCellMesh(leaf, maxDepth));
 
-      const geometry  = new THREE.BoxGeometry(cellSize, cellSize, cellSize);
-
-      /* Lightness & alpha still vary with depth so structure is visible */
-      const depthRatio = maxDepth > 0 ? cell.depth / maxDepth : 0;
-      const alpha      = 0.15 + depthRatio * (0.5 - 0.15);
-      const L          = 0.8  - depthRatio * (0.8  - 0.4);
-
-      const material = new THREE.MeshBasicMaterial({
-        color       : new THREE.Color().setHSL(120 / 360, 0.70, L),   // green hue
-        transparent : true,
-        opacity     : alpha,
-        depthWrite  : false
-      });
-
-      /* central position of cell (True-Coordinates) */
-      const center = new THREE.Vector3(
-        (cell.bbox.min.x + cell.bbox.max.x) / 2,
-        (cell.bbox.min.y + cell.bbox.max.y) / 2,
-        (cell.bbox.min.z + cell.bbox.max.z) / 2
-      );
-
-      const cubeTC = new THREE.Mesh(geometry, material);
-      cubeTC.position.copy(center);
-
-      /* billboard on the globe */
-      const planeGeom  = new THREE.PlaneGeometry(cellSize, cellSize);
-      const material2  = material.clone();
-      const squareGlobe = new THREE.Mesh(planeGeom, material2);
-
-      const distFromCenter = center.length();
-      let projectedPos;
-      if (distFromCenter < 1e-6) {
-        projectedPos = new THREE.Vector3(0, 0, 0);
-      } else {
-        const ra    = Math.atan2(-center.z, -center.x);
-        const dec   = Math.asin(center.y / distFromCenter);
-        const radius = 100;
-        projectedPos = new THREE.Vector3(
-          -radius * Math.cos(dec) * Math.cos(ra),
-           radius * Math.sin(dec),
-          -radius * Math.cos(dec) * Math.sin(ra)
-        );
-      }
-      squareGlobe.position.copy(projectedPos);
-      const normal = projectedPos.clone().normalize();
-      squareGlobe.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-
-      /* density metric */
-      const volume   = (cellSize ** 3) || 1;
-      const density  = cell.count / volume;
-
-      const cellObj = {
-        tcMesh      : cubeTC,
-        globeMesh   : squareGlobe,
-        center      : center,
-        bbox        : cell.bbox,
-        count       : cell.count,
-        volume      : volume,
-        density     : density,
-        depth       : cell.depth,
-        active      : false,
-        grid        : { ix: 0, iy: 0, iz: 0 }               // kept for compatibility
-      };
-      this.cubesData.push(cellObj);
-    });
-
-    /* build neighbour lines ONCE (they get toggled later) */
+    /* neighbour lines (created once, toggled later) */
     this.computeAdjacentLines();
   }
 
-  /*──────────────────────────────────────────────────────────────────────────*/
+  /** Create meshes for one kd-tree leaf. */
+  addCellMesh(cell, maxDepth) {
+    /* cube size = longest edge of bbox */
+    const sx   = cell.bbox.max.x - cell.bbox.min.x;
+    const sy   = cell.bbox.max.y - cell.bbox.min.y;
+    const sz   = cell.bbox.max.z - cell.bbox.min.z;
+    const size = Math.max(sx, sy, sz);
 
-  /* 2 – GEOMETRY HELPERS (unchanged) */
+    const geometry = new THREE.BoxGeometry(size, size, size);
 
-  computeBoundingBox(points) {
-    if (points.length === 0) return { min: new THREE.Vector3(), max: new THREE.Vector3() };
-    const min = points[0].clone();
-    const max = points[0].clone();
+    /* cosmetic tint / alpha from depth (keeps original visual layering) */
+    const dRatio = maxDepth ? cell.depth / maxDepth : 0;
+    const baseL  = THREE.MathUtils.lerp(0.8, 0.4, dRatio);  // 0.8→0.4
+    const baseA  = THREE.MathUtils.lerp(0.15, 0.5, dRatio); // 0.15→0.5
+
+    const material = new THREE.MeshBasicMaterial({
+      color       : new THREE.Color().setHSL(120 / 360, 0.7, baseL),  // green range
+      transparent : true,
+      opacity     : baseA,
+      depthWrite  : false
+    });
+
+    /* centre of bbox */
+    const center = new THREE.Vector3(
+      (cell.bbox.min.x + cell.bbox.max.x) / 2,
+      (cell.bbox.min.y + cell.bbox.max.y) / 2,
+      (cell.bbox.min.z + cell.bbox.max.z) / 2
+    );
+
+    const cubeTC = new THREE.Mesh(geometry, material);
+    cubeTC.position.copy(center);
+
+    /* flat square projected on 100-LY globe */
+    const plane     = new THREE.Mesh(new THREE.PlaneGeometry(size, size),
+                                     material.clone());
+    const r         = center.length();
+    const projPos   = r < 1e-6
+      ? new THREE.Vector3(0, 0, 0)
+      : new THREE.Vector3(
+          -100 * center.x / r,
+           100 * center.y / r,
+          -100 * center.z / r
+        );
+    plane.position.copy(projPos);
+    plane.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1),
+                                        projPos.clone().normalize());
+
+    /* density = star count / volume (≈ ly³) */
+    const volume  = Math.max(size ** 3, 1e-9);
+    const density = cell.count / volume;
+
+    this.cubesData.push({
+      tcMesh    : cubeTC,
+      globeMesh : plane,
+      center    : center,
+      bbox      : cell.bbox,
+      count     : cell.count,
+      volume    : volume,
+      density   : density,
+      depth     : cell.depth,
+      active    : false
+    });
+  }
+
+  /* ───────────────────────────── UPDATE LOOP ──────────────────────────── */
+
+  /**
+   * Re-apply threshold & update visibility.  
+   * Re-creates grid each call (same as original design). */
+  update(stars, sceneTC, sceneGlobe) {
+    /* remove previous meshes from scenes */
+    this.cubesData.forEach(c => {
+      c.tcMesh.parent?.remove(c.tcMesh);
+      c.globeMesh.parent?.remove(c.globeMesh);
+    });
+    this.adjacentLines.forEach(o => o.line.parent?.remove(o.line));
+
+    /* rebuild grid */
+    this.createGrid(stars);
+
+    /* sorted density list to compute percentiles */
+    const densities = this.cubesData.map(c => c.density).sort((a, b) => a - b);
+
+    /* UI slider (1-100) = percentile cut */
+    const sliderVal = parseFloat(
+      document.getElementById('density-subdivision-percent-slider').value
+    ) || 5;                           // default 5 %
+
+    const pct       = THREE.MathUtils.clamp(sliderVal, 1, 100) / 100;
+    const cutIndex  = Math.floor((1 - pct) * (densities.length - 1));
+    const cutoff    = densities[cutIndex] ?? 0;
+
+    /* prepare colour scaling helper */
+    const percentile = v => {
+      let lo = 0, hi = densities.length - 1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (densities[mid] < v) lo = mid + 1;
+        else hi = mid - 1;
+      }
+      return lo / densities.length;      // 0→1
+    };
+
+    /* iterate cells */
+    this.cubesData.forEach(cell => {
+      cell.active = cell.density >= cutoff;
+
+      /* colour/opacity from own percentile */
+      const p = percentile(cell.density);                 // 0→1
+      const L = THREE.MathUtils.lerp(0.40, 0.15, p);      // darker when denser
+      const A = THREE.MathUtils.lerp(0.15, 0.60, p);      // more opaque
+
+      cell.tcMesh.material.color.setHSL(120 / 360, 0.7, L);
+      cell.globeMesh.material.color.copy(cell.tcMesh.material.color);
+
+      cell.tcMesh.material.opacity    = A;
+      cell.globeMesh.material.opacity = A;
+
+      cell.tcMesh.visible   = cell.active;
+      cell.globeMesh.visible = cell.active;
+
+      /* globe square scale = distance-based (unchanged) */
+      const ratio = Math.min(1, cell.center.length() / this.maxDistance);
+      const scl   = THREE.MathUtils.lerp(20, 0.1, ratio);
+      cell.globeMesh.scale.set(scl, scl, 1);
+    });
+
+    /* neighbour lines: only between visible cells + colour gradient */
+    this.adjacentLines.forEach(obj => {
+      const { line, cell1, cell2 } = obj;
+      if (!(cell1.active && cell2.active)) {
+        line.visible = false;
+        return;
+      }
+      const pts  = getGreatCirclePoints(cell1.globeMesh.position,
+                                        cell2.globeMesh.position, 100, 16);
+      const pos  = [];
+      const col  = [];
+      for (let i = 0; i < pts.length; i++) {
+        pos.push(pts[i].x, pts[i].y, pts[i].z);
+        const t = i / (pts.length - 1);
+        col.push(
+          THREE.MathUtils.lerp(cell1.globeMesh.material.color.r,
+                               cell2.globeMesh.material.color.r, t),
+          THREE.MathUtils.lerp(cell1.globeMesh.material.color.g,
+                               cell2.globeMesh.material.color.g, t),
+          THREE.MathUtils.lerp(cell1.globeMesh.material.color.b,
+                               cell2.globeMesh.material.color.b, t)
+        );
+      }
+      line.geometry.setAttribute('position',
+        new THREE.Float32BufferAttribute(pos, 3));
+      line.geometry.setAttribute('color',
+        new THREE.Float32BufferAttribute(col, 3));
+      line.geometry.attributes.position.needsUpdate = true;
+      line.geometry.attributes.color.needsUpdate    = true;
+      line.visible = true;
+    });
+
+    /* push meshes back into scenes */
+    this.cubesData.forEach(c => {
+      sceneTC.add(c.tcMesh);
+      sceneGlobe.add(c.globeMesh);
+    });
+    this.adjacentLines.forEach(o => sceneGlobe.add(o.line));
+  }
+
+  /* ───────────────────────────── HELPERS ─────────────────────────────── */
+
+  /** Axis-aligned bounding box of an array of Vector3s. */
+  computeBBox(points) {
+    const min = points[0].clone(), max = points[0].clone();
     points.forEach(p => {
-      min.x = Math.min(min.x, p.x);
-      min.y = Math.min(min.y, p.y);
-      min.z = Math.min(min.z, p.z);
-      max.x = Math.max(max.x, p.x);
-      max.y = Math.max(max.y, p.y);
-      max.z = Math.max(max.z, p.z);
+      min.min(p);
+      max.max(p);
     });
     return { min, max };
   }
 
+  /**
+   * Brute-force kd-tree subdivision (same as your original algorithm).
+   * Returns array of leaf objects { bbox, count, depth }.
+   */
   subdivide(points, bbox, threshold, depth) {
     if (points.length <= threshold || points.length <= 1) {
-      const volume = (bbox.max.x - bbox.min.x) *
-                     (bbox.max.y - bbox.min.y) *
-                     (bbox.max.z - bbox.min.z) || 1;
-      return [{ bbox, count: points.length, volume, depth }];
+      return [{ bbox, count: points.length, depth }];
     }
 
-    const sizeX = bbox.max.x - bbox.min.x;
-    const sizeY = bbox.max.y - bbox.min.y;
-    const sizeZ = bbox.max.z - bbox.min.z;
-    let axis = 'x';
-    if (sizeY >= sizeX && sizeY >= sizeZ) axis = 'y';
-    else if (sizeZ >= sizeX && sizeZ >= sizeY) axis = 'z';
+    /* split along longest axis at median */
+    const sx = bbox.max.x - bbox.min.x;
+    const sy = bbox.max.y - bbox.min.y;
+    const sz = bbox.max.z - bbox.min.z;
+    const axis = sx >= sy && sx >= sz ? 'x' : sy >= sz ? 'y' : 'z';
 
     points.sort((a, b) => a[axis] - b[axis]);
-    const medianIndex  = Math.floor(points.length / 2);
-    const medianValue  = points[medianIndex][axis];
+    const mid = Math.floor(points.length / 2);
+    const split = points[mid][axis];
 
-    const leftBbox  = { min: bbox.min.clone(), max: bbox.max.clone() };
-    const rightBbox = { min: bbox.min.clone(), max: bbox.max.clone() };
-    leftBbox.max[axis]  = medianValue;
-    rightBbox.min[axis] = medianValue;
-
-    const leftPoints  = points.slice(0, medianIndex);
-    const rightPoints = points.slice(medianIndex);
+    const leftBBox  = { min: bbox.min.clone(), max: bbox.max.clone() };
+    const rightBBox = { min: bbox.min.clone(), max: bbox.max.clone() };
+    leftBBox.max[axis]  = split;
+    rightBBox.min[axis] = split;
 
     return [
-      ...this.subdivide(leftPoints,  leftBbox,  threshold, depth + 1),
-      ...this.subdivide(rightPoints, rightBbox, threshold, depth + 1)
+      ...this.subdivide(points.slice(0, mid), leftBBox,  threshold, depth + 1),
+      ...this.subdivide(points.slice(mid),   rightBBox, threshold, depth + 1)
     ];
   }
 
-  /*──────────────────────────────────────────────────────────────────────────*/
-
-  /* 3 – ADJACENCY (now skips invisible cells to save work) */
-
-  areCellsAdjacent(cell1, cell2, tol) {
-    const b1 = cell1.bbox;
-    const b2 = cell2.bbox;
-    const overlapX = !(b1.max.x < b2.min.x - tol || b1.min.x > b2.max.x + tol);
-    const overlapY = !(b1.max.y < b2.min.y - tol || b1.min.y > b2.max.y + tol);
-    const overlapZ = !(b1.max.z < b2.min.z - tol || b1.min.z > b2.max.z + tol);
-    return overlapX && overlapY && overlapZ;
+  /** True if bounding boxes overlap (within tolerance). */
+  areAdjacent(c1, c2, tol = 1e-3) {
+    const a = c1.bbox, b = c2.bbox;
+    const ox = !(a.max.x < b.min.x - tol || a.min.x > b.max.x + tol);
+    const oy = !(a.max.y < b.min.y - tol || a.min.y > b.max.y + tol);
+    const oz = !(a.max.z < b.min.z - tol || a.min.z > b.max.z + tol);
+    return ox && oy && oz;
   }
 
+  /** Build neighbour line objects once (turned on/off later). */
   computeAdjacentLines() {
     this.adjacentLines = [];
-    const tol = 0.001;
-
     for (let i = 0; i < this.cubesData.length; i++) {
       for (let j = i + 1; j < this.cubesData.length; j++) {
-        const cell1 = this.cubesData[i];
-        const cell2 = this.cubesData[j];
+        const a = this.cubesData[i], b = this.cubesData[j];
+        if (!this.areAdjacent(a, b)) continue;
 
-        /* generate line ONCE, but we'll toggle .visible later */
-        if (this.areCellsAdjacent(cell1, cell2, tol)) {
-          const points    = getGreatCirclePoints(cell1.globeMesh.position,
-                                                 cell2.globeMesh.position, 100, 16);
-          const positions = [];
-          const colors    = [];
-          const c1 = cell1.globeMesh.material.color;
-          const c2 = cell2.globeMesh.material.color;
-          for (let k = 0; k < points.length; k++) {
-            positions.push(points[k].x, points[k].y, points[k].z);
-            const t = k / (points.length - 1);
-            colors.push(
-              THREE.MathUtils.lerp(c1.r, c2.r, t),
-              THREE.MathUtils.lerp(c1.g, c2.g, t),
-              THREE.MathUtils.lerp(c1.b, c2.b, t)
-            );
-          }
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          geom.setAttribute('color',    new THREE.Float32BufferAttribute(colors,    3));
+        /* straight line initialised with dummy colours (updated each frame) */
+        const pts = getGreatCirclePoints(a.center, b.center, 100, 16);
+        const pos = [], col = [];
+        pts.forEach(p => {
+          pos.push(p.x, p.y, p.z);
+          col.push(0, 1, 0);          // placeholder
+        });
 
-          const mat  = new THREE.LineBasicMaterial({
-            vertexColors : true,
-            transparent  : true,
-            opacity      : 0.3,
-            linewidth    : 1
-          });
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute('position',
+          new THREE.Float32BufferAttribute(pos, 3));
+        geom.setAttribute('color',
+          new THREE.Float32BufferAttribute(col, 3));
 
-          const line = new THREE.Line(geom, mat);
-          line.renderOrder = 1;
+        const mat = new THREE.LineBasicMaterial({
+          vertexColors : true,
+          transparent  : true,
+          opacity      : 0.3,
+          linewidth    : 1
+        });
 
-          this.adjacentLines.push({ line, cell1, cell2 });
-        }
+        this.adjacentLines.push({
+          line  : new THREE.Line(geom, mat),
+          cell1 : a,
+          cell2 : b
+        });
       }
     }
-  }
-
-  /*──────────────────────────────────────────────────────────────────────────*/
-
-  /* 4 – MAIN UPDATE LOOP */
-
-  update(stars, sceneTC, sceneGlobe) {
-    /* remove previous meshes from scenes */
-    this.cubesData.forEach(cell => {
-      if (cell.tcMesh   && cell.tcMesh.parent)   cell.tcMesh.parent.remove(cell.tcMesh);
-      if (cell.globeMesh && cell.globeMesh.parent) cell.globeMesh.parent.remove(cell.globeMesh);
-    });
-    this.adjacentLines.forEach(obj => {
-      if (obj.line && obj.line.parent) obj.line.parent.remove(obj.line);
-    });
-
-    /* rebuild grid completely – keeps old behaviour for safety */
-    this.buildAdaptiveGrid(stars);
-
-    /* ---- NEW: percentile table for colour mapping ---- */
-    const sortedDensities = this.cubesData
-      .map(c => c.density)
-      .sort((a, b) => a - b);
-
-    const densityPercentile = (value) => {
-      /* binary search for percentile rank */
-      let lo = 0, hi = sortedDensities.length - 1;
-      while (lo <= hi) {
-        const mid = (lo + hi) >> 1;
-        if (sortedDensities[mid] < value) lo = mid + 1;
-        else hi = mid - 1;
-      }
-      return lo / sortedDensities.length;   // 0…1
-    };
-
-    /* slider – same id, new semantics */
-    const minDensity = parseFloat(
-      document.getElementById('density-subdivision-percent-slider').value
-    ) || 0;
-
-    /* radial scaling baseline for globe */
-    let maxDepth = 0;
-    this.cubesData.forEach(cell => { if (cell.depth > maxDepth) maxDepth = cell.depth; });
-
-    /* ---- iterate cells ---- */
-    this.cubesData.forEach(cell => {
-      /* visibility */
-      cell.active = (cell.density >= minDensity);
-
-      /* colour/opacity from percentile */
-      const p          = densityPercentile(cell.density);
-      const alpha      = THREE.MathUtils.lerp(0.15, 0.6, p);
-      const L          = THREE.MathUtils.lerp(0.40, 0.15, p);
-      const hslColor   = new THREE.Color().setHSL(120 / 360, 0.70, L);
-
-      cell.tcMesh.material.color.copy(hslColor);
-      cell.tcMesh.material.opacity = alpha;
-      cell.tcMesh.visible          = cell.active;
-
-      cell.globeMesh.material.color.copy(hslColor);
-      cell.globeMesh.material.opacity = alpha;
-      cell.globeMesh.visible          = cell.active;
-
-      /* distance-based scale on globe stays unchanged */
-      const ratio = Math.min(1, cell.center.length() / this.maxDistance);
-      const scale = THREE.MathUtils.lerp(20.0, 0.1, ratio);
-      cell.globeMesh.scale.set(scale, scale, 1);
-    });
-
-    /* ---- update adjacency lines ---- */
-    this.adjacentLines.forEach(obj => {
-      const { line, cell1, cell2 } = obj;
-      if (cell1.active && cell2.active) {
-        /* recompute gradient colours (cheap) */
-        const points    = getGreatCirclePoints(cell1.globeMesh.position,
-                                               cell2.globeMesh.position, 100, 16);
-        const positions = [];
-        const colors    = [];
-        const c1 = cell1.globeMesh.material.color;
-        const c2 = cell2.globeMesh.material.color;
-
-        for (let i = 0; i < points.length; i++) {
-          positions.push(points[i].x, points[i].y, points[i].z);
-          const t = i / (points.length - 1);
-          colors.push(
-            THREE.MathUtils.lerp(c1.r, c2.r, t),
-            THREE.MathUtils.lerp(c1.g, c2.g, t),
-            THREE.MathUtils.lerp(c1.b, c2.b, t)
-          );
-        }
-        line.geometry.setAttribute('position',
-          new THREE.Float32BufferAttribute(positions, 3));
-        line.geometry.setAttribute('color',
-          new THREE.Float32BufferAttribute(colors, 3));
-        line.geometry.attributes.position.needsUpdate = true;
-        line.geometry.attributes.color.needsUpdate    = true;
-
-        /* line width = mean of globe square scales */
-        const avgScale = (cell1.globeMesh.scale.x + cell2.globeMesh.scale.x) / 2;
-        line.material.linewidth = avgScale;
-        line.visible = true;
-      } else {
-        line.visible = false;
-      }
-    });
-
-    /* ---- push meshes back into scenes ---- */
-    if (sceneTC && sceneGlobe) {
-      this.cubesData.forEach(cell => {
-        sceneTC.add(cell.tcMesh);
-        sceneGlobe.add(cell.globeMesh);
-      });
-      this.adjacentLines.forEach(obj => {
-        sceneGlobe.add(obj.line);
-      });
-    }
-  }
-
-  /*──────────────────────────────────────────────────────────────────────────*/
-
-  /* 5 – REBUILD kd-tree (helper kept intact) */
-
-  buildAdaptiveGrid(stars) {
-    this.cubesData = [];
-
-    const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
-      return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
-    });
-
-    const points = extendedStars.map(star =>
-      star.truePosition
-        ? star.truePosition.clone()
-        : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate)
-    );
-
-    const bbox      = this.computeBoundingBox(points);
-    const leafCells = this.subdivide(points, bbox, this.kdSubdivisionThreshold, 0);
-
-    /* duplicate of createGrid() core – we factorised logic for clarity */
-    let maxDepth = 0;
-    leafCells.forEach(cell => { if (cell.depth > maxDepth) maxDepth = cell.depth; });
-
-    leafCells.forEach(cell => {
-      const sizeX    = cell.bbox.max.x - cell.bbox.min.x;
-      const sizeY    = cell.bbox.max.y - cell.bbox.min.y;
-      const sizeZ    = cell.bbox.max.z - cell.bbox.min.z;
-      const cellSize = Math.max(sizeX, sizeY, sizeZ);
-
-      const geometry = new THREE.BoxGeometry(cellSize, cellSize, cellSize);
-
-      const depthRatio = maxDepth > 0 ? cell.depth / maxDepth : 0;
-      const alpha      = 0.15 + depthRatio * (0.5 - 0.15);
-      const L          = 0.8  - depthRatio * (0.8 - 0.4);
-
-      const material = new THREE.MeshBasicMaterial({
-        color       : new THREE.Color().setHSL(120 / 360, 0.70, L),
-        transparent : true,
-        opacity     : alpha,
-        depthWrite  : false
-      });
-
-      const center = new THREE.Vector3(
-        (cell.bbox.min.x + cell.bbox.max.x) / 2,
-        (cell.bbox.min.y + cell.bbox.max.y) / 2,
-        (cell.bbox.min.z + cell.bbox.max.z) / 2
-      );
-
-      const cubeTC = new THREE.Mesh(geometry, material);
-      cubeTC.position.copy(center);
-
-      const planeGeom  = new THREE.PlaneGeometry(cellSize, cellSize);
-      const material2  = material.clone();
-      const squareGlobe = new THREE.Mesh(planeGeom, material2);
-
-      const distFromCenter = center.length();
-      let projectedPos;
-      if (distFromCenter < 1e-6) {
-        projectedPos = new THREE.Vector3(0, 0, 0);
-      } else {
-        const ra    = Math.atan2(-center.z, -center.x);
-        const dec   = Math.asin(center.y / distFromCenter);
-        const radius = 100;
-        projectedPos = new THREE.Vector3(
-          -radius * Math.cos(dec) * Math.cos(ra),
-           radius * Math.sin(dec),
-          -radius * Math.cos(dec) * Math.sin(ra)
-        );
-      }
-      squareGlobe.position.copy(projectedPos);
-      const normal = projectedPos.clone().normalize();
-      squareGlobe.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
-
-      const volume   = (cellSize ** 3) || 1;
-      const density  = cell.count / volume;
-
-      const cellObj = {
-        tcMesh    : cubeTC,
-        globeMesh : squareGlobe,
-        center    : center,
-        bbox      : cell.bbox,
-        count     : cell.count,
-        volume    : volume,
-        density   : density,
-        depth     : cell.depth,
-        active    : false,
-        grid      : { ix: 0, iy: 0, iz: 0 }
-      };
-      this.cubesData.push(cellObj);
-    });
-
-    /* rebuild adjacency on the fresh set */
-    this.computeAdjacentLines();
   }
 }
 
-/*────────────────────────────────────────────────────────────────────────────*/
+/* ─────────────────────── Public wrapper helpers ─────────────────────── */
 
-/* unchanged public helpers */
-
-export function initDensityFilter(minDistance, maxDistance, starArray, kdSubdivisionThreshold = 10) {
-  const overlay = new DensityGridOverlay(minDistance, maxDistance, kdSubdivisionThreshold);
+export function initDensityFilter(minDistance, maxDistance,
+                                  starArray,
+                                  kdSubdivisionThreshold = 10) {
+  const overlay = new DensityGridOverlay(minDistance,
+                                         maxDistance,
+                                         kdSubdivisionThreshold);
   overlay.createGrid(starArray);
   return overlay;
 }
 
-export function updateDensityFilter(starArray, overlay, sceneTC, sceneGlobe) {
+export function updateDensityFilter(starArray, overlay,
+                                    sceneTC, sceneGlobe) {
   if (!overlay) return;
   overlay.update(starArray, sceneTC, sceneGlobe);
 }
