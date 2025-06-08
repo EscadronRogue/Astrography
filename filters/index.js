@@ -10,7 +10,6 @@ import { applyStellarClassLogic, generateStellarClassFilters as scGenerate } fro
 import { loadConstellationBoundaries, loadConstellationCenters } from './constellationFilter.js';
 import { applyGlobeSurfaceFilter } from './globeSurfaceFilter.js';
 import { createConstellationOverlayForGlobe } from './constellationOverlayFilter.js';
-import { createConstellationOverlayForMollweide } from './constellationOverlayFilter.js';
 import { applyDistanceFilter } from './distanceFilter.js';
 
 // Import the new Isolation and Density Filter modules.

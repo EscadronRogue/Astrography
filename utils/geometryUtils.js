@@ -225,17 +225,18 @@ export function splitMollweideWrap(p1, p2) {
   const b = p2.clone();
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  // Check if the segment crosses the wrap boundary by testing the
-  // difference in x as well as whether the points lie within the ellipse.
   const ellipse = (x, y) => (x * x) / (200 * 200) + (y * y) / (100 * 100);
+
+  // If both points are inside the ellipse and the x-distance is less than
+  // the wrap threshold, return the original segment.
   if (Math.abs(dx) < 200 && ellipse(a.x, a.y) <= 1 && ellipse(b.x, b.y) <= 1) {
     return [[a, b]];
   }
 
-  // Solve line/ellipse intersection for the first intersection point.
+  // Compute intersection of the line with the ellipse boundary. We solve for t
+  // on the parametric line a + t*(b-a) such that the point lies on the ellipse.
   const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
-  const B =
-    2 * (a.x * dx / (200 * 200) + a.y * dy / (100 * 100));
+  const B = 2 * (a.x * dx / (200 * 200) + a.y * dy / (100 * 100));
   const C = ellipse(a.x, a.y) - 1;
   const disc = B * B - 4 * A * C;
   if (disc < 0) {
@@ -244,9 +245,7 @@ export function splitMollweideWrap(p1, p2) {
   const sqrtDisc = Math.sqrt(disc);
   const t1 = (-B - sqrtDisc) / (2 * A);
   const t2 = (-B + sqrtDisc) / (2 * A);
-  const ts = [t1, t2]
-    .filter(t => t >= 0 && t <= 1)
-    .sort((x, y) => x - y);
+  const ts = [t1, t2].filter(t => t >= 0 && t <= 1).sort((x, y) => x - y);
   if (ts.length === 0) {
     return [[a, b]];
   }
@@ -260,7 +259,13 @@ export function splitMollweideWrap(p1, p2) {
   } else {
     wrapped.x += 400;
   }
-  const seg1 = [a, edge];
-  const seg2 = [wrapped, b];
-  return [seg1, seg2];
+  // Second point also needs to be shifted so the wrapped segment continues
+  // from the opposite edge.
+  const end = b.clone();
+  if (a.x < b.x) {
+    end.x -= 400;
+  } else {
+    end.x += 400;
+  }
+  return [ [a, edge], [wrapped, end] ];
 }
