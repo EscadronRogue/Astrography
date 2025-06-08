@@ -223,20 +223,44 @@ export function adjustMollweideWrap(p1, p2) {
 export function splitMollweideWrap(p1, p2) {
   const a = p1.clone();
   const b = p2.clone();
-  if (Math.abs(a.x - b.x) <= 200) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  // Check if the segment crosses the wrap boundary by testing the
+  // difference in x as well as whether the points lie within the ellipse.
+  const ellipse = (x, y) => (x * x) / (200 * 200) + (y * y) / (100 * 100);
+  if (Math.abs(dx) < 200 && ellipse(a.x, a.y) <= 1 && ellipse(b.x, b.y) <= 1) {
     return [[a, b]];
   }
-  if (a.x < b.x) {
-    const t = (-200 - a.x) / (b.x - a.x);
-    const yEdge = a.y + t * (b.y - a.y);
-    const seg1 = [a, new THREE.Vector3(-200, yEdge, 0)];
-    const seg2 = [new THREE.Vector3(200, yEdge, 0), b];
-    return [seg1, seg2];
-  } else {
-    const t = (200 - a.x) / (b.x - a.x);
-    const yEdge = a.y + t * (b.y - a.y);
-    const seg1 = [a, new THREE.Vector3(200, yEdge, 0)];
-    const seg2 = [new THREE.Vector3(-200, yEdge, 0), b];
-    return [seg1, seg2];
+
+  // Solve line/ellipse intersection for the first intersection point.
+  const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
+  const B =
+    2 * (a.x * dx / (200 * 200) + a.y * dy / (100 * 100));
+  const C = ellipse(a.x, a.y) - 1;
+  const disc = B * B - 4 * A * C;
+  if (disc < 0) {
+    return [[a, b]];
   }
+  const sqrtDisc = Math.sqrt(disc);
+  const t1 = (-B - sqrtDisc) / (2 * A);
+  const t2 = (-B + sqrtDisc) / (2 * A);
+  const ts = [t1, t2]
+    .filter(t => t >= 0 && t <= 1)
+    .sort((x, y) => x - y);
+  if (ts.length === 0) {
+    return [[a, b]];
+  }
+  const t = ts[0];
+  const ix = a.x + dx * t;
+  const iy = a.y + dy * t;
+  const edge = new THREE.Vector3(ix, iy, 0);
+  const wrapped = edge.clone();
+  if (a.x < b.x) {
+    wrapped.x -= 400;
+  } else {
+    wrapped.x += 400;
+  }
+  const seg1 = [a, edge];
+  const seg2 = [wrapped, b];
+  return [seg1, seg2];
 }
