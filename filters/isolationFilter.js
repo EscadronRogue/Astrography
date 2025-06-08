@@ -2,7 +2,7 @@
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densityColorUtils.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap } from '../utils/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries } from './constellationFilter.js';
 
 // IsolationGridOverlay encapsulates the uniform grid logic for the Isolation Filter.
@@ -50,10 +50,10 @@ class IsolationGridOverlay {
           const cubeTC = new THREE.Mesh(geometry, material);
           cubeTC.position.copy(posTC);
 
-          // Instead of a square mesh on the globe, create a dummy Object3D
-          // that will hold the projected position.
-          const squareGlobe = new THREE.Object3D();
-          const squareMoll = new THREE.Object3D();
+          // Create plane meshes for Globe and Mollweide projections
+          const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
+          const squareGlobe = new THREE.Mesh(planeGeom, material.clone());
+          const squareMoll = new THREE.Mesh(planeGeom.clone(), material.clone());
           let projectedPos;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
@@ -70,7 +70,7 @@ class IsolationGridOverlay {
             squareMoll.position.copy(projMoll);
           }
           squareGlobe.position.copy(projectedPos);
-          // (No geometry or material is set for squareGlobe.)
+          squareGlobe.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), projectedPos.clone().normalize());
 
           const cell = {
             tcMesh: cubeTC,
@@ -100,6 +100,11 @@ class IsolationGridOverlay {
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
+      const r = cell.tcPos.length();
+      const ra = Math.atan2(-cell.tcPos.z, -cell.tcPos.x);
+      const dec = Math.asin(cell.tcPos.y / r);
+      const posM = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
+      cell.mollweideMesh.position.copy(posM);
       computeCellDistances(cell, extendedStars);
     });
     this.computeAdjacentLines();
@@ -133,10 +138,8 @@ class IsolationGridOverlay {
           const colors = [];
           const posM1 = cell.mollweideMesh.position.clone();
           const posM2 = neighbor.mollweideMesh.position.clone();
-          if (Math.abs(posM1.x - posM2.x) > 200) {
-            if (posM1.x > posM2.x) posM1.x -= 400; else posM2.x -= 400;
-          }
-          const geomM = new THREE.BufferGeometry().setFromPoints([posM1, posM2]);
+          const [adj1, adj2] = adjustMollweideWrap(posM1, posM2);
+          const geomM = new THREE.BufferGeometry().setFromPoints([adj1, adj2]);
           const c1 = cell.tcMesh.material.color; // use cube color
           const c2 = neighbor.tcMesh.material.color;
           for (let i = 0; i < points.length; i++) {
@@ -214,9 +217,7 @@ class IsolationGridOverlay {
         const colors = [];
         const posM1 = cell1.mollweideMesh.position.clone();
         const posM2 = cell2.mollweideMesh.position.clone();
-        if (Math.abs(posM1.x - posM2.x) > 200) {
-          if (posM1.x > posM2.x) posM1.x -= 400; else posM2.x -= 400;
-        }
+        const [adj1, adj2] = adjustMollweideWrap(posM1, posM2);
         const c1 = cell1.tcMesh.material.color;
         const c2 = cell2.tcMesh.material.color;
         for (let i = 0; i < points.length; i++) {
@@ -235,7 +236,7 @@ class IsolationGridOverlay {
         const avgScale = (cell1.globeMesh.scale.x + cell2.globeMesh.scale.x) / 2;
         line.material.linewidth = avgScale;
         line.visible = true;
-        lineM.geometry.setFromPoints([posM1, posM2]);
+        lineM.geometry.setFromPoints([adj1, adj2]);
         lineM.visible = true;
       } else {
         line.visible = false;

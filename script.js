@@ -34,6 +34,12 @@ let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
 let isolationOverlay = null;
 let densityOverlay = null;
+let showConstellationBoundariesFlag = false;
+let showConstellationNamesFlag = false;
+let showConstellationOverlayFlag = false;
+let enableIsolationFilterFlag = false;
+let enableDensityFilterFlag = false;
+let showCloudsFlag = false;
 
 function getStarTruePosition(star) {
   const R = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
@@ -168,7 +174,7 @@ function debounce(func, wait) {
   };
 }
 
-const debouncedUpdateMollweideView = debounce(updateMollweideView, 100);
+const debouncedUpdateMollweideView = debounce(updateMollweideView, 50);
 
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
@@ -196,6 +202,13 @@ async function buildAndApplyFilters() {
     densityGridSize,
     showClouds
   } = filters;
+
+  showConstellationBoundariesFlag = showConstellationBoundaries;
+  showConstellationNamesFlag = showConstellationNames;
+  showConstellationOverlayFlag = showConstellationOverlay;
+  enableIsolationFilterFlag = enableIsolationFilter;
+  enableDensityFilterFlag = enableDensityFilter;
+  showCloudsFlag = showClouds;
 
   currentFilteredStars = filteredStars;
   currentConnections = connections;
@@ -576,7 +589,38 @@ function updateMollweideView() {
   cachedStars.forEach(star => {
     star.mollweidePosition = projectStarMollweide(star);
   });
-  buildAndApplyFilters();
+
+  mollweideMap.updateMap(currentFilteredStars, currentConnections);
+  mollweideMap.labelManager.refreshLabels(currentFilteredStars);
+
+  if (showConstellationBoundariesFlag) {
+    constellationLinesMoll.forEach(l => mollweideMap.scene.remove(l));
+    constellationLinesMoll = createConstellationBoundariesForMollweide();
+    constellationLinesMoll.forEach(l => mollweideMap.scene.add(l));
+  }
+  if (showConstellationNamesFlag) {
+    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
+    constellationLabelsMoll = createConstellationLabelsForMollweide();
+    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
+  }
+  if (showConstellationOverlayFlag) {
+    constellationOverlayMoll.forEach(mesh => mollweideMap.scene.remove(mesh));
+    constellationOverlayMoll = createConstellationOverlayForMollweide();
+    constellationOverlayMoll.forEach(mesh => mollweideMap.scene.add(mesh));
+  }
+  if (showCloudsFlag) {
+    const form = document.getElementById('filters-form');
+    const cloudFiles = new FormData(form).getAll('dust-clouds');
+    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudFiles);
+  }
+  if (enableIsolationFilterFlag && isolationOverlay) {
+    updateIsolationFilter(cachedStars, isolationOverlay, trueCoordinatesMap.scene,
+      globeMap.scene, mollweideMap.scene);
+  }
+  if (enableDensityFilterFlag && densityOverlay) {
+    updateDensityFilter(cachedStars, densityOverlay, trueCoordinatesMap.scene,
+      globeMap.scene, mollweideMap.scene);
+  }
 }
 window.updateMollweideView = updateMollweideView;
 

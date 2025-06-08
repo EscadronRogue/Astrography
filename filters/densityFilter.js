@@ -13,7 +13,7 @@
 // Only this file changed. Public API and all other files are untouched.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap } from '../utils/geometryUtils.js';
 
 export class DensityGridOverlay {
   /**
@@ -122,9 +122,9 @@ export class DensityGridOverlay {
         const ra = Math.atan2(-center.z, -center.x);
         const dec = Math.asin(center.y / r);
         const p = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
-        const obj = new THREE.Object3D();
-        obj.position.copy(p);
-        return obj;
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), material.clone());
+        mesh.position.copy(p);
+        return mesh;
       })(),
       center    : center,
       bbox      : cell.bbox,
@@ -238,10 +238,8 @@ export class DensityGridOverlay {
       line.visible = true;
       const p1 = cell1.mollweideMesh.position.clone();
       const p2 = cell2.mollweideMesh.position.clone();
-      if (Math.abs(p1.x - p2.x) > 200) {
-        if (p1.x > p2.x) p1.x -= 400; else p2.x -= 400;
-      }
-      lineM.geometry.setFromPoints([p1, p2]);
+      const [adj1, adj2] = adjustMollweideWrap(p1, p2);
+      lineM.geometry.setFromPoints([adj1, adj2]);
       lineM.visible = true;
     });
 
