@@ -10,7 +10,7 @@ import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct impo
 import { ThreeDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
-import { cachedRadToSphere, degToRad } from './utils/geometryUtils.js';
+import { cachedRadToSphere, cachedRadToMollweide, degToRad } from './utils/geometryUtils.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -20,8 +20,10 @@ let currentGlobeConnections = [];
 let selectedStarData = null;
 let selectedHighlightTrue = null;
 let selectedHighlightGlobe = null;
+let selectedHighlightMollweide = null;
 let trueCoordinatesMap;
 let globeMap;
+let mollweideMap;
 let constellationLinesGlobe = [];
 let constellationLabelsGlobe = [];
 let constellationOverlayGlobe = [];
@@ -59,6 +61,22 @@ function projectStarGlobe(star) {
     dec = 0;
   }
   return cachedRadToSphere(ra, dec, R);
+}
+
+function projectStarMollweide(star) {
+  const R = 100;
+  let ra, dec;
+  if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
+    ra = star.RA_in_radian;
+    dec = star.DEC_in_radian;
+  } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
+    ra = degToRad(star.RA_in_degrees);
+    dec = degToRad(star.DEC_in_degrees);
+  } else {
+    ra = 0;
+    dec = 0;
+  }
+  return cachedRadToMollweide(ra, dec, R, 0);
 }
 
 function createGlobeGrid(R = 100, options = {}) {
@@ -170,12 +188,15 @@ async function buildAndApplyFilters() {
   });
   currentFilteredStars.forEach(star => {
     star.truePosition = getStarTruePosition(star);
+    star.mollweidePosition = projectStarMollweide(star);
   });
 
   trueCoordinatesMap.updateMap(currentFilteredStars, currentConnections);
   trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
   globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
   globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
+  mollweideMap.updateMap(currentFilteredStars, currentConnections);
+  mollweideMap.labelManager.refreshLabels(currentFilteredStars);
 
   removeConstellationObjectsFromGlobe();
   removeConstellationOverlayObjectsFromGlobe();
@@ -265,6 +286,8 @@ class MapManager {
     );
     if (mapType === 'TrueCoordinates') {
       this.camera.position.set(0, 0, 70);
+    } else if (mapType === 'Globe') {
+      this.camera.position.set(0, 0, 200);
     } else {
       this.camera.position.set(0, 0, 200);
     }
@@ -314,8 +337,10 @@ class MapManager {
       let pos;
       if (this.mapType === 'TrueCoordinates') {
         pos = star.truePosition ? star.truePosition.clone() : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
-      } else {
+      } else if (this.mapType === 'Globe') {
         pos = star.spherePosition ? star.spherePosition.clone() : new THREE.Vector3(0, 0, 0);
+      } else {
+        pos = star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0);
       }
       const size = star.displaySize !== undefined ? star.displaySize : 1;
       const scale = size * 0.2;
@@ -345,7 +370,7 @@ class MapManager {
       const linesArray = createConnectionLines(stars, connectionObjs, 'Globe');
       linesArray.forEach(line => this.connectionGroup.add(line));
     } else {
-      const merged = mergeConnectionLines(connectionObjs);
+      const merged = mergeConnectionLines(connectionObjs, this.mapType);
       this.connectionGroup.add(merged);
     }
     this.scene.add(this.connectionGroup);
@@ -444,6 +469,10 @@ function updateSelectedStarHighlight() {
     globeMap.scene.remove(selectedHighlightGlobe);
     selectedHighlightGlobe = null;
   }
+  if (selectedHighlightMollweide) {
+    mollweideMap.scene.remove(selectedHighlightMollweide);
+    selectedHighlightMollweide = null;
+  }
   if (!selectedStarData) return;
   let posTrue = selectedStarData.truePosition ? selectedStarData.truePosition : new THREE.Vector3(selectedStarData.x_coordinate, selectedStarData.y_coordinate, selectedStarData.z_coordinate);
   let radius = (selectedStarData.displaySize || 2) * 0.2 * 1.2;
@@ -460,6 +489,14 @@ function updateSelectedStarHighlight() {
   selectedHighlightGlobe = new THREE.Mesh(highlightGeomGlobe, highlightMatGlobe);
   selectedHighlightGlobe.position.copy(posGlobe);
   globeMap.scene.add(selectedHighlightGlobe);
+
+  let posMoll = selectedStarData.mollweidePosition ? selectedStarData.mollweidePosition : projectStarMollweide(selectedStarData);
+  let radiusMoll = (selectedStarData.displaySize || 2) * 0.2 * 1.2;
+  const highlightGeomMoll = new THREE.SphereGeometry(radiusMoll, 16, 16);
+  const highlightMatMoll = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+  selectedHighlightMollweide = new THREE.Mesh(highlightGeomMoll, highlightMatMoll);
+  selectedHighlightMollweide.position.copy(posMoll);
+  mollweideMap.scene.add(selectedHighlightMollweide);
 }
 
 async function main() {
@@ -476,17 +513,21 @@ async function main() {
     }
     trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
     globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
+    mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
     window.trueCoordinatesMap = trueCoordinatesMap;
     window.globeMap = globeMap;
+    window.mollweideMap = mollweideMap;
     cachedStars.forEach(star => {
       star.spherePosition = projectStarGlobe(star);
       star.truePosition = getStarTruePosition(star);
+      star.mollweidePosition = projectStarMollweide(star);
     });
     const globeGrid = createGlobeGrid(100, { color: 0x444444, opacity: 0.2, lineWidth: 1 });
     globeMap.scene.add(globeGrid);
     buildAndApplyFilters();
     initStarInteractions(trueCoordinatesMap);
     initStarInteractions(globeMap);
+    initStarInteractions(mollweideMap);
     loader.classList.add('hidden');
   } catch (err) {
     console.error('Error initializing starmap:', err);

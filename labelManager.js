@@ -158,10 +158,12 @@ export class LabelManager {
     // Update positions:
     // For TrueCoordinates map, use star.truePosition if available.
     const starPos = (this.mapType === 'TrueCoordinates')
-      ? (star.truePosition 
+      ? (star.truePosition
           ? new THREE.Vector3(star.truePosition.x, star.truePosition.y, star.truePosition.z)
           : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate))
-      : new THREE.Vector3(star.spherePosition.x, star.spherePosition.y, star.spherePosition.z);
+      : (this.mapType === 'Globe'
+          ? new THREE.Vector3(star.spherePosition.x, star.spherePosition.y, star.spherePosition.z)
+          : new THREE.Vector3(star.mollweidePosition.x, star.mollweidePosition.y, star.mollweidePosition.z));
 
     const offset = this.computeLabelOffset(star, starPos);
     const labelPos = starPos.clone().add(offset);
@@ -189,7 +191,7 @@ export class LabelManager {
    * Simple helper to compute label offset from star position, so the label doesn't overlap the star mesh.
    */
   computeLabelOffset(star, starPos) {
-    if (this.mapType === 'TrueCoordinates') {
+    if (this.mapType === 'TrueCoordinates' || this.mapType === 'Mollweide') {
       // Small offset in X and Y
       return new THREE.Vector3(1, 1, 0).multiplyScalar(
         THREE.MathUtils.clamp(star.displaySize / 2, 0.5, 1.5)

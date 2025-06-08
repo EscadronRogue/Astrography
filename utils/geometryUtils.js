@@ -1,5 +1,6 @@
 // utils/geometryUtils.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { minimalRADifference } from '../utils.js';
 
 /**
  * Converts RA and DEC (in radians) to a THREE.Vector3 on a sphere of radius R.
@@ -146,5 +147,39 @@ export function cachedRadToSphere(ra, dec, R) {
   }
   const vec = radToSphere(ra, dec, R);
   radToSphereCache.set(key, vec.clone());
+  return vec;
+}
+
+/**
+ * Converts RA and DEC (in radians) to Mollweide projection coordinates.
+ * @param {number} ra
+ * @param {number} dec
+ * @param {number} [R=100]
+ * @param {number} [lambda0=0] - Central meridian in radians.
+ * @returns {THREE.Vector3}
+ */
+export function radToMollweide(ra, dec, R = 100, lambda0 = 0) {
+  const lambda = minimalRADifference(ra - lambda0);
+  const phi = dec;
+  let theta = phi;
+  for (let i = 0; i < 10; i++) {
+    const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(phi)) /
+      (2 + 2 * Math.cos(2 * theta));
+    theta -= delta;
+    if (Math.abs(delta) < 1e-10) break;
+  }
+  const x = (2 * R / Math.PI) * lambda * Math.cos(theta);
+  const y = R * Math.sin(theta);
+  return new THREE.Vector3(x, y, 0);
+}
+
+const radToMollweideCache = new Map();
+export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = 0) {
+  const key = `${ra}_${dec}_${R}_${lambda0}`;
+  if (radToMollweideCache.has(key)) {
+    return radToMollweideCache.get(key).clone();
+  }
+  const vec = radToMollweide(ra, dec, R, lambda0);
+  radToMollweideCache.set(key, vec.clone());
   return vec;
 }
