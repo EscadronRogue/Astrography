@@ -69,15 +69,23 @@ export function computeConnectionPairs(stars, maxDistance) {
  * @param {Array} connectionObjs - Array of connection objects.
  * @returns {THREE.LineSegments} - The merged connection lines.
  */
-export function mergeConnectionLines(connectionObjs) {
+export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates') {
   const positions = [];
   const colors = [];
-  
+
   connectionObjs.forEach(pair => {
     const { starA, starB } = pair;
-    
-    const posA = getPosition(starA);
-    const posB = getPosition(starB);
+    let posA, posB;
+    if (mapType === 'Globe') {
+      posA = starA.spherePosition;
+      posB = starB.spherePosition;
+    } else if (mapType === 'Mollweide') {
+      posA = starA.mollweidePosition;
+      posB = starB.mollweidePosition;
+    } else {
+      posA = getPosition(starA);
+      posB = getPosition(starB);
+    }
     
     positions.push(posA.x, posA.y, posA.z);
     positions.push(posB.x, posB.y, posB.z);
@@ -125,6 +133,10 @@ export function createConnectionLines(stars, pairs, mapType) {
       if (!starA.spherePosition || !starB.spherePosition) return;
       posA = new THREE.Vector3(starA.spherePosition.x, starA.spherePosition.y, starA.spherePosition.z);
       posB = new THREE.Vector3(starB.spherePosition.x, starB.spherePosition.y, starB.spherePosition.z);
+    } else if (mapType === 'Mollweide') {
+      if (!starA.mollweidePosition || !starB.mollweidePosition) return;
+      posA = new THREE.Vector3(starA.mollweidePosition.x, starA.mollweidePosition.y, starA.mollweidePosition.z);
+      posB = new THREE.Vector3(starB.mollweidePosition.x, starB.mollweidePosition.y, starB.mollweidePosition.z);
     } else {
       // Use the computed truePosition if available
       posA = getPosition(starA).clone();
