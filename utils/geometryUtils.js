@@ -206,9 +206,15 @@ export function adjustMollweideWrap(p1, p2) {
   const a = p1.clone();
   const b = p2.clone();
   if (Math.abs(a.x - b.x) > 200) {
-    if (a.x > b.x) a.x -= 400; else b.x -= 400;
+    if (a.x > b.x) {
+      b.x += 400;
+    } else {
+      a.x += 400;
+    }
   }
-  a.x = THREE.MathUtils.clamp(a.x, -200, 200);
-  b.x = THREE.MathUtils.clamp(b.x, -200, 200);
+  if (a.x > 200) a.x -= 400;
+  if (a.x < -200) a.x += 400;
+  if (b.x > 200) b.x -= 400;
+  if (b.x < -200) b.x += 400;
   return [a, b];
 }

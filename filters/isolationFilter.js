@@ -50,13 +50,13 @@ class IsolationGridOverlay {
           const cubeTC = new THREE.Mesh(geometry, material);
           cubeTC.position.copy(posTC);
 
-          // Create plane meshes for Globe and Mollweide projections
-          const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
-          const squareGlobe = new THREE.Mesh(planeGeom, material.clone());
-          const squareMoll = new THREE.Mesh(planeGeom.clone(), material.clone());
+          // Create placeholder objects for Globe and Mollweide projections
+          const squareGlobe = new THREE.Object3D();
+          const squareMoll = new THREE.Object3D();
           let projectedPos;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
+            squareMoll.position.set(0, 0, 0);
           } else {
             const ra = Math.atan2(-posTC.z, -posTC.x);
             const dec = Math.asin(posTC.y / distFromCenter);
@@ -70,7 +70,6 @@ class IsolationGridOverlay {
             squareMoll.position.copy(projMoll);
           }
           squareGlobe.position.copy(projectedPos);
-          squareGlobe.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), projectedPos.clone().normalize());
 
           const cell = {
             tcMesh: cubeTC,
@@ -100,11 +99,6 @@ class IsolationGridOverlay {
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
-      const r = cell.tcPos.length();
-      const ra = Math.atan2(-cell.tcPos.z, -cell.tcPos.x);
-      const dec = Math.asin(cell.tcPos.y / r);
-      const posM = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
-      cell.mollweideMesh.position.copy(posM);
       computeCellDistances(cell, extendedStars);
     });
     this.computeAdjacentLines();

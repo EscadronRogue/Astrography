@@ -174,7 +174,7 @@ function debounce(func, wait) {
   };
 }
 
-const debouncedUpdateMollweideView = debounce(updateMollweideView, 50);
+const debouncedUpdateMollweideView = debounce(updateMollweideView, 10);
 
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
