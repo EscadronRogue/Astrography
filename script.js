@@ -2,7 +2,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines } from './filters/connectionsFilter.js';
-import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
+import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
@@ -648,9 +648,12 @@ function updateMollweideView() {
   mollweideMap.labelManager.refreshLabels(currentFilteredStars);
 
   if (showConstellationBoundariesFlag) {
-    constellationLinesMoll.forEach(l => mollweideMap.scene.remove(l));
-    constellationLinesMoll = createConstellationBoundariesForMollweide();
-    constellationLinesMoll.forEach(l => mollweideMap.scene.add(l));
+    if (constellationLinesMoll.length === 0) {
+      constellationLinesMoll = createConstellationBoundariesForMollweide();
+      constellationLinesMoll.forEach(l => mollweideMap.scene.add(l));
+    } else {
+      constellationLinesMoll.forEach(l => updateConstellationBoundariesForMollweide(l));
+    }
   }
   if (showConstellationNamesFlag) {
     constellationLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));

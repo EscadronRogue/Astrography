@@ -109,27 +109,59 @@ export function createConstellationBoundariesForGlobe() {
 }
 
 export function createConstellationBoundariesForMollweide() {
-  const lines = [];
   const R = 100;
-  const lambda0 = getMollweideLambda0();
-  boundaryData.forEach(b => {
-    const raw1 = cachedRadToMollweide(b.ra1, b.dec1, R, lambda0);
-    const raw2 = cachedRadToMollweide(b.ra2, b.dec2, R, lambda0);
-    const segments = splitMollweideWrap(raw1, raw2);
-    segments.forEach(([p1, p2]) => {
-      const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-      const material = new THREE.LineDashedMaterial({
-        color: 0x888888,
-        dashSize: 2,
-        gapSize: 1,
-        linewidth: 1
-      });
-      const line = new THREE.Line(geometry, material);
-      line.computeLineDistances();
-      lines.push(line);
-    });
+  const material = new THREE.LineDashedMaterial({
+    color: 0x888888,
+    dashSize: 2,
+    gapSize: 1,
+    linewidth: 1
   });
-  return lines;
+  const maxSegments = boundaryData.length * 2; // each boundary can wrap
+  const positions = new Float32Array(maxSegments * 2 * 3); // 2 vertices per segment
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const lineSegs = new THREE.LineSegments(geometry, material);
+  lineSegs.computeLineDistances();
+  lineSegs.userData.boundaryData = boundaryData;
+  lineSegs.userData.R = R;
+  updateConstellationBoundariesForMollweide(lineSegs);
+  return [lineSegs];
+}
+
+export function updateConstellationBoundariesForMollweide(lineSegs) {
+  const R = lineSegs.userData.R || 100;
+  const lambda0 = getMollweideLambda0();
+  const data = lineSegs.userData.boundaryData || [];
+  const posAttr = lineSegs.geometry.getAttribute('position');
+  const array = posAttr.array;
+  let idx = 0;
+  data.forEach(seg => {
+    const p1 = cachedRadToMollweide(seg.ra1, seg.dec1, R, lambda0);
+    const p2 = cachedRadToMollweide(seg.ra2, seg.dec2, R, lambda0);
+    const segments = splitMollweideWrap(p1, p2);
+    for (let i = 0; i < 2; i++) {
+      if (i < segments.length) {
+        const s = segments[i][0];
+        const e = segments[i][1];
+        array[idx++] = s.x;
+        array[idx++] = s.y;
+        array[idx++] = 0;
+        array[idx++] = e.x;
+        array[idx++] = e.y;
+        array[idx++] = 0;
+      } else {
+        // degenerate segment
+        array[idx++] = 0;
+        array[idx++] = 0;
+        array[idx++] = 0;
+        array[idx++] = 0;
+        array[idx++] = 0;
+        array[idx++] = 0;
+      }
+    }
+  });
+  posAttr.needsUpdate = true;
+  lineSegs.computeLineDistances();
 }
 
 /**
