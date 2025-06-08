@@ -261,3 +261,128 @@ export class ThreeDControls {
         this.domElement.removeEventListener('touchcancel', this.onTouchEnd, false);
     }
 }
+
+/* ----------------------------
+   TwoDControls Class
+   ---------------------------- */
+/**
+ * Provides pan and zoom controls for 2D maps using an OrthographicCamera.
+ */
+export class TwoDControls {
+    constructor(camera, domElement) {
+        this.camera = camera;
+        this.domElement = domElement;
+
+        this.isPanning = false;
+        this.lastPos = { x: 0, y: 0 };
+        this.isPinching = false;
+        this.touchStartDistance = 0;
+
+        this.onMouseDown = this.onMouseDown.bind(this);
+        this.onMouseMove = this.onMouseMove.bind(this);
+        this.onMouseUp = this.onMouseUp.bind(this);
+        this.onWheel = this.onWheel.bind(this);
+        this.onTouchStart = this.onTouchStart.bind(this);
+        this.onTouchMove = this.onTouchMove.bind(this);
+        this.onTouchEnd = this.onTouchEnd.bind(this);
+
+        domElement.addEventListener('mousedown', this.onMouseDown, false);
+        domElement.addEventListener('mousemove', this.onMouseMove, false);
+        domElement.addEventListener('mouseup', this.onMouseUp, false);
+        domElement.addEventListener('wheel', this.onWheel, false);
+
+        domElement.addEventListener('touchstart', this.onTouchStart, false);
+        domElement.addEventListener('touchmove', this.onTouchMove, false);
+        domElement.addEventListener('touchend', this.onTouchEnd, false);
+        domElement.addEventListener('touchcancel', this.onTouchEnd, false);
+    }
+
+    getScale() {
+        return {
+            x: (this.camera.right - this.camera.left) / this.domElement.clientWidth,
+            y: (this.camera.top - this.camera.bottom) / this.domElement.clientHeight
+        };
+    }
+
+    pan(dx, dy) {
+        const scale = this.getScale();
+        this.camera.position.x -= dx * scale.x;
+        this.camera.position.y += dy * scale.y;
+    }
+
+    onMouseDown(event) {
+        this.isPanning = true;
+        this.lastPos = { x: event.clientX, y: event.clientY };
+    }
+
+    onMouseMove(event) {
+        if (!this.isPanning) return;
+        const dx = event.clientX - this.lastPos.x;
+        const dy = event.clientY - this.lastPos.y;
+        this.pan(dx, dy);
+        this.lastPos = { x: event.clientX, y: event.clientY };
+    }
+
+    onMouseUp() {
+        this.isPanning = false;
+    }
+
+    onWheel(event) {
+        event.preventDefault();
+        const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
+        this.camera.zoom *= zoomFactor;
+        this.camera.updateProjectionMatrix();
+    }
+
+    getTouchDistance(t1, t2) {
+        const dx = t2.clientX - t1.clientX;
+        const dy = t2.clientY - t1.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    onTouchStart(event) {
+        if (event.touches.length === 1) {
+            this.isPanning = true;
+            this.lastPos = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+        } else if (event.touches.length === 2) {
+            this.isPinching = true;
+            this.touchStartDistance = this.getTouchDistance(event.touches[0], event.touches[1]);
+        }
+    }
+
+    onTouchMove(event) {
+        event.preventDefault();
+        if (this.isPinching && event.touches.length === 2) {
+            const currentDistance = this.getTouchDistance(event.touches[0], event.touches[1]);
+            const delta = currentDistance - this.touchStartDistance;
+            const zoomFactor = 1 + delta / 200;
+            this.camera.zoom *= zoomFactor;
+            this.camera.updateProjectionMatrix();
+            this.touchStartDistance = currentDistance;
+        } else if (this.isPanning && event.touches.length === 1) {
+            const touch = event.touches[0];
+            const dx = touch.clientX - this.lastPos.x;
+            const dy = touch.clientY - this.lastPos.y;
+            this.pan(dx, dy);
+            this.lastPos = { x: touch.clientX, y: touch.clientY };
+        }
+    }
+
+    onTouchEnd() {
+        this.isPanning = false;
+        this.isPinching = false;
+    }
+
+    dispose() {
+        this.domElement.removeEventListener('mousedown', this.onMouseDown, false);
+        this.domElement.removeEventListener('mousemove', this.onMouseMove, false);
+        this.domElement.removeEventListener('mouseup', this.onMouseUp, false);
+        this.domElement.removeEventListener('wheel', this.onWheel, false);
+
+        this.domElement.removeEventListener('touchstart', this.onTouchStart, false);
+        this.domElement.removeEventListener('touchmove', this.onTouchMove, false);
+        this.domElement.removeEventListener('touchend', this.onTouchEnd, false);
+        this.domElement.removeEventListener('touchcancel', this.onTouchEnd, false);
+    }
+}
+

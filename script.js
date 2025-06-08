@@ -7,7 +7,7 @@ import { initIsolationFilter, updateIsolationFilter } from './filters/isolationF
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
 import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct import
-import { ThreeDControls } from './cameraControls.js';
+import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad } from './utils/geometryUtils.js';
@@ -278,25 +278,41 @@ class MapManager {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
-    this.camera = new THREE.PerspectiveCamera(
-      75,
-      this.canvas.clientWidth / this.canvas.clientHeight,
-      0.1,
-      10000
-    );
-    if (mapType === 'TrueCoordinates') {
-      this.camera.position.set(0, 0, 70);
-    } else if (mapType === 'Globe') {
-      this.camera.position.set(0, 0, 200);
+    if (mapType === 'Mollweide') {
+      const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+      this.frustumSize = 200;
+      this.camera = new THREE.OrthographicCamera(
+        (-this.frustumSize * aspect) / 2,
+        (this.frustumSize * aspect) / 2,
+        this.frustumSize / 2,
+        -this.frustumSize / 2,
+        -1000,
+        1000
+      );
+      this.camera.position.set(0, 0, 10);
     } else {
-      this.camera.position.set(0, 0, 200);
+      this.camera = new THREE.PerspectiveCamera(
+        75,
+        this.canvas.clientWidth / this.canvas.clientHeight,
+        0.1,
+        10000
+      );
+      if (mapType === 'TrueCoordinates') {
+        this.camera.position.set(0, 0, 70);
+      } else {
+        this.camera.position.set(0, 0, 200);
+      }
     }
     this.scene.add(this.camera);
     const amb = new THREE.AmbientLight(0xffffff, 0.5);
     this.scene.add(amb);
     const pt = new THREE.PointLight(0xffffff, 1);
     this.scene.add(pt);
-    this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
+    if (mapType === 'Mollweide') {
+      this.controls = new TwoDControls(this.camera, this.renderer.domElement);
+    } else {
+      this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
+    }
     this.labelManager = new LabelManager(mapType, this.scene);
     this.starGroup = new THREE.Group();
     this.scene.add(this.starGroup);
@@ -384,7 +400,15 @@ class MapManager {
   onResize() {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
-    this.camera.aspect = w / h;
+    if (this.camera.isOrthographicCamera) {
+      const aspect = w / h;
+      this.camera.left = (-this.frustumSize * aspect) / 2;
+      this.camera.right = (this.frustumSize * aspect) / 2;
+      this.camera.top = this.frustumSize / 2;
+      this.camera.bottom = -this.frustumSize / 2;
+    } else {
+      this.camera.aspect = w / h;
+    }
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
   }
