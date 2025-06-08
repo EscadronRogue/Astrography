@@ -1,7 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines } from './filters/connectionsFilter.js';
+import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
@@ -500,11 +500,24 @@ class MapManager {
     if (this.mapType === 'Globe') {
       const linesArray = createConnectionLines(stars, connectionObjs, 'Globe');
       linesArray.forEach(line => this.connectionGroup.add(line));
+    } else if (this.mapType === 'Mollweide') {
+      const merged = createMollweideConnectionSegments(connectionObjs);
+      this.connectionGroup.add(merged);
     } else {
       const merged = mergeConnectionLines(connectionObjs, this.mapType);
       this.connectionGroup.add(merged);
     }
     this.scene.add(this.connectionGroup);
+  }
+
+  updateConnectionPositions(stars, connectionObjs) {
+    if (!this.connectionGroup) return;
+    if (this.mapType === 'Mollweide') {
+      const segs = this.connectionGroup.children[0];
+      if (segs) updateMollweideConnectionSegments(segs);
+    } else {
+      this.updateConnections(stars, connectionObjs);
+    }
   }
 
   updateMap(stars, connectionObjs) {
@@ -644,7 +657,8 @@ function updateMollweideView() {
     updateMollweidePosition(star);
   });
 
-  mollweideMap.updateMap(currentFilteredStars, currentConnections);
+  mollweideMap.updateStarPositions(currentFilteredStars);
+  mollweideMap.updateConnectionPositions(currentFilteredStars, currentConnections);
   mollweideMap.labelManager.refreshLabels(currentFilteredStars);
 
   if (showConstellationBoundariesFlag) {

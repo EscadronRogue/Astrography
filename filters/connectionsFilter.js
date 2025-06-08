@@ -121,6 +121,59 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
   return mergedLines;
 }
 
+export function createMollweideConnectionSegments(pairs) {
+  const segCount = pairs.length * 2; // up to 2 segments per pair
+  const positions = new Float32Array(segCount * 2 * 3);
+  const colors = new Float32Array(segCount * 2 * 3);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.5,
+    linewidth: 1
+  });
+  const lineSegs = new THREE.LineSegments(geometry, material);
+  lineSegs.userData.pairs = pairs;
+  updateMollweideConnectionSegments(lineSegs);
+  return lineSegs;
+}
+
+export function updateMollweideConnectionSegments(lineSegs) {
+  const pairs = lineSegs.userData.pairs || [];
+  const posAttr = lineSegs.geometry.getAttribute('position');
+  const colorAttr = lineSegs.geometry.getAttribute('color');
+  let idx = 0;
+  pairs.forEach(pair => {
+    const segs = splitMollweideWrap(
+      pair.starA.mollweidePosition,
+      pair.starB.mollweidePosition
+    );
+    const cA = new THREE.Color(pair.starA.displayColor || '#ffffff');
+    const cB = new THREE.Color(pair.starB.displayColor || '#ffffff');
+    for (let i = 0; i < 2; i++) {
+      if (i < segs.length) {
+        const s = segs[i][0];
+        const e = segs[i][1];
+        posAttr.array[idx] = s.x; posAttr.array[idx+1] = s.y; posAttr.array[idx+2] = s.z;
+        posAttr.array[idx+3] = e.x; posAttr.array[idx+4] = e.y; posAttr.array[idx+5] = e.z;
+        colorAttr.array[idx] = cA.r; colorAttr.array[idx+1] = cA.g; colorAttr.array[idx+2] = cA.b;
+        colorAttr.array[idx+3] = cB.r; colorAttr.array[idx+4] = cB.g; colorAttr.array[idx+5] = cB.b;
+      } else {
+        posAttr.array[idx] = posAttr.array[idx+1] = posAttr.array[idx+2] = 0;
+        posAttr.array[idx+3] = posAttr.array[idx+4] = posAttr.array[idx+5] = 0;
+        colorAttr.array[idx] = colorAttr.array[idx+1] = colorAttr.array[idx+2] = 0;
+        colorAttr.array[idx+3] = colorAttr.array[idx+4] = colorAttr.array[idx+5] = 0;
+      }
+      idx += 6;
+    }
+  });
+  posAttr.needsUpdate = true;
+  colorAttr.needsUpdate = true;
+  lineSegs.computeLineDistances();
+}
+
 /**
  * Creates individual connection line objects between star pairs.
  *

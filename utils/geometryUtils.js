@@ -205,13 +205,14 @@ export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda
 export function adjustMollweideWrap(p1, p2) {
   const a = p1.clone();
   const b = p2.clone();
-  if (Math.abs(a.x - b.x) > 200) {
-    if (a.x < b.x) {
-      a.x += 400;
-    } else {
-      b.x += 400;
-    }
-  }
+  // shift points horizontally so their separation stays within the map
+  while (a.x - b.x > 200) a.x -= 400;
+  while (b.x - a.x > 200) b.x -= 400;
+  // keep coordinates inside [-200, 200]
+  while (a.x > 200) a.x -= 400;
+  while (a.x < -200) a.x += 400;
+  while (b.x > 200) b.x -= 400;
+  while (b.x < -200) b.x += 400;
   return [a, b];
 }
 
@@ -223,49 +224,35 @@ export function adjustMollweideWrap(p1, p2) {
 export function splitMollweideWrap(p1, p2) {
   const a = p1.clone();
   const b = p2.clone();
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const ellipse = (x, y) => (x * x) / (200 * 200) + (y * y) / (100 * 100);
-
-  // If both points are inside the ellipse and the x-distance is less than
-  // the wrap threshold, return the original segment.
-  if (Math.abs(dx) < 200 && ellipse(a.x, a.y) <= 1 && ellipse(b.x, b.y) <= 1) {
+  if (Math.abs(a.x - b.x) <= 200) {
     return [[a, b]];
   }
+  let left = a, right = b;
+  let swapped = false;
+  if (left.x > right.x) { left = b; right = a; swapped = true; }
 
-  // Compute intersection of the line with the ellipse boundary. We solve for t
-  // on the parametric line a + t*(b-a) such that the point lies on the ellipse.
+  const shifted = right.clone();
+  shifted.x -= 400;
+
+  const dx = shifted.x - left.x;
+  const dy = shifted.y - left.y;
   const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
-  const B = 2 * (a.x * dx / (200 * 200) + a.y * dy / (100 * 100));
-  const C = ellipse(a.x, a.y) - 1;
+  const B = 2 * (left.x * dx / (200 * 200) + left.y * dy / (100 * 100));
+  const C = (left.x * left.x) / (200 * 200) + (left.y * left.y) / (100 * 100) - 1;
   const disc = B * B - 4 * A * C;
-  if (disc < 0) {
-    return [[a, b]];
-  }
+  if (disc < 0) return [[a, b]];
   const sqrtDisc = Math.sqrt(disc);
   const t1 = (-B - sqrtDisc) / (2 * A);
   const t2 = (-B + sqrtDisc) / (2 * A);
-  const ts = [t1, t2].filter(t => t >= 0 && t <= 1).sort((x, y) => x - y);
-  if (ts.length === 0) {
-    return [[a, b]];
-  }
-  const t = ts[0];
-  const ix = a.x + dx * t;
-  const iy = a.y + dy * t;
-  const edge = new THREE.Vector3(ix, iy, 0);
-  const wrapped = edge.clone();
-  if (a.x < b.x) {
-    wrapped.x -= 400;
+  const t = (t1 >= 0 && t1 <= 1) ? t1 : (t2 >= 0 && t2 <= 1 ? t2 : null);
+  if (t === null) return [[a, b]];
+  const ix = left.x + dx * t;
+  const iy = left.y + dy * t;
+  const edgeLeft = new THREE.Vector3(ix, iy, 0);
+  const edgeRight = new THREE.Vector3(ix + 400, iy, 0);
+  if (!swapped) {
+    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
   } else {
-    wrapped.x += 400;
+    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
   }
-  // Second point also needs to be shifted so the wrapped segment continues
-  // from the opposite edge.
-  const end = b.clone();
-  if (a.x < b.x) {
-    end.x -= 400;
-  } else {
-    end.x += 400;
-  }
-  return [ [a, edge], [wrapped, end] ];
 }

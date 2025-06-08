@@ -51,9 +51,11 @@ class IsolationGridOverlay {
           const cubeTC = new THREE.Mesh(geometry, material);
           cubeTC.position.copy(posTC);
 
-          // Create placeholder objects for Globe and Mollweide projections
-          const squareGlobe = new THREE.Object3D();
-          const squareMoll = new THREE.Object3D();
+          const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
+          const planeMat = material.clone();
+          planeMat.side = THREE.DoubleSide;
+          const squareGlobe = new THREE.Mesh(planeGeom, planeMat.clone());
+          const squareMoll = new THREE.Mesh(planeGeom.clone(), planeMat.clone());
           let projectedPos;
           let ra, dec;
           if (distFromCenter < 1e-6) {
@@ -84,6 +86,13 @@ class IsolationGridOverlay {
           const mollXFactor = (2 * 100 / Math.PI) * cosT;
           const mollY = 100 * sinT;
           squareGlobe.position.copy(projectedPos);
+          const nrm = projectedPos.clone().normalize();
+          let right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), nrm);
+          if (right.lengthSq() < 1e-6) right.set(1,0,0);
+          right.normalize();
+          const upVec = new THREE.Vector3().crossVectors(nrm, right).normalize();
+          const mat4 = new THREE.Matrix4().makeBasis(right, upVec, nrm);
+          squareGlobe.setRotationFromMatrix(mat4);
 
           const cell = {
             tcMesh: cubeTC,
