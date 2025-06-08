@@ -1,7 +1,7 @@
 // filters/connectionsFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { adjustMollweideWrap } from '../utils/geometryUtils.js';
+import { adjustMollweideWrap, splitMollweideWrap } from '../utils/geometryUtils.js';
 
 /**
  * Helper: Returns a THREE.Vector3 for a star’s position.
@@ -77,29 +77,33 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
   connectionObjs.forEach(pair => {
     const { starA, starB } = pair;
     let posA, posB;
+    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
+    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
     if (mapType === 'Globe') {
       posA = starA.spherePosition;
       posB = starB.spherePosition;
     } else if (mapType === 'Mollweide') {
-      const [a, b] = adjustMollweideWrap(
+      const segments = splitMollweideWrap(
         starA.mollweidePosition,
         starB.mollweidePosition
       );
-      posA = a;
-      posB = b;
+      segments.forEach(([s1, s2]) => {
+        positions.push(s1.x, s1.y, s1.z, s2.x, s2.y, s2.z);
+        const cA = new THREE.Color(starA.displayColor || '#ffffff');
+        const cB = new THREE.Color(starB.displayColor || '#ffffff');
+        colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
+      });
+      return; // continue to next pair
     } else {
       posA = getPosition(starA);
       posB = getPosition(starB);
     }
-    
     positions.push(posA.x, posA.y, posA.z);
     positions.push(posB.x, posB.y, posB.z);
-    
-    // Set each vertex's color from the star's displayColor.
+
     const cA = new THREE.Color(starA.displayColor || '#ffffff');
     const cB = new THREE.Color(starB.displayColor || '#ffffff');
-    colors.push(cA.r, cA.g, cA.b);
-    colors.push(cB.r, cB.g, cB.b);
+    colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
   });
   
   const geometry = new THREE.BufferGeometry();
@@ -134,26 +138,37 @@ export function createConnectionLines(stars, pairs, mapType) {
   pairs.forEach(pair => {
     const { starA, starB, distance } = pair;
     let posA, posB;
+    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
+    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
     if (mapType === 'Globe') {
       if (!starA.spherePosition || !starB.spherePosition) return;
       posA = new THREE.Vector3(starA.spherePosition.x, starA.spherePosition.y, starA.spherePosition.z);
       posB = new THREE.Vector3(starB.spherePosition.x, starB.spherePosition.y, starB.spherePosition.z);
     } else if (mapType === 'Mollweide') {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
-      const [a, b] = adjustMollweideWrap(
+      const segments = splitMollweideWrap(
         starA.mollweidePosition,
         starB.mollweidePosition
       );
-      posA = a.clone();
-      posB = b.clone();
+      segments.forEach(([s1, s2]) => {
+        const points = [s1, s2];
+        const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
+        const materialLine = new THREE.LineBasicMaterial({
+          color: c1.clone().lerp(c2, 0.5),
+          transparent: true,
+          opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)),
+          linewidth: THREE.MathUtils.lerp(5, 1, distance / (largestPairDistance || distance))
+        });
+        const line = new THREE.Line(geometryLine, materialLine);
+        lines.push(line);
+      });
+      return;
     } else {
       // Use the computed truePosition if available
       posA = getPosition(starA).clone();
       posB = getPosition(starB).clone();
     }
     
-    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
-    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
     const gradientColor = c1.clone().lerp(c2, 0.5);
     
     const normDist = distance / (largestPairDistance || distance);
@@ -168,7 +183,7 @@ export function createConnectionLines(stars, pairs, mapType) {
     } else {
       points = [posA, posB];
     }
-    
+
     const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
     const materialLine = new THREE.LineBasicMaterial({
       color: gradientColor,

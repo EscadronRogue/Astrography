@@ -206,15 +206,37 @@ export function adjustMollweideWrap(p1, p2) {
   const a = p1.clone();
   const b = p2.clone();
   if (Math.abs(a.x - b.x) > 200) {
-    if (a.x > b.x) {
-      b.x += 400;
-    } else {
+    if (a.x < b.x) {
       a.x += 400;
+    } else {
+      b.x += 400;
     }
   }
-  if (a.x > 200) a.x -= 400;
-  if (a.x < -200) a.x += 400;
-  if (b.x > 200) b.x -= 400;
-  if (b.x < -200) b.x += 400;
   return [a, b];
+}
+
+/**
+ * Splits a Mollweide segment at the map boundary if needed so that
+ * wrapped lines appear on the opposite side instead of bleeding out.
+ * Returns an array of [start, end] pairs.
+ */
+export function splitMollweideWrap(p1, p2) {
+  const a = p1.clone();
+  const b = p2.clone();
+  if (Math.abs(a.x - b.x) <= 200) {
+    return [[a, b]];
+  }
+  if (a.x < b.x) {
+    const t = (-200 - a.x) / (b.x - a.x);
+    const yEdge = a.y + t * (b.y - a.y);
+    const seg1 = [a, new THREE.Vector3(-200, yEdge, 0)];
+    const seg2 = [new THREE.Vector3(200, yEdge, 0), b];
+    return [seg1, seg2];
+  } else {
+    const t = (200 - a.x) / (b.x - a.x);
+    const yEdge = a.y + t * (b.y - a.y);
+    const seg1 = [a, new THREE.Vector3(200, yEdge, 0)];
+    const seg2 = [new THREE.Vector3(-200, yEdge, 0), b];
+    return [seg1, seg2];
+  }
 }

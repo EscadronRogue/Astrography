@@ -3,6 +3,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densityColorUtils.js';
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap } from '../utils/geometryUtils.js';
+import { minimalRADifference } from '../utils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries } from './constellationFilter.js';
 
 // IsolationGridOverlay encapsulates the uniform grid logic for the Isolation Filter.
@@ -54,12 +55,14 @@ class IsolationGridOverlay {
           const squareGlobe = new THREE.Object3D();
           const squareMoll = new THREE.Object3D();
           let projectedPos;
+          let ra, dec;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
             squareMoll.position.set(0, 0, 0);
+            ra = 0; dec = 0;
           } else {
-            const ra = Math.atan2(-posTC.z, -posTC.x);
-            const dec = Math.asin(posTC.y / distFromCenter);
+            ra = Math.atan2(-posTC.z, -posTC.x);
+            dec = Math.asin(posTC.y / distFromCenter);
             const radius = 100;
             projectedPos = new THREE.Vector3(
               -radius * Math.cos(dec) * Math.cos(ra),
@@ -69,6 +72,17 @@ class IsolationGridOverlay {
             const projMoll = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
             squareMoll.position.copy(projMoll);
           }
+          let theta = dec;
+          for (let i = 0; i < 10; i++) {
+            const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
+              (2 + 2 * Math.cos(2 * theta));
+            theta -= delta;
+            if (Math.abs(delta) < 1e-10) break;
+          }
+          const cosT = Math.cos(theta);
+          const sinT = Math.sin(theta);
+          const mollXFactor = (2 * 100 / Math.PI) * cosT;
+          const mollY = 100 * sinT;
           squareGlobe.position.copy(projectedPos);
 
           const cell = {
@@ -81,13 +95,13 @@ class IsolationGridOverlay {
               iy: Math.round(y / this.gridSize),
               iz: Math.round(z / this.gridSize)
             },
-            active: false
+            active: false,
+            raRad: ra,
+            decRad: dec,
+            mollXFactor: mollXFactor,
+            mollY: mollY
           };
 
-          const cellRa = ((posTC.x + halfExt) / (2 * halfExt)) * 360;
-          const cellDec = ((posTC.y + halfExt) / (2 * halfExt)) * 180 - 90;
-          cell.ra = cellRa;
-          cell.dec = cellDec;
           cell.id = this.cubesData.length;
           this.cubesData.push(cell);
         }
@@ -200,6 +214,12 @@ class IsolationGridOverlay {
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.visible = cell.active;
       cell.mollweideMesh.scale.set(scale, scale, 1);
+      const lambda = minimalRADifference(cell.raRad - getMollweideLambda0());
+      cell.mollweideMesh.position.set(
+        cell.mollXFactor * lambda,
+        cell.mollY,
+        0
+      );
     });
 
     // Update the adjacent lines.

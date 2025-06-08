@@ -12,6 +12,7 @@ import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
+import { minimalRADifference } from './utils.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -87,6 +88,39 @@ function projectStarMollweide(star) {
     dec = 0;
   }
   return cachedRadToMollweide(ra, dec, R);
+}
+
+function precalcMollweideData(star) {
+  let ra, dec;
+  if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
+    ra = star.RA_in_radian;
+    dec = star.DEC_in_radian;
+  } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
+    ra = degToRad(star.RA_in_degrees);
+    dec = degToRad(star.DEC_in_degrees);
+  } else {
+    ra = 0;
+    dec = 0;
+  }
+  star.raRad = ra;
+  star.decRad = dec;
+  let theta = dec;
+  for (let i = 0; i < 10; i++) {
+    const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
+      (2 + 2 * Math.cos(2 * theta));
+    theta -= delta;
+    if (Math.abs(delta) < 1e-10) break;
+  }
+  const cosT = Math.cos(theta);
+  const sinT = Math.sin(theta);
+  star.mollXFactor = (2 * R / Math.PI) * cosT;
+  star.mollY = R * sinT;
+}
+
+function updateMollweidePosition(star) {
+  const lambda = minimalRADifference(star.raRad - getMollweideLambda0());
+  if (!star.mollweidePosition) star.mollweidePosition = new THREE.Vector3();
+  star.mollweidePosition.set(star.mollXFactor * lambda, star.mollY, 0);
 }
 
 function createGlobeGrid(R = 100, options = {}) {
@@ -174,7 +208,7 @@ function debounce(func, wait) {
   };
 }
 
-const debouncedUpdateMollweideView = debounce(updateMollweideView, 10);
+const debouncedUpdateMollweideView = debounce(updateMollweideView, 1);
 
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
@@ -220,7 +254,8 @@ async function buildAndApplyFilters() {
   });
   currentFilteredStars.forEach(star => {
     star.truePosition = getStarTruePosition(star);
-    star.mollweidePosition = projectStarMollweide(star);
+    precalcMollweideData(star);
+    updateMollweidePosition(star);
   });
 
   trueCoordinatesMap.updateMap(currentFilteredStars, currentConnections);
@@ -587,7 +622,7 @@ function updateSelectedStarHighlight() {
 function updateMollweideView() {
   if (!cachedStars) return;
   cachedStars.forEach(star => {
-    star.mollweidePosition = projectStarMollweide(star);
+    updateMollweidePosition(star);
   });
 
   mollweideMap.updateMap(currentFilteredStars, currentConnections);
@@ -645,7 +680,8 @@ async function main() {
     cachedStars.forEach(star => {
       star.spherePosition = projectStarGlobe(star);
       star.truePosition = getStarTruePosition(star);
-      star.mollweidePosition = projectStarMollweide(star);
+      precalcMollweideData(star);
+      updateMollweidePosition(star);
     });
     const globeGrid = createGlobeGrid(100, { color: 0x444444, opacity: 0.2, lineWidth: 1 });
     globeMap.scene.add(globeGrid);

@@ -1,7 +1,7 @@
 // /filters/constellationFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap, splitMollweideWrap } from '../utils/geometryUtils.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -115,17 +115,19 @@ export function createConstellationBoundariesForMollweide() {
   boundaryData.forEach(b => {
     const raw1 = cachedRadToMollweide(b.ra1, b.dec1, R, lambda0);
     const raw2 = cachedRadToMollweide(b.ra2, b.dec2, R, lambda0);
-    const [pos1, pos2] = adjustMollweideWrap(raw1, raw2);
-    const geometry = new THREE.BufferGeometry().setFromPoints([pos1, pos2]);
-    const material = new THREE.LineDashedMaterial({
-      color: 0x888888,
-      dashSize: 2,
-      gapSize: 1,
-      linewidth: 1
+    const segments = splitMollweideWrap(raw1, raw2);
+    segments.forEach(([p1, p2]) => {
+      const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const material = new THREE.LineDashedMaterial({
+        color: 0x888888,
+        dashSize: 2,
+        gapSize: 1,
+        linewidth: 1
+      });
+      const line = new THREE.Line(geometry, material);
+      line.computeLineDistances();
+      lines.push(line);
     });
-    const line = new THREE.Line(geometry, material);
-    line.computeLineDistances();
-    lines.push(line);
   });
   return lines;
 }
