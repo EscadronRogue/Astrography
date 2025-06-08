@@ -259,6 +259,7 @@ export class ThreeDControls {
         this.domElement.removeEventListener('touchmove', this.onTouchMove, false);
         this.domElement.removeEventListener('touchend', this.onTouchEnd, false);
         this.domElement.removeEventListener('touchcancel', this.onTouchEnd, false);
+        this.domElement.removeEventListener('contextmenu', this.contextMenuHandler);
     }
 }
 
@@ -269,15 +270,18 @@ export class ThreeDControls {
  * Provides pan and zoom controls for 2D maps using an OrthographicCamera.
  */
 export class TwoDControls {
-    constructor(camera, domElement, panCallback = null, panCamera = true) {
+    constructor(camera, domElement, options = {}) {
         this.camera = camera;
         this.domElement = domElement;
 
-        this.panCallback = panCallback;
-        this.panCamera = panCamera;
+        this.leftCallback = options.leftCallback || null;
+        this.rightCallback = options.rightCallback || null;
+        this.panCameraLeft = options.panCameraLeft !== undefined ? options.panCameraLeft : true;
+        this.panCameraRight = options.panCameraRight !== undefined ? options.panCameraRight : false;
 
         this.isPanning = false;
         this.lastPos = { x: 0, y: 0 };
+        this.button = 0;
         this.isPinching = false;
         this.touchStartDistance = 0;
 
@@ -293,6 +297,8 @@ export class TwoDControls {
         domElement.addEventListener('mousemove', this.onMouseMove, false);
         domElement.addEventListener('mouseup', this.onMouseUp, false);
         domElement.addEventListener('wheel', this.onWheel, false);
+        this.contextMenuHandler = (e) => e.preventDefault();
+        domElement.addEventListener('contextmenu', this.contextMenuHandler);
 
         domElement.addEventListener('touchstart', this.onTouchStart, false);
         domElement.addEventListener('touchmove', this.onTouchMove, false);
@@ -307,17 +313,27 @@ export class TwoDControls {
         };
     }
 
-    pan(dx, dy) {
+    pan(dx, dy, button = 0) {
         const scale = this.getScale();
-        if (this.panCamera) {
-            this.camera.position.x -= dx * scale.x;
-            this.camera.position.y += dy * scale.y;
+        if (button === 2) {
+            if (this.panCameraRight) {
+                this.camera.position.x -= dx * scale.x;
+                this.camera.position.y += dy * scale.y;
+            }
+            if (this.rightCallback) this.rightCallback(dx, dy);
+        } else {
+            if (this.panCameraLeft) {
+                this.camera.position.x -= dx * scale.x;
+                this.camera.position.y += dy * scale.y;
+            }
+            if (this.leftCallback) this.leftCallback(dx, dy);
         }
-        if (this.panCallback) this.panCallback(dx, dy);
     }
 
     onMouseDown(event) {
         this.isPanning = true;
+        this.button = event.button;
+        if (this.button === 2) event.preventDefault();
         this.lastPos = { x: event.clientX, y: event.clientY };
     }
 
@@ -325,12 +341,13 @@ export class TwoDControls {
         if (!this.isPanning) return;
         const dx = event.clientX - this.lastPos.x;
         const dy = event.clientY - this.lastPos.y;
-        this.pan(dx, dy);
+        this.pan(dx, dy, this.button);
         this.lastPos = { x: event.clientX, y: event.clientY };
     }
 
     onMouseUp() {
         this.isPanning = false;
+        this.button = 0;
     }
 
     onWheel(event) {
@@ -369,7 +386,7 @@ export class TwoDControls {
             const touch = event.touches[0];
             const dx = touch.clientX - this.lastPos.x;
             const dy = touch.clientY - this.lastPos.y;
-            this.pan(dx, dy);
+            this.pan(dx, dy, 0);
             this.lastPos = { x: touch.clientX, y: touch.clientY };
         }
     }
@@ -389,6 +406,7 @@ export class TwoDControls {
         this.domElement.removeEventListener('touchmove', this.onTouchMove, false);
         this.domElement.removeEventListener('touchend', this.onTouchEnd, false);
         this.domElement.removeEventListener('touchcancel', this.onTouchEnd, false);
+        this.domElement.removeEventListener('contextmenu', this.contextMenuHandler);
     }
 }
 

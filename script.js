@@ -408,13 +408,17 @@ class MapManager {
     const pt = new THREE.PointLight(0xffffff, 1);
     this.scene.add(pt);
     if (mapType === 'Mollweide') {
-      this.controls = new TwoDControls(this.camera, this.renderer.domElement, (dx) => {
-        let lambda0 = getMollweideLambda0() - dx * 0.002;
-        const twoPi = Math.PI * 2;
-        lambda0 = ((lambda0 % twoPi) + twoPi) % twoPi;
-        setMollweideLambda0(lambda0);
-        scheduleMollweideUpdate();
-      }, false);
+      this.controls = new TwoDControls(this.camera, this.renderer.domElement, {
+        rightCallback: (dx) => {
+          let lambda0 = getMollweideLambda0() - dx * 0.002;
+          const twoPi = Math.PI * 2;
+          lambda0 = ((lambda0 % twoPi) + twoPi) % twoPi;
+          setMollweideLambda0(lambda0);
+          scheduleMollweideUpdate();
+        },
+        panCameraLeft: true,
+        panCameraRight: false
+      });
       const border = createMollweideBorder(100);
       this.scene.add(border);
     } else {
