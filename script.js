@@ -2,7 +2,8 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines } from './filters/connectionsFilter.js';
-import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe } from './filters/constellationFilter.js';
+import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
+import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
@@ -27,6 +28,9 @@ let mollweideMap;
 let constellationLinesGlobe = [];
 let constellationLabelsGlobe = [];
 let constellationOverlayGlobe = [];
+let constellationLinesMoll = [];
+let constellationLabelsMoll = [];
+let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
 let isolationOverlay = null;
 let densityOverlay = null;
@@ -204,15 +208,23 @@ async function buildAndApplyFilters() {
   if (showConstellationBoundaries) {
     constellationLinesGlobe = createConstellationBoundariesForGlobe();
     constellationLinesGlobe.forEach(ln => globeMap.scene.add(ln));
+    constellationLinesMoll = createConstellationBoundariesForMollweide();
+    constellationLinesMoll.forEach(ln => mollweideMap.scene.add(ln));
   }
   if (showConstellationNames) {
     constellationLabelsGlobe = createConstellationLabelsForGlobe();
     constellationLabelsGlobe.forEach(lbl => globeMap.scene.add(lbl));
+    constellationLabelsMoll = createConstellationLabelsForMollweide();
+    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
   }
   if (showConstellationOverlay) {
     const constellationOverlay = createConstellationOverlayForGlobe();
     constellationOverlay.forEach(mesh => {
       window.globeMap.scene.add(mesh);
+    });
+    constellationOverlayMoll = createConstellationOverlayForMollweide();
+    constellationOverlayMoll.forEach(mesh => {
+      mollweideMap.scene.add(mesh);
     });
   }
 
@@ -224,6 +236,7 @@ async function buildAndApplyFilters() {
     // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
     updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
     updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
+    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
   }
 
   applyGlobeSurface(globeOpaqueSurface);
@@ -238,6 +251,14 @@ function removeConstellationObjectsFromGlobe() {
     constellationLabelsGlobe.forEach(lbl => globeMap.scene.remove(lbl));
   }
   constellationLabelsGlobe = [];
+  if (constellationLinesMoll && constellationLinesMoll.length > 0) {
+    constellationLinesMoll.forEach(l => mollweideMap.scene.remove(l));
+  }
+  constellationLinesMoll = [];
+  if (constellationLabelsMoll && constellationLabelsMoll.length > 0) {
+    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
+  }
+  constellationLabelsMoll = [];
 }
 
 function removeConstellationOverlayObjectsFromGlobe() {
@@ -245,6 +266,10 @@ function removeConstellationOverlayObjectsFromGlobe() {
     constellationOverlayGlobe.forEach(mesh => globeMap.scene.remove(mesh));
   }
   constellationOverlayGlobe = [];
+  if (constellationOverlayMoll && constellationOverlayMoll.length > 0) {
+    constellationOverlayMoll.forEach(mesh => mollweideMap.scene.remove(mesh));
+  }
+  constellationOverlayMoll = [];
 }
 
 function applyGlobeSurface(isOpaque) {

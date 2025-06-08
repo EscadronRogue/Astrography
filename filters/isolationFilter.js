@@ -2,7 +2,7 @@
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densityColorUtils.js';
-import { radToSphere, getGreatCirclePoints } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide } from '../utils/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries } from './constellationFilter.js';
 
 // IsolationGridOverlay encapsulates the uniform grid logic for the Isolation Filter.
@@ -21,6 +21,7 @@ class IsolationGridOverlay {
     this.regionClusters = [];
     this.regionLabelsGroupTC = new THREE.Group();
     this.regionLabelsGroupGlobe = new THREE.Group();
+    this.regionLabelsGroupMoll = new THREE.Group();
   }
 
   createGrid(stars) {
@@ -52,6 +53,7 @@ class IsolationGridOverlay {
           // Instead of a square mesh on the globe, create a dummy Object3D
           // that will hold the projected position.
           const squareGlobe = new THREE.Object3D();
+          const squareMoll = new THREE.Object3D();
           let projectedPos;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
@@ -64,6 +66,8 @@ class IsolationGridOverlay {
                radius * Math.sin(dec),
               -radius * Math.cos(dec) * Math.sin(ra)
             );
+            const projMoll = cachedRadToMollweide(ra, dec, 100, 0);
+            squareMoll.position.copy(projMoll);
           }
           squareGlobe.position.copy(projectedPos);
           // (No geometry or material is set for squareGlobe.)
@@ -71,6 +75,7 @@ class IsolationGridOverlay {
           const cell = {
             tcMesh: cubeTC,
             globeMesh: squareGlobe,
+            mollweideMesh: squareMoll,
             tcPos: posTC,
             grid: {
               ix: Math.round(x / this.gridSize),
@@ -126,6 +131,12 @@ class IsolationGridOverlay {
           const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
           const positions = [];
           const colors = [];
+          const posM1 = cell.mollweideMesh.position.clone();
+          const posM2 = neighbor.mollweideMesh.position.clone();
+          if (Math.abs(posM1.x - posM2.x) > 200) {
+            if (posM1.x > posM2.x) posM1.x -= 400; else posM2.x -= 400;
+          }
+          const geomM = new THREE.BufferGeometry().setFromPoints([posM1, posM2]);
           const c1 = cell.tcMesh.material.color; // use cube color
           const c2 = neighbor.tcMesh.material.color;
           for (let i = 0; i < points.length; i++) {
@@ -148,14 +159,15 @@ class IsolationGridOverlay {
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
-          this.adjacentLines.push({ line, cell1: cell, cell2: neighbor });
+          const lineM = new THREE.Line(geomM, mat.clone());
+          this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
         }
       });
     });
   }
 
-  // Updated update() method now accepts sceneTC and sceneGlobe to re-add new meshes.
-  update(stars, sceneTC, sceneGlobe) {
+  // Updated update() method now accepts sceneTC, sceneGlobe, and sceneMoll to re-add new meshes.
+  update(stars, sceneTC, sceneGlobe, sceneMoll) {
     // Safely obtain slider values: if not found, use defaults.
     const isolationSlider = document.getElementById('isolation-slider');
     const toleranceSlider = document.getElementById('isolation-tolerance-slider');
@@ -189,15 +201,22 @@ class IsolationGridOverlay {
       cell.globeMesh.visible = cell.active;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, ratio);
       cell.globeMesh.scale.set(scale, scale, 1);
+      cell.mollweideMesh.visible = cell.active;
+      cell.mollweideMesh.scale.set(scale, scale, 1);
     });
 
     // Update the adjacent lines.
     this.adjacentLines.forEach(obj => {
-      const { line, cell1, cell2 } = obj;
+      const { line, lineM, cell1, cell2 } = obj;
       if (cell1.globeMesh.visible && cell2.globeMesh.visible) {
         const points = getGreatCirclePoints(cell1.globeMesh.position, cell2.globeMesh.position, 100, 16);
         const positions = [];
         const colors = [];
+        const posM1 = cell1.mollweideMesh.position.clone();
+        const posM2 = cell2.mollweideMesh.position.clone();
+        if (Math.abs(posM1.x - posM2.x) > 200) {
+          if (posM1.x > posM2.x) posM1.x -= 400; else posM2.x -= 400;
+        }
         const c1 = cell1.tcMesh.material.color;
         const c2 = cell2.tcMesh.material.color;
         for (let i = 0; i < points.length; i++) {
@@ -216,19 +235,24 @@ class IsolationGridOverlay {
         const avgScale = (cell1.globeMesh.scale.x + cell2.globeMesh.scale.x) / 2;
         line.material.linewidth = avgScale;
         line.visible = true;
+        lineM.geometry.setFromPoints([posM1, posM2]);
+        lineM.visible = true;
       } else {
         line.visible = false;
+        lineM.visible = false;
       }
     });
 
     // Re‑add the new cell meshes to the scenes.
-    if (sceneTC && sceneGlobe) {
+    if (sceneTC && sceneGlobe && sceneMoll) {
       this.cubesData.forEach(cell => {
         sceneTC.add(cell.tcMesh);
         sceneGlobe.add(cell.globeMesh);
+        sceneMoll.add(cell.mollweideMesh);
       });
       this.adjacentLines.forEach(obj => {
         sceneGlobe.add(obj.line);
+        sceneMoll.add(obj.lineM);
       });
     }
   }
@@ -352,8 +376,8 @@ export function initIsolationFilter(minDistance, maxDistance, starArray, gridSiz
   return overlay;
 }
 
-export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe) {
+export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll) {
   if (!overlay) return;
-  overlay.update(starArray, sceneTC, sceneGlobe);
+  overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll);
 }
 

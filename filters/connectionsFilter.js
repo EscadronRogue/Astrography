@@ -80,8 +80,12 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
       posA = starA.spherePosition;
       posB = starB.spherePosition;
     } else if (mapType === 'Mollweide') {
-      posA = starA.mollweidePosition;
-      posB = starB.mollweidePosition;
+      posA = starA.mollweidePosition.clone();
+      posB = starB.mollweidePosition.clone();
+      if (Math.abs(posA.x - posB.x) > 200) {
+        if (posA.x > posB.x) posA.x -= 400;
+        else posB.x -= 400;
+      }
     } else {
       posA = getPosition(starA);
       posB = getPosition(starB);
@@ -137,6 +141,10 @@ export function createConnectionLines(stars, pairs, mapType) {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
       posA = new THREE.Vector3(starA.mollweidePosition.x, starA.mollweidePosition.y, starA.mollweidePosition.z);
       posB = new THREE.Vector3(starB.mollweidePosition.x, starB.mollweidePosition.y, starB.mollweidePosition.z);
+      if (Math.abs(posA.x - posB.x) > 200) {
+        if (posA.x > posB.x) posA.x -= 400;
+        else posB.x -= 400;
+      }
     } else {
       // Use the computed truePosition if available
       posA = getPosition(starA).clone();
