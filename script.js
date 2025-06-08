@@ -11,7 +11,7 @@ import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct impo
 import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
-import { cachedRadToSphere, cachedRadToMollweide, degToRad } from './utils/geometryUtils.js';
+import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -80,7 +80,7 @@ function projectStarMollweide(star) {
     ra = 0;
     dec = 0;
   }
-  return cachedRadToMollweide(ra, dec, R, 0);
+  return cachedRadToMollweide(ra, dec, R);
 }
 
 function createGlobeGrid(R = 100, options = {}) {
@@ -118,6 +118,19 @@ function createGlobeGrid(R = 100, options = {}) {
     gridGroup.add(line);
   }
   return gridGroup;
+}
+
+function createMollweideBorder(R = 100) {
+  const points = [];
+  for (let i = 0; i <= 64; i++) {
+    const theta = (i / 64) * 2 * Math.PI;
+    const x = 2 * R * Math.cos(theta);
+    const y = R * Math.sin(theta);
+    points.push(new THREE.Vector3(x, y, 0));
+  }
+  const geom = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  return new THREE.LineLoop(geom, mat);
 }
 
 async function loadStarData() {
@@ -334,7 +347,13 @@ class MapManager {
     const pt = new THREE.PointLight(0xffffff, 1);
     this.scene.add(pt);
     if (mapType === 'Mollweide') {
-      this.controls = new TwoDControls(this.camera, this.renderer.domElement);
+      this.controls = new TwoDControls(this.camera, this.renderer.domElement, (dx) => {
+        const lambda0 = getMollweideLambda0() + dx * 0.005;
+        setMollweideLambda0(lambda0);
+        if (window.updateMollweideView) window.updateMollweideView();
+      });
+      const border = createMollweideBorder(100);
+      this.scene.add(border);
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
@@ -547,6 +566,15 @@ function updateSelectedStarHighlight() {
   selectedHighlightMollweide.position.copy(posMoll);
   mollweideMap.scene.add(selectedHighlightMollweide);
 }
+
+function updateMollweideView() {
+  if (!cachedStars) return;
+  cachedStars.forEach(star => {
+    star.mollweidePosition = projectStarMollweide(star);
+  });
+  buildAndApplyFilters();
+}
+window.updateMollweideView = updateMollweideView;
 
 async function main() {
   const loader = document.getElementById('loader');

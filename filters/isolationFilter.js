@@ -2,7 +2,7 @@
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densityColorUtils.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries } from './constellationFilter.js';
 
 // IsolationGridOverlay encapsulates the uniform grid logic for the Isolation Filter.
@@ -66,7 +66,7 @@ class IsolationGridOverlay {
                radius * Math.sin(dec),
               -radius * Math.cos(dec) * Math.sin(ra)
             );
-            const projMoll = cachedRadToMollweide(ra, dec, 100, 0);
+            const projMoll = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
             squareMoll.position.copy(projMoll);
           }
           squareGlobe.position.copy(projectedPos);

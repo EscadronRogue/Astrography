@@ -13,7 +13,7 @@
 // Only this file changed. Public API and all other files are untouched.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 
 export class DensityGridOverlay {
   /**
@@ -121,7 +121,7 @@ export class DensityGridOverlay {
       mollweideMesh : (() => {
         const ra = Math.atan2(-center.z, -center.x);
         const dec = Math.asin(center.y / r);
-        const p = cachedRadToMollweide(ra, dec, 100, 0);
+        const p = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
         const obj = new THREE.Object3D();
         obj.position.copy(p);
         return obj;
@@ -330,8 +330,8 @@ export class DensityGridOverlay {
         const dec1 = Math.asin(a.center.y / a.center.length());
         const ra2 = Math.atan2(-b.center.z, -b.center.x);
         const dec2 = Math.asin(b.center.y / b.center.length());
-        const pM1 = cachedRadToMollweide(ra1, dec1, 100, 0);
-        const pM2 = cachedRadToMollweide(ra2, dec2, 100, 0);
+        const pM1 = cachedRadToMollweide(ra1, dec1, 100, getMollweideLambda0());
+        const pM2 = cachedRadToMollweide(ra2, dec2, 100, getMollweideLambda0());
         if (Math.abs(pM1.x - pM2.x) > 200) {
           if (pM1.x > pM2.x) pM1.x -= 400; else pM2.x -= 400;
         }

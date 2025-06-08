@@ -1,7 +1,7 @@
 // /filters/constellationFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -111,10 +111,16 @@ export function createConstellationBoundariesForGlobe() {
 export function createConstellationBoundariesForMollweide() {
   const lines = [];
   const R = 100;
+  const lambda0 = getMollweideLambda0();
   boundaryData.forEach(b => {
-    const p1 = cachedRadToMollweide(b.ra1, b.dec1, R, 0);
-    const p2 = cachedRadToMollweide(b.ra2, b.dec2, R, 0);
-    const geometry = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+    const p1 = cachedRadToMollweide(b.ra1, b.dec1, R, lambda0);
+    const p2 = cachedRadToMollweide(b.ra2, b.dec2, R, lambda0);
+    const pos1 = p1.clone();
+    const pos2 = p2.clone();
+    if (Math.abs(pos1.x - pos2.x) > 200) {
+      if (pos1.x > pos2.x) pos1.x -= 400; else pos2.x -= 400;
+    }
+    const geometry = new THREE.BufferGeometry().setFromPoints([pos1, pos2]);
     const material = new THREE.LineDashedMaterial({
       color: 0x888888,
       dashSize: 2,
@@ -198,8 +204,9 @@ export function createConstellationLabelsForGlobe() {
 export function createConstellationLabelsForMollweide() {
   const labels = [];
   const R = 100;
+  const lambda0 = getMollweideLambda0();
   centerData.forEach(c => {
-    const p = cachedRadToMollweide(c.ra, c.dec, R, 0);
+    const p = cachedRadToMollweide(c.ra, c.dec, R, lambda0);
     const baseFontSize = 300;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -224,6 +231,7 @@ export function createConstellationLabelsForMollweide() {
 export function createConstellationOverlayForMollweide() {
   const boundaries = getConstellationBoundaries();
   const groups = {};
+  const lambda0 = getMollweideLambda0();
   boundaries.forEach(seg => {
     const key1 = seg.const1 ? seg.const1.toUpperCase() : null;
     const key2 = seg.const2 ? seg.const2.toUpperCase() : null;
@@ -242,8 +250,13 @@ export function createConstellationOverlayForMollweide() {
     const segs = groups[constellation];
     const points = [];
     segs.forEach(seg => {
-      points.push(cachedRadToMollweide(seg.ra1, seg.dec1, 100, 0));
-      points.push(cachedRadToMollweide(seg.ra2, seg.dec2, 100, 0));
+      const p1 = cachedRadToMollweide(seg.ra1, seg.dec1, 100, lambda0);
+      const p2 = cachedRadToMollweide(seg.ra2, seg.dec2, 100, lambda0);
+      if (Math.abs(p1.x - p2.x) > 200) {
+        if (p1.x > p2.x) p1.x -= 400; else p2.x -= 400;
+      }
+      points.push(p1);
+      points.push(p2);
     });
     const shape = new THREE.Shape(points.map(p => new THREE.Vector2(p.x, p.y)));
     const geometry = new THREE.ShapeGeometry(shape);

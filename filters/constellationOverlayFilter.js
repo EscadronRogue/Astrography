@@ -1,6 +1,6 @@
 // filters/constellationOverlayFilter.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { cachedRadToSphere, cachedRadToMollweide, getGreatCirclePoints, subdivideGeometry } from '../utils/geometryUtils.js';
+import { cachedRadToSphere, cachedRadToMollweide, getGreatCirclePoints, subdivideGeometry, getMollweideLambda0 } from '../utils/geometryUtils.js';
 import { getConstellationBoundaries } from './constellationFilter.js';
 
 const R = 100;
@@ -116,6 +116,7 @@ export function createConstellationOverlayForGlobe() {
     }
   });
   
+  const lambda0 = getMollweideLambda0();
   const colorMapping = computeConstellationColorMapping();
   const overlays = [];
   
@@ -252,7 +253,7 @@ export function createConstellationOverlayForMollweide() {
         endpoint === 0 ? seg.ra1 : seg.ra2,
         endpoint === 0 ? seg.dec1 : seg.dec2,
         R,
-        0
+        lambda0
       ).clone();
       if (base) {
         if (Math.abs(p.x - base.x) > 200) {
