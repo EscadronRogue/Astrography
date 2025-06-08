@@ -21,7 +21,7 @@ async function loadCloudData(cloudFileUrl) {
  * is drawn as a series of small segments following the great‑circle path on a sphere.
  * @param {Array} cloudData - Array of star objects from the cloud file.
  * @param {Array} completeStarList - Complete array of star objects.
- * @param {string} mapType - Either 'TrueCoordinates' or 'Globe'.
+ * @param {string} mapType - Either 'TrueCoordinates', 'Globe', or 'Mollweide'.
  * @param {THREE.Color} cloudColor - Unique color for the cloud overlay.
  * @returns {THREE.LineSegments|null} - A THREE.LineSegments object representing the cloud overlay, or null if too few points.
  */
@@ -38,8 +38,10 @@ export async function createCloudOverlay(cloudData, completeStarList, mapType, c
       let pos = null;
       if (mapType === 'TrueCoordinates') {
         if (star.truePosition) pos = star.truePosition;
-      } else {
+      } else if (mapType === 'Globe') {
         if (star.spherePosition) pos = star.spherePosition;
+      } else {
+        if (star.mollweidePosition) pos = star.mollweidePosition;
       }
       if (pos) {
         cloudStars.push({ star, pos });
@@ -78,8 +80,13 @@ export async function createCloudOverlay(cloudData, completeStarList, mapType, c
         }
       } else {
         // For non-globe maps, simply connect p1 and p2.
-        vertices.push(p1.x, p1.y, p1.z);
-        vertices.push(p2.x, p2.y, p2.z);
+        const v1 = p1.clone();
+        const v2 = p2.clone();
+        if (mapType === 'Mollweide' && Math.abs(v1.x - v2.x) > 200) {
+          if (v1.x > v2.x) v1.x -= 400; else v2.x -= 400;
+        }
+        vertices.push(v1.x, v1.y, v1.z);
+        vertices.push(v2.x, v2.y, v2.z);
       }
     }
   }
@@ -135,7 +142,7 @@ function getCloudNameFromFileUrl(fileUrl) {
  * Each cloud is rendered with a unique color.
  * @param {Array} completeStarList - Complete array of star objects.
  * @param {THREE.Scene} scene - The scene to add the cloud overlays.
- * @param {string} mapType - 'TrueCoordinates' or 'Globe'.
+ * @param {string} mapType - 'TrueCoordinates', 'Globe', or 'Mollweide'.
  * @param {Array} cloudDataFiles - Array of file URLs for cloud data.
  */
 export async function updateCloudsOverlay(completeStarList, scene, mapType, cloudDataFiles) {

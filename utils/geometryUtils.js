@@ -2,6 +2,17 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { minimalRADifference } from '../utils.js';
 
+// Global central meridian for Mollweide projection
+let mollweideLambda0 = 0;
+
+export function setMollweideLambda0(lambda0) {
+  mollweideLambda0 = lambda0;
+}
+
+export function getMollweideLambda0() {
+  return mollweideLambda0;
+}
+
 /**
  * Converts RA and DEC (in radians) to a THREE.Vector3 on a sphere of radius R.
  */
@@ -158,7 +169,7 @@ export function cachedRadToSphere(ra, dec, R) {
  * @param {number} [lambda0=0] - Central meridian in radians.
  * @returns {THREE.Vector3}
  */
-export function radToMollweide(ra, dec, R = 100, lambda0 = 0) {
+export function radToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda0) {
   const lambda = minimalRADifference(ra - lambda0);
   const phi = dec;
   let theta = phi;
@@ -174,7 +185,7 @@ export function radToMollweide(ra, dec, R = 100, lambda0 = 0) {
 }
 
 const radToMollweideCache = new Map();
-export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = 0) {
+export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda0) {
   const key = `${ra}_${dec}_${R}_${lambda0}`;
   if (radToMollweideCache.has(key)) {
     return radToMollweideCache.get(key).clone();
@@ -182,4 +193,66 @@ export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = 0) {
   const vec = radToMollweide(ra, dec, R, lambda0);
   radToMollweideCache.set(key, vec.clone());
   return vec;
+}
+
+/**
+ * Adjusts a pair of Mollweide points so the connecting line wraps inside the
+ * standard [-200, 200] x-range. Returns the adjusted clones.
+ * @param {THREE.Vector3} p1
+ * @param {THREE.Vector3} p2
+ * @returns {[THREE.Vector3, THREE.Vector3]}
+ */
+export function adjustMollweideWrap(p1, p2) {
+  const a = p1.clone();
+  const b = p2.clone();
+  // shift points horizontally so their separation stays within the map
+  while (a.x - b.x > 200) a.x -= 400;
+  while (b.x - a.x > 200) b.x -= 400;
+  // keep coordinates inside [-200, 200]
+  while (a.x > 200) a.x -= 400;
+  while (a.x < -200) a.x += 400;
+  while (b.x > 200) b.x -= 400;
+  while (b.x < -200) b.x += 400;
+  return [a, b];
+}
+
+/**
+ * Splits a Mollweide segment at the map boundary if needed so that
+ * wrapped lines appear on the opposite side instead of bleeding out.
+ * Returns an array of [start, end] pairs.
+ */
+export function splitMollweideWrap(p1, p2) {
+  const a = p1.clone();
+  const b = p2.clone();
+  if (Math.abs(a.x - b.x) <= 200) {
+    return [[a, b]];
+  }
+  let left = a, right = b;
+  let swapped = false;
+  if (left.x > right.x) { left = b; right = a; swapped = true; }
+
+  const shifted = right.clone();
+  shifted.x -= 400;
+
+  const dx = shifted.x - left.x;
+  const dy = shifted.y - left.y;
+  const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
+  const B = 2 * (left.x * dx / (200 * 200) + left.y * dy / (100 * 100));
+  const C = (left.x * left.x) / (200 * 200) + (left.y * left.y) / (100 * 100) - 1;
+  const disc = B * B - 4 * A * C;
+  if (disc < 0) return [[a, b]];
+  const sqrtDisc = Math.sqrt(disc);
+  const t1 = (-B - sqrtDisc) / (2 * A);
+  const t2 = (-B + sqrtDisc) / (2 * A);
+  const t = (t1 >= 0 && t1 <= 1) ? t1 : (t2 >= 0 && t2 <= 1 ? t2 : null);
+  if (t === null) return [[a, b]];
+  const ix = left.x + dx * t;
+  const iy = left.y + dy * t;
+  const edgeLeft = new THREE.Vector3(ix, iy, 0);
+  const edgeRight = new THREE.Vector3(ix + 400, iy, 0);
+  if (!swapped) {
+    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
+  } else {
+    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
+  }
 }

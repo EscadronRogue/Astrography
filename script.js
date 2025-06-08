@@ -1,8 +1,9 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines } from './filters/connectionsFilter.js';
-import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe } from './filters/constellationFilter.js';
+import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
+import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
+import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
@@ -10,7 +11,8 @@ import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct impo
 import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
-import { cachedRadToSphere, cachedRadToMollweide, degToRad } from './utils/geometryUtils.js';
+import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
+import { minimalRADifference } from './utils.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -27,9 +29,18 @@ let mollweideMap;
 let constellationLinesGlobe = [];
 let constellationLabelsGlobe = [];
 let constellationOverlayGlobe = [];
+let constellationLinesMoll = [];
+let constellationLabelsMoll = [];
+let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
 let isolationOverlay = null;
 let densityOverlay = null;
+let showConstellationBoundariesFlag = false;
+let showConstellationNamesFlag = false;
+let showConstellationOverlayFlag = false;
+let enableIsolationFilterFlag = false;
+let enableDensityFilterFlag = false;
+let showCloudsFlag = false;
 
 function getStarTruePosition(star) {
   const R = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
@@ -76,7 +87,41 @@ function projectStarMollweide(star) {
     ra = 0;
     dec = 0;
   }
-  return cachedRadToMollweide(ra, dec, R, 0);
+  return cachedRadToMollweide(ra, dec, R);
+}
+
+function precalcMollweideData(star) {
+  const R = 100;
+  let ra, dec;
+  if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
+    ra = star.RA_in_radian;
+    dec = star.DEC_in_radian;
+  } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
+    ra = degToRad(star.RA_in_degrees);
+    dec = degToRad(star.DEC_in_degrees);
+  } else {
+    ra = 0;
+    dec = 0;
+  }
+  star.raRad = ra;
+  star.decRad = dec;
+  let theta = dec;
+  for (let i = 0; i < 10; i++) {
+    const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
+      (2 + 2 * Math.cos(2 * theta));
+    theta -= delta;
+    if (Math.abs(delta) < 1e-10) break;
+  }
+  const cosT = Math.cos(theta);
+  const sinT = Math.sin(theta);
+  star.mollXFactor = (2 * R / Math.PI) * cosT;
+  star.mollY = R * sinT;
+}
+
+function updateMollweidePosition(star) {
+  const lambda = minimalRADifference(star.raRad - getMollweideLambda0());
+  if (!star.mollweidePosition) star.mollweidePosition = new THREE.Vector3();
+  star.mollweidePosition.set(star.mollXFactor * lambda, star.mollY, 0);
 }
 
 function createGlobeGrid(R = 100, options = {}) {
@@ -116,6 +161,19 @@ function createGlobeGrid(R = 100, options = {}) {
   return gridGroup;
 }
 
+function createMollweideBorder(R = 100) {
+  const points = [];
+  for (let i = 0; i <= 64; i++) {
+    const theta = (i / 64) * 2 * Math.PI;
+    const x = 2 * R * Math.cos(theta);
+    const y = R * Math.sin(theta);
+    points.push(new THREE.Vector3(x, y, 0));
+  }
+  const geom = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  return new THREE.LineLoop(geom, mat);
+}
+
 async function loadStarData() {
   const manifestUrl = 'data/manifest.json';
   try {
@@ -151,6 +209,17 @@ function debounce(func, wait) {
   };
 }
 
+let pendingMollweideUpdate = false;
+function scheduleMollweideUpdate() {
+  if (!pendingMollweideUpdate) {
+    pendingMollweideUpdate = true;
+    requestAnimationFrame(() => {
+      pendingMollweideUpdate = false;
+      updateMollweideView();
+    });
+  }
+}
+
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
   const filters = applyFilters(cachedStars);
@@ -178,6 +247,13 @@ async function buildAndApplyFilters() {
     showClouds
   } = filters;
 
+  showConstellationBoundariesFlag = showConstellationBoundaries;
+  showConstellationNamesFlag = showConstellationNames;
+  showConstellationOverlayFlag = showConstellationOverlay;
+  enableIsolationFilterFlag = enableIsolationFilter;
+  enableDensityFilterFlag = enableDensityFilter;
+  showCloudsFlag = showClouds;
+
   currentFilteredStars = filteredStars;
   currentConnections = connections;
   currentGlobeFilteredStars = globeFilteredStars;
@@ -188,14 +264,16 @@ async function buildAndApplyFilters() {
   });
   currentFilteredStars.forEach(star => {
     star.truePosition = getStarTruePosition(star);
-    star.mollweidePosition = projectStarMollweide(star);
+    precalcMollweideData(star);
+    updateMollweidePosition(star);
   });
 
   trueCoordinatesMap.updateMap(currentFilteredStars, currentConnections);
   trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
   globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
   globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
-  mollweideMap.updateMap(currentFilteredStars, currentConnections);
+  mollweideMap.updateStarPositions(currentFilteredStars);
+  mollweideMap.updateConnections(currentFilteredStars, currentConnections);
   mollweideMap.labelManager.refreshLabels(currentFilteredStars);
 
   removeConstellationObjectsFromGlobe();
@@ -204,15 +282,23 @@ async function buildAndApplyFilters() {
   if (showConstellationBoundaries) {
     constellationLinesGlobe = createConstellationBoundariesForGlobe();
     constellationLinesGlobe.forEach(ln => globeMap.scene.add(ln));
+    constellationLinesMoll = createConstellationBoundariesForMollweide();
+    constellationLinesMoll.forEach(ln => mollweideMap.scene.add(ln));
   }
   if (showConstellationNames) {
     constellationLabelsGlobe = createConstellationLabelsForGlobe();
     constellationLabelsGlobe.forEach(lbl => globeMap.scene.add(lbl));
+    constellationLabelsMoll = createConstellationLabelsForMollweide();
+    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
   }
   if (showConstellationOverlay) {
     const constellationOverlay = createConstellationOverlayForGlobe();
     constellationOverlay.forEach(mesh => {
       window.globeMap.scene.add(mesh);
+    });
+    constellationOverlayMoll = createConstellationOverlayForMollweide();
+    constellationOverlayMoll.forEach(mesh => {
+      mollweideMap.scene.add(mesh);
     });
   }
 
@@ -224,6 +310,7 @@ async function buildAndApplyFilters() {
     // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
     updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
     updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
+    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
   }
 
   applyGlobeSurface(globeOpaqueSurface);
@@ -238,6 +325,14 @@ function removeConstellationObjectsFromGlobe() {
     constellationLabelsGlobe.forEach(lbl => globeMap.scene.remove(lbl));
   }
   constellationLabelsGlobe = [];
+  if (constellationLinesMoll && constellationLinesMoll.length > 0) {
+    constellationLinesMoll.forEach(l => mollweideMap.scene.remove(l));
+  }
+  constellationLinesMoll = [];
+  if (constellationLabelsMoll && constellationLabelsMoll.length > 0) {
+    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
+  }
+  constellationLabelsMoll = [];
 }
 
 function removeConstellationOverlayObjectsFromGlobe() {
@@ -245,6 +340,10 @@ function removeConstellationOverlayObjectsFromGlobe() {
     constellationOverlayGlobe.forEach(mesh => globeMap.scene.remove(mesh));
   }
   constellationOverlayGlobe = [];
+  if (constellationOverlayMoll && constellationOverlayMoll.length > 0) {
+    constellationOverlayMoll.forEach(mesh => mollweideMap.scene.remove(mesh));
+  }
+  constellationOverlayMoll = [];
 }
 
 function applyGlobeSurface(isOpaque) {
@@ -309,7 +408,19 @@ class MapManager {
     const pt = new THREE.PointLight(0xffffff, 1);
     this.scene.add(pt);
     if (mapType === 'Mollweide') {
-      this.controls = new TwoDControls(this.camera, this.renderer.domElement);
+      this.controls = new TwoDControls(this.camera, this.renderer.domElement, {
+        rightCallback: (dx) => {
+          let lambda0 = getMollweideLambda0() - dx * 0.002;
+          const twoPi = Math.PI * 2;
+          lambda0 = ((lambda0 % twoPi) + twoPi) % twoPi;
+          setMollweideLambda0(lambda0);
+          scheduleMollweideUpdate();
+        },
+        panCameraLeft: true,
+        panCameraRight: false
+      });
+      const border = createMollweideBorder(100);
+      this.scene.add(border);
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
@@ -322,33 +433,42 @@ class MapManager {
   }
 
   addStars(stars) {
-    while (this.starGroup.children.length > 0) {
-      const child = this.starGroup.children[0];
-      this.starGroup.remove(child);
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
-    }
     const count = stars.length;
-    if (count === 0) return;
-    const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
-    const vertexCount = baseGeometry.attributes.position.count;
-    const dummyColors = new Float32Array(vertexCount * 3);
-    for (let i = 0; i < vertexCount; i++) {
-      dummyColors[i * 3] = 1;
-      dummyColors[i * 3 + 1] = 1;
-      dummyColors[i * 3 + 2] = 1;
+    if (!this.instancedMesh || this.instancedMesh.count !== count) {
+      while (this.starGroup.children.length > 0) {
+        const child = this.starGroup.children[0];
+        this.starGroup.remove(child);
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      }
+      if (count === 0) return;
+      const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
+      const vertexCount = baseGeometry.attributes.position.count;
+      const dummyColors = new Float32Array(vertexCount * 3);
+      for (let i = 0; i < vertexCount; i++) {
+        dummyColors[i * 3] = 1;
+        dummyColors[i * 3 + 1] = 1;
+        dummyColors[i * 3 + 2] = 1;
+      }
+      baseGeometry.setAttribute('color', new THREE.BufferAttribute(dummyColors, 3));
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 1.0,
+        vertexColors: true
+      });
+      this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
+      this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+      this.starGroup.add(this.instancedMesh);
     }
-    baseGeometry.setAttribute('color', new THREE.BufferAttribute(dummyColors, 3));
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 1.0,
-      vertexColors: true
-    });
-    const instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
+    this.updateStarPositions(stars);
+  }
+
+  updateStarPositions(stars) {
+    if (!this.instancedMesh) return;
     const dummy = new THREE.Object3D();
-    const colors = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
+    const colors = this.instancedMesh.instanceColor.array;
+    for (let i = 0; i < stars.length; i++) {
       const star = stars[i];
       let pos;
       if (this.mapType === 'TrueCoordinates') {
@@ -363,15 +483,14 @@ class MapManager {
       dummy.position.copy(pos);
       dummy.scale.set(scale, scale, scale);
       dummy.updateMatrix();
-      instancedMesh.setMatrixAt(i, dummy.matrix);
+      this.instancedMesh.setMatrixAt(i, dummy.matrix);
       const color = new THREE.Color(star.displayColor || '#ffffff');
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
     }
-    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
-    instancedMesh.instanceColor.needsUpdate = true;
-    this.starGroup.add(instancedMesh);
+    this.instancedMesh.instanceMatrix.needsUpdate = true;
+    this.instancedMesh.instanceColor.needsUpdate = true;
     this.starObjects = stars;
   }
 
@@ -385,11 +504,24 @@ class MapManager {
     if (this.mapType === 'Globe') {
       const linesArray = createConnectionLines(stars, connectionObjs, 'Globe');
       linesArray.forEach(line => this.connectionGroup.add(line));
+    } else if (this.mapType === 'Mollweide') {
+      const merged = createMollweideConnectionSegments(connectionObjs);
+      this.connectionGroup.add(merged);
     } else {
       const merged = mergeConnectionLines(connectionObjs, this.mapType);
       this.connectionGroup.add(merged);
     }
     this.scene.add(this.connectionGroup);
+  }
+
+  updateConnectionPositions(stars, connectionObjs) {
+    if (!this.connectionGroup) return;
+    if (this.mapType === 'Mollweide') {
+      const segs = this.connectionGroup.children[0];
+      if (segs) updateMollweideConnectionSegments(segs);
+    } else {
+      this.updateConnections(stars, connectionObjs);
+    }
   }
 
   updateMap(stars, connectionObjs) {
@@ -523,6 +655,52 @@ function updateSelectedStarHighlight() {
   mollweideMap.scene.add(selectedHighlightMollweide);
 }
 
+function updateMollweideView() {
+  if (!currentFilteredStars || currentFilteredStars.length === 0) return;
+  currentFilteredStars.forEach(star => {
+    updateMollweidePosition(star);
+  });
+
+  mollweideMap.updateStarPositions(currentFilteredStars);
+  mollweideMap.updateConnectionPositions(currentFilteredStars, currentConnections);
+  mollweideMap.labelManager.refreshLabels(currentFilteredStars);
+
+  if (showConstellationBoundariesFlag) {
+    if (constellationLinesMoll.length === 0) {
+      constellationLinesMoll = createConstellationBoundariesForMollweide();
+      constellationLinesMoll.forEach(l => mollweideMap.scene.add(l));
+    } else {
+      constellationLinesMoll.forEach(l => updateConstellationBoundariesForMollweide(l));
+    }
+  }
+  if (showConstellationNamesFlag) {
+    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
+    constellationLabelsMoll = createConstellationLabelsForMollweide();
+    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
+  }
+  if (showConstellationOverlayFlag) {
+    constellationOverlayMoll.forEach(mesh => mollweideMap.scene.remove(mesh));
+    constellationOverlayMoll = createConstellationOverlayForMollweide();
+    constellationOverlayMoll.forEach(mesh => mollweideMap.scene.add(mesh));
+  }
+  if (showCloudsFlag) {
+    const form = document.getElementById('filters-form');
+    const cloudFiles = new FormData(form).getAll('dust-clouds');
+    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudFiles);
+  }
+  if (enableIsolationFilterFlag && isolationOverlay) {
+    if (typeof isolationOverlay.refreshMollweide === 'function') {
+      isolationOverlay.refreshMollweide();
+    }
+  }
+  if (enableDensityFilterFlag && densityOverlay) {
+    if (typeof densityOverlay.refreshMollweide === 'function') {
+      densityOverlay.refreshMollweide();
+    }
+  }
+}
+window.updateMollweideView = updateMollweideView;
+
 async function main() {
   const loader = document.getElementById('loader');
   loader.classList.remove('hidden');
@@ -544,7 +722,8 @@ async function main() {
     cachedStars.forEach(star => {
       star.spherePosition = projectStarGlobe(star);
       star.truePosition = getStarTruePosition(star);
-      star.mollweidePosition = projectStarMollweide(star);
+      precalcMollweideData(star);
+      updateMollweidePosition(star);
     });
     const globeGrid = createGlobeGrid(100, { color: 0x444444, opacity: 0.2, lineWidth: 1 });
     globeMap.scene.add(globeGrid);

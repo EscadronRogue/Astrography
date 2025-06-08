@@ -1,6 +1,7 @@
 // filters/connectionsFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { adjustMollweideWrap, splitMollweideWrap } from '../utils/geometryUtils.js';
 
 /**
  * Helper: Returns a THREE.Vector3 for a star’s position.
@@ -76,25 +77,33 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
   connectionObjs.forEach(pair => {
     const { starA, starB } = pair;
     let posA, posB;
+    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
+    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
     if (mapType === 'Globe') {
       posA = starA.spherePosition;
       posB = starB.spherePosition;
     } else if (mapType === 'Mollweide') {
-      posA = starA.mollweidePosition;
-      posB = starB.mollweidePosition;
+      const segments = splitMollweideWrap(
+        starA.mollweidePosition,
+        starB.mollweidePosition
+      );
+      segments.forEach(([s1, s2]) => {
+        positions.push(s1.x, s1.y, s1.z, s2.x, s2.y, s2.z);
+        const cA = new THREE.Color(starA.displayColor || '#ffffff');
+        const cB = new THREE.Color(starB.displayColor || '#ffffff');
+        colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
+      });
+      return; // continue to next pair
     } else {
       posA = getPosition(starA);
       posB = getPosition(starB);
     }
-    
     positions.push(posA.x, posA.y, posA.z);
     positions.push(posB.x, posB.y, posB.z);
-    
-    // Set each vertex's color from the star's displayColor.
+
     const cA = new THREE.Color(starA.displayColor || '#ffffff');
     const cB = new THREE.Color(starB.displayColor || '#ffffff');
-    colors.push(cA.r, cA.g, cA.b);
-    colors.push(cB.r, cB.g, cB.b);
+    colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
   });
   
   const geometry = new THREE.BufferGeometry();
@@ -110,6 +119,59 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
   
   const mergedLines = new THREE.LineSegments(geometry, material);
   return mergedLines;
+}
+
+export function createMollweideConnectionSegments(pairs) {
+  const segCount = pairs.length * 2; // up to 2 segments per pair
+  const positions = new Float32Array(segCount * 2 * 3);
+  const colors = new Float32Array(segCount * 2 * 3);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.5,
+    linewidth: 1
+  });
+  const lineSegs = new THREE.LineSegments(geometry, material);
+  lineSegs.userData.pairs = pairs;
+  updateMollweideConnectionSegments(lineSegs);
+  return lineSegs;
+}
+
+export function updateMollweideConnectionSegments(lineSegs) {
+  const pairs = lineSegs.userData.pairs || [];
+  const posAttr = lineSegs.geometry.getAttribute('position');
+  const colorAttr = lineSegs.geometry.getAttribute('color');
+  let idx = 0;
+  pairs.forEach(pair => {
+    const segs = splitMollweideWrap(
+      pair.starA.mollweidePosition,
+      pair.starB.mollweidePosition
+    );
+    const cA = new THREE.Color(pair.starA.displayColor || '#ffffff');
+    const cB = new THREE.Color(pair.starB.displayColor || '#ffffff');
+    for (let i = 0; i < 2; i++) {
+      if (i < segs.length) {
+        const s = segs[i][0];
+        const e = segs[i][1];
+        posAttr.array[idx] = s.x; posAttr.array[idx+1] = s.y; posAttr.array[idx+2] = s.z;
+        posAttr.array[idx+3] = e.x; posAttr.array[idx+4] = e.y; posAttr.array[idx+5] = e.z;
+        colorAttr.array[idx] = cA.r; colorAttr.array[idx+1] = cA.g; colorAttr.array[idx+2] = cA.b;
+        colorAttr.array[idx+3] = cB.r; colorAttr.array[idx+4] = cB.g; colorAttr.array[idx+5] = cB.b;
+      } else {
+        posAttr.array[idx] = posAttr.array[idx+1] = posAttr.array[idx+2] = 0;
+        posAttr.array[idx+3] = posAttr.array[idx+4] = posAttr.array[idx+5] = 0;
+        colorAttr.array[idx] = colorAttr.array[idx+1] = colorAttr.array[idx+2] = 0;
+        colorAttr.array[idx+3] = colorAttr.array[idx+4] = colorAttr.array[idx+5] = 0;
+      }
+      idx += 6;
+    }
+  });
+  posAttr.needsUpdate = true;
+  colorAttr.needsUpdate = true;
+  lineSegs.computeLineDistances();
 }
 
 /**
@@ -129,22 +191,37 @@ export function createConnectionLines(stars, pairs, mapType) {
   pairs.forEach(pair => {
     const { starA, starB, distance } = pair;
     let posA, posB;
+    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
+    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
     if (mapType === 'Globe') {
       if (!starA.spherePosition || !starB.spherePosition) return;
       posA = new THREE.Vector3(starA.spherePosition.x, starA.spherePosition.y, starA.spherePosition.z);
       posB = new THREE.Vector3(starB.spherePosition.x, starB.spherePosition.y, starB.spherePosition.z);
     } else if (mapType === 'Mollweide') {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
-      posA = new THREE.Vector3(starA.mollweidePosition.x, starA.mollweidePosition.y, starA.mollweidePosition.z);
-      posB = new THREE.Vector3(starB.mollweidePosition.x, starB.mollweidePosition.y, starB.mollweidePosition.z);
+      const segments = splitMollweideWrap(
+        starA.mollweidePosition,
+        starB.mollweidePosition
+      );
+      segments.forEach(([s1, s2]) => {
+        const points = [s1, s2];
+        const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
+        const materialLine = new THREE.LineBasicMaterial({
+          color: c1.clone().lerp(c2, 0.5),
+          transparent: true,
+          opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)),
+          linewidth: THREE.MathUtils.lerp(5, 1, distance / (largestPairDistance || distance))
+        });
+        const line = new THREE.Line(geometryLine, materialLine);
+        lines.push(line);
+      });
+      return;
     } else {
       // Use the computed truePosition if available
       posA = getPosition(starA).clone();
       posB = getPosition(starB).clone();
     }
     
-    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
-    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
     const gradientColor = c1.clone().lerp(c2, 0.5);
     
     const normDist = distance / (largestPairDistance || distance);
@@ -159,7 +236,7 @@ export function createConnectionLines(stars, pairs, mapType) {
     } else {
       points = [posA, posB];
     }
-    
+
     const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
     const materialLine = new THREE.LineBasicMaterial({
       color: gradientColor,

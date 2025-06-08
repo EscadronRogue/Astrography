@@ -1,7 +1,7 @@
 // /filters/constellationFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap, splitMollweideWrap } from '../utils/geometryUtils.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -108,6 +108,62 @@ export function createConstellationBoundariesForGlobe() {
   return lines;
 }
 
+export function createConstellationBoundariesForMollweide() {
+  const R = 100;
+  const material = new THREE.LineDashedMaterial({
+    color: 0x888888,
+    dashSize: 2,
+    gapSize: 1,
+    linewidth: 1
+  });
+  const maxSegments = boundaryData.length * 2; // each boundary can wrap
+  const positions = new Float32Array(maxSegments * 2 * 3); // 2 vertices per segment
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const lineSegs = new THREE.LineSegments(geometry, material);
+  lineSegs.computeLineDistances();
+  lineSegs.userData.boundaryData = boundaryData;
+  lineSegs.userData.R = R;
+  updateConstellationBoundariesForMollweide(lineSegs);
+  return [lineSegs];
+}
+
+export function updateConstellationBoundariesForMollweide(lineSegs) {
+  const R = lineSegs.userData.R || 100;
+  const lambda0 = getMollweideLambda0();
+  const data = lineSegs.userData.boundaryData || [];
+  const posAttr = lineSegs.geometry.getAttribute('position');
+  const array = posAttr.array;
+  let idx = 0;
+  data.forEach(seg => {
+    const p1 = cachedRadToMollweide(seg.ra1, seg.dec1, R, lambda0);
+    const p2 = cachedRadToMollweide(seg.ra2, seg.dec2, R, lambda0);
+    const segments = splitMollweideWrap(p1, p2);
+    for (let i = 0; i < 2; i++) {
+      if (i < segments.length) {
+        const s = segments[i][0];
+        const e = segments[i][1];
+        array[idx++] = s.x;
+        array[idx++] = s.y;
+        array[idx++] = 0;
+        array[idx++] = e.x;
+        array[idx++] = e.y;
+        array[idx++] = 0;
+      } else {
+        // degenerate segment
+        array[idx++] = 0;
+        array[idx++] = 0;
+        array[idx++] = 0;
+        array[idx++] = 0;
+        array[idx++] = 0;
+        array[idx++] = 0;
+      }
+    }
+  });
+  posAttr.needsUpdate = true;
+  lineSegs.computeLineDistances();
+}
+
 /**
  * Creates constellation label meshes for the Globe.
  * The labels are rendered using a custom shader material so that they are double-sided
@@ -173,6 +229,78 @@ export function createConstellationLabelsForGlobe() {
     labels.push(label);
   });
   return labels;
+}
+
+export function createConstellationLabelsForMollweide() {
+  const labels = [];
+  const R = 100;
+  const lambda0 = getMollweideLambda0();
+  centerData.forEach(c => {
+    const p = cachedRadToMollweide(c.ra, c.dec, R, lambda0);
+    const baseFontSize = 300;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = `${baseFontSize}px Arial`;
+    const textWidth = ctx.measureText(c.name).width;
+    canvas.width = textWidth + 20;
+    canvas.height = baseFontSize * 1.2;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = `${baseFontSize}px Arial`;
+    ctx.fillStyle = '#888888';
+    ctx.fillText(c.name, 10, baseFontSize);
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.5 });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
+    sprite.position.copy(p);
+    labels.push(sprite);
+  });
+  return labels;
+}
+
+export function createConstellationOverlayForMollweide() {
+  const boundaries = getConstellationBoundaries();
+  const groups = {};
+  const lambda0 = getMollweideLambda0();
+  boundaries.forEach(seg => {
+    const key1 = seg.const1 ? seg.const1.toUpperCase() : null;
+    const key2 = seg.const2 ? seg.const2.toUpperCase() : null;
+    if (key1) {
+      if (!groups[key1]) groups[key1] = [];
+      groups[key1].push(seg);
+    }
+    if (key2 && key2 !== key1) {
+      if (!groups[key2]) groups[key2] = [];
+      groups[key2].push(seg);
+    }
+  });
+  const colorMapping = computeConstellationColorMapping();
+  const overlays = [];
+  for (const constellation in groups) {
+    const segs = groups[constellation];
+    const points = [];
+    segs.forEach(seg => {
+      const p1 = cachedRadToMollweide(seg.ra1, seg.dec1, 100, lambda0);
+      const p2 = cachedRadToMollweide(seg.ra2, seg.dec2, 100, lambda0);
+      if (Math.abs(p1.x - p2.x) > 200) {
+        if (p1.x > p2.x) p1.x -= 400; else p2.x -= 400;
+      }
+      points.push(p1);
+      points.push(p2);
+    });
+    const shape = new THREE.Shape(points.map(p => new THREE.Vector2(p.x, p.y)));
+    const geometry = new THREE.ShapeGeometry(shape);
+    const material = new THREE.MeshBasicMaterial({
+      color: new THREE.Color(colorMapping[constellation]),
+      opacity: 0.15,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    overlays.push(mesh);
+  }
+  return overlays;
 }
 
 /**

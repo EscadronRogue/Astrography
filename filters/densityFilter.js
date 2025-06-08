@@ -13,7 +13,7 @@
 // Only this file changed. Public API and all other files are untouched.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap } from '../utils/geometryUtils.js';
 
 export class DensityGridOverlay {
   /**
@@ -118,6 +118,14 @@ export class DensityGridOverlay {
     this.cubesData.push({
       tcMesh    : cubeTC,
       globeMesh : plane,
+      mollweideMesh : (() => {
+        const ra = Math.atan2(-center.z, -center.x);
+        const dec = Math.asin(center.y / r);
+        const p = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
+        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size), material.clone());
+        mesh.position.copy(p);
+        return mesh;
+      })(),
       center    : center,
       bbox      : cell.bbox,
       count     : cell.count,
@@ -133,13 +141,17 @@ export class DensityGridOverlay {
   /**
    * Re-apply threshold & update visibility.  
    * Re-creates grid each call (same as original design). */
-  update(stars, sceneTC, sceneGlobe) {
+  update(stars, sceneTC, sceneGlobe, sceneMoll) {
     /* remove previous meshes from scenes */
     this.cubesData.forEach(c => {
       c.tcMesh.parent?.remove(c.tcMesh);
       c.globeMesh.parent?.remove(c.globeMesh);
+      c.mollweideMesh.parent?.remove(c.mollweideMesh);
     });
-    this.adjacentLines.forEach(o => o.line.parent?.remove(o.line));
+    this.adjacentLines.forEach(o => {
+      o.line.parent?.remove(o.line);
+      o.lineM?.parent?.remove(o.lineM);
+    });
 
     /* rebuild grid */
     this.createGrid(stars);
@@ -184,18 +196,21 @@ export class DensityGridOverlay {
 
       cell.tcMesh.visible   = cell.active;
       cell.globeMesh.visible = cell.active;
+      cell.mollweideMesh.visible = cell.active;
 
       /* globe square scale = distance-based (unchanged) */
       const ratio = Math.min(1, cell.center.length() / this.maxDistance);
       const scl   = THREE.MathUtils.lerp(20, 0.1, ratio);
       cell.globeMesh.scale.set(scl, scl, 1);
+      cell.mollweideMesh.scale.set(scl, scl, 1);
     });
 
     /* neighbour lines: only between visible cells + colour gradient */
     this.adjacentLines.forEach(obj => {
-      const { line, cell1, cell2 } = obj;
+      const { line, lineM, cell1, cell2 } = obj;
       if (!(cell1.active && cell2.active)) {
         line.visible = false;
+        lineM.visible = false;
         return;
       }
       const pts  = getGreatCirclePoints(cell1.globeMesh.position,
@@ -221,14 +236,35 @@ export class DensityGridOverlay {
       line.geometry.attributes.position.needsUpdate = true;
       line.geometry.attributes.color.needsUpdate    = true;
       line.visible = true;
+      const p1 = cell1.mollweideMesh.position.clone();
+      const p2 = cell2.mollweideMesh.position.clone();
+      const [adj1, adj2] = adjustMollweideWrap(p1, p2);
+      lineM.geometry.setFromPoints([adj1, adj2]);
+      lineM.visible = true;
     });
 
     /* push meshes back into scenes */
     this.cubesData.forEach(c => {
       sceneTC.add(c.tcMesh);
       sceneGlobe.add(c.globeMesh);
+      sceneMoll.add(c.mollweideMesh);
     });
-    this.adjacentLines.forEach(o => sceneGlobe.add(o.line));
+    this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); sceneMoll.add(o.lineM); });
+  }
+
+  refreshMollweide(lambda0 = getMollweideLambda0()) {
+    this.cubesData.forEach(cell => {
+      const ra = Math.atan2(-cell.center.z, -cell.center.x);
+      const dec = Math.asin(cell.center.y / cell.center.length());
+      const p = cachedRadToMollweide(ra, dec, 100, lambda0);
+      cell.mollweideMesh.position.copy(p);
+    });
+    this.adjacentLines.forEach(obj => {
+      const p1 = obj.cell1.mollweideMesh.position.clone();
+      const p2 = obj.cell2.mollweideMesh.position.clone();
+      const [a, b] = adjustMollweideWrap(p1, p2);
+      obj.lineM.geometry.setFromPoints([a, b]);
+    });
   }
 
   /* ───────────────────────────── HELPERS ─────────────────────────────── */
@@ -303,6 +339,16 @@ export class DensityGridOverlay {
           new THREE.Float32BufferAttribute(pos, 3));
         geom.setAttribute('color',
           new THREE.Float32BufferAttribute(col, 3));
+        const ra1 = Math.atan2(-a.center.z, -a.center.x);
+        const dec1 = Math.asin(a.center.y / a.center.length());
+        const ra2 = Math.atan2(-b.center.z, -b.center.x);
+        const dec2 = Math.asin(b.center.y / b.center.length());
+        const pM1 = cachedRadToMollweide(ra1, dec1, 100, getMollweideLambda0());
+        const pM2 = cachedRadToMollweide(ra2, dec2, 100, getMollweideLambda0());
+        if (Math.abs(pM1.x - pM2.x) > 200) {
+          if (pM1.x > pM2.x) pM1.x -= 400; else pM2.x -= 400;
+        }
+        const geomM = new THREE.BufferGeometry().setFromPoints([pM1, pM2]);
 
         const mat = new THREE.LineBasicMaterial({
           vertexColors : true,
@@ -313,6 +359,7 @@ export class DensityGridOverlay {
 
         this.adjacentLines.push({
           line  : new THREE.Line(geom, mat),
+          lineM : new THREE.Line(geomM, mat.clone()),
           cell1 : a,
           cell2 : b
         });
@@ -334,7 +381,7 @@ export function initDensityFilter(minDistance, maxDistance,
 }
 
 export function updateDensityFilter(starArray, overlay,
-                                    sceneTC, sceneGlobe) {
+                                    sceneTC, sceneGlobe, sceneMoll) {
   if (!overlay) return;
-  overlay.update(starArray, sceneTC, sceneGlobe);
+  overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll);
 }
