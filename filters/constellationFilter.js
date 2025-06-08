@@ -1,7 +1,7 @@
 // /filters/constellationFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap } from '../utils/geometryUtils.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -113,13 +113,9 @@ export function createConstellationBoundariesForMollweide() {
   const R = 100;
   const lambda0 = getMollweideLambda0();
   boundaryData.forEach(b => {
-    const p1 = cachedRadToMollweide(b.ra1, b.dec1, R, lambda0);
-    const p2 = cachedRadToMollweide(b.ra2, b.dec2, R, lambda0);
-    const pos1 = p1.clone();
-    const pos2 = p2.clone();
-    if (Math.abs(pos1.x - pos2.x) > 200) {
-      if (pos1.x > pos2.x) pos1.x -= 400; else pos2.x -= 400;
-    }
+    const raw1 = cachedRadToMollweide(b.ra1, b.dec1, R, lambda0);
+    const raw2 = cachedRadToMollweide(b.ra2, b.dec2, R, lambda0);
+    const [pos1, pos2] = adjustMollweideWrap(raw1, raw2);
     const geometry = new THREE.BufferGeometry().setFromPoints([pos1, pos2]);
     const material = new THREE.LineDashedMaterial({
       color: 0x888888,

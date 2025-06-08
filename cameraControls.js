@@ -269,11 +269,12 @@ export class ThreeDControls {
  * Provides pan and zoom controls for 2D maps using an OrthographicCamera.
  */
 export class TwoDControls {
-    constructor(camera, domElement, panCallback = null) {
+    constructor(camera, domElement, panCallback = null, panCamera = true) {
         this.camera = camera;
         this.domElement = domElement;
 
         this.panCallback = panCallback;
+        this.panCamera = panCamera;
 
         this.isPanning = false;
         this.lastPos = { x: 0, y: 0 };
@@ -308,9 +309,11 @@ export class TwoDControls {
 
     pan(dx, dy) {
         const scale = this.getScale();
-        this.camera.position.x -= dx * scale.x;
-        this.camera.position.y += dy * scale.y;
-        if (this.panCallback) this.panCallback(dx * scale.x, dy * scale.y);
+        if (this.panCamera) {
+            this.camera.position.x -= dx * scale.x;
+            this.camera.position.y += dy * scale.y;
+        }
+        if (this.panCallback) this.panCallback(dx, dy);
     }
 
     onMouseDown(event) {

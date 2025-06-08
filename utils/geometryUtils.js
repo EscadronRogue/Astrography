@@ -194,3 +194,21 @@ export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda
   radToMollweideCache.set(key, vec.clone());
   return vec;
 }
+
+/**
+ * Adjusts a pair of Mollweide points so the connecting line wraps inside the
+ * standard [-200, 200] x-range. Returns the adjusted clones.
+ * @param {THREE.Vector3} p1
+ * @param {THREE.Vector3} p2
+ * @returns {[THREE.Vector3, THREE.Vector3]}
+ */
+export function adjustMollweideWrap(p1, p2) {
+  const a = p1.clone();
+  const b = p2.clone();
+  if (Math.abs(a.x - b.x) > 200) {
+    if (a.x > b.x) a.x -= 400; else b.x -= 400;
+  }
+  a.x = THREE.MathUtils.clamp(a.x, -200, 200);
+  b.x = THREE.MathUtils.clamp(b.x, -200, 200);
+  return [a, b];
+}

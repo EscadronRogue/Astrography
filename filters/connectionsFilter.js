@@ -1,6 +1,7 @@
 // filters/connectionsFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { adjustMollweideWrap } from '../utils/geometryUtils.js';
 
 /**
  * Helper: Returns a THREE.Vector3 for a star’s position.
@@ -80,12 +81,12 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
       posA = starA.spherePosition;
       posB = starB.spherePosition;
     } else if (mapType === 'Mollweide') {
-      posA = starA.mollweidePosition.clone();
-      posB = starB.mollweidePosition.clone();
-      if (Math.abs(posA.x - posB.x) > 200) {
-        if (posA.x > posB.x) posA.x -= 400;
-        else posB.x -= 400;
-      }
+      const [a, b] = adjustMollweideWrap(
+        starA.mollweidePosition,
+        starB.mollweidePosition
+      );
+      posA = a;
+      posB = b;
     } else {
       posA = getPosition(starA);
       posB = getPosition(starB);
@@ -139,12 +140,12 @@ export function createConnectionLines(stars, pairs, mapType) {
       posB = new THREE.Vector3(starB.spherePosition.x, starB.spherePosition.y, starB.spherePosition.z);
     } else if (mapType === 'Mollweide') {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
-      posA = new THREE.Vector3(starA.mollweidePosition.x, starA.mollweidePosition.y, starA.mollweidePosition.z);
-      posB = new THREE.Vector3(starB.mollweidePosition.x, starB.mollweidePosition.y, starB.mollweidePosition.z);
-      if (Math.abs(posA.x - posB.x) > 200) {
-        if (posA.x > posB.x) posA.x -= 400;
-        else posB.x -= 400;
-      }
+      const [a, b] = adjustMollweideWrap(
+        starA.mollweidePosition,
+        starB.mollweidePosition
+      );
+      posA = a.clone();
+      posB = b.clone();
     } else {
       // Use the computed truePosition if available
       posA = getPosition(starA).clone();

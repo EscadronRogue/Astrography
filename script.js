@@ -168,6 +168,8 @@ function debounce(func, wait) {
   };
 }
 
+const debouncedUpdateMollweideView = debounce(updateMollweideView, 100);
+
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
   const filters = applyFilters(cachedStars);
@@ -348,10 +350,12 @@ class MapManager {
     this.scene.add(pt);
     if (mapType === 'Mollweide') {
       this.controls = new TwoDControls(this.camera, this.renderer.domElement, (dx) => {
-        const lambda0 = getMollweideLambda0() + dx * 0.005;
+        let lambda0 = getMollweideLambda0() - dx * 0.002;
+        const twoPi = Math.PI * 2;
+        lambda0 = ((lambda0 % twoPi) + twoPi) % twoPi;
         setMollweideLambda0(lambda0);
-        if (window.updateMollweideView) window.updateMollweideView();
-      });
+        debouncedUpdateMollweideView();
+      }, false);
       const border = createMollweideBorder(100);
       this.scene.add(border);
     } else {
