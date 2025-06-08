@@ -252,6 +252,21 @@ export class DensityGridOverlay {
     this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); sceneMoll.add(o.lineM); });
   }
 
+  refreshMollweide(lambda0 = getMollweideLambda0()) {
+    this.cubesData.forEach(cell => {
+      const ra = Math.atan2(-cell.center.z, -cell.center.x);
+      const dec = Math.asin(cell.center.y / cell.center.length());
+      const p = cachedRadToMollweide(ra, dec, 100, lambda0);
+      cell.mollweideMesh.position.copy(p);
+    });
+    this.adjacentLines.forEach(obj => {
+      const p1 = obj.cell1.mollweideMesh.position.clone();
+      const p2 = obj.cell2.mollweideMesh.position.clone();
+      const [a, b] = adjustMollweideWrap(p1, p2);
+      obj.lineM.geometry.setFromPoints([a, b]);
+    });
+  }
+
   /* ───────────────────────────── HELPERS ─────────────────────────────── */
 
   /** Axis-aligned bounding box of an array of Vector3s. */

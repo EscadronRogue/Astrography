@@ -209,7 +209,16 @@ function debounce(func, wait) {
   };
 }
 
-const debouncedUpdateMollweideView = debounce(updateMollweideView, 16);
+let pendingMollweideUpdate = false;
+function scheduleMollweideUpdate() {
+  if (!pendingMollweideUpdate) {
+    pendingMollweideUpdate = true;
+    requestAnimationFrame(() => {
+      pendingMollweideUpdate = false;
+      updateMollweideView();
+    });
+  }
+}
 
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
@@ -404,7 +413,7 @@ class MapManager {
         const twoPi = Math.PI * 2;
         lambda0 = ((lambda0 % twoPi) + twoPi) % twoPi;
         setMollweideLambda0(lambda0);
-        debouncedUpdateMollweideView();
+        scheduleMollweideUpdate();
       }, false);
       const border = createMollweideBorder(100);
       this.scene.add(border);
@@ -630,8 +639,8 @@ function updateSelectedStarHighlight() {
 }
 
 function updateMollweideView() {
-  if (!cachedStars) return;
-  cachedStars.forEach(star => {
+  if (!currentFilteredStars || currentFilteredStars.length === 0) return;
+  currentFilteredStars.forEach(star => {
     updateMollweidePosition(star);
   });
 
@@ -659,12 +668,14 @@ function updateMollweideView() {
     updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudFiles);
   }
   if (enableIsolationFilterFlag && isolationOverlay) {
-    updateIsolationFilter(cachedStars, isolationOverlay, trueCoordinatesMap.scene,
-      globeMap.scene, mollweideMap.scene);
+    if (typeof isolationOverlay.refreshMollweide === 'function') {
+      isolationOverlay.refreshMollweide();
+    }
   }
   if (enableDensityFilterFlag && densityOverlay) {
-    updateDensityFilter(cachedStars, densityOverlay, trueCoordinatesMap.scene,
-      globeMap.scene, mollweideMap.scene);
+    if (typeof densityOverlay.refreshMollweide === 'function') {
+      densityOverlay.refreshMollweide();
+    }
   }
 }
 window.updateMollweideView = updateMollweideView;

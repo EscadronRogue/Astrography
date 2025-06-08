@@ -265,11 +265,28 @@ class IsolationGridOverlay {
         sceneGlobe.add(cell.globeMesh);
         sceneMoll.add(cell.mollweideMesh);
       });
-      this.adjacentLines.forEach(obj => {
-        sceneGlobe.add(obj.line);
-        sceneMoll.add(obj.lineM);
-      });
+    this.adjacentLines.forEach(obj => {
+      sceneGlobe.add(obj.line);
+      sceneMoll.add(obj.lineM);
+    });
     }
+  }
+
+  refreshMollweide(lambda0 = getMollweideLambda0()) {
+    this.cubesData.forEach(cell => {
+      const lambda = minimalRADifference(cell.raRad - lambda0);
+      cell.mollweideMesh.position.set(
+        cell.mollXFactor * lambda,
+        cell.mollY,
+        0
+      );
+    });
+    this.adjacentLines.forEach(obj => {
+      const p1 = obj.cell1.mollweideMesh.position.clone();
+      const p2 = obj.cell2.mollweideMesh.position.clone();
+      const [a, b] = adjustMollweideWrap(p1, p2);
+      obj.lineM.geometry.setFromPoints([a, b]);
+    });
   }
 
   async assignConstellationsToCells() {
