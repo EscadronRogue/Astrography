@@ -91,6 +91,7 @@ function projectStarMollweide(star) {
 }
 
 function precalcMollweideData(star) {
+  const R = 100;
   let ra, dec;
   if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
     ra = star.RA_in_radian;
@@ -208,7 +209,7 @@ function debounce(func, wait) {
   };
 }
 
-const debouncedUpdateMollweideView = debounce(updateMollweideView, 1);
+const debouncedUpdateMollweideView = debounce(updateMollweideView, 16);
 
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
@@ -262,7 +263,8 @@ async function buildAndApplyFilters() {
   trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
   globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
   globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
-  mollweideMap.updateMap(currentFilteredStars, currentConnections);
+  mollweideMap.updateStarPositions(currentFilteredStars);
+  mollweideMap.updateConnections(currentFilteredStars, currentConnections);
   mollweideMap.labelManager.refreshLabels(currentFilteredStars);
 
   removeConstellationObjectsFromGlobe();
@@ -418,33 +420,42 @@ class MapManager {
   }
 
   addStars(stars) {
-    while (this.starGroup.children.length > 0) {
-      const child = this.starGroup.children[0];
-      this.starGroup.remove(child);
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
-    }
     const count = stars.length;
-    if (count === 0) return;
-    const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
-    const vertexCount = baseGeometry.attributes.position.count;
-    const dummyColors = new Float32Array(vertexCount * 3);
-    for (let i = 0; i < vertexCount; i++) {
-      dummyColors[i * 3] = 1;
-      dummyColors[i * 3 + 1] = 1;
-      dummyColors[i * 3 + 2] = 1;
+    if (!this.instancedMesh || this.instancedMesh.count !== count) {
+      while (this.starGroup.children.length > 0) {
+        const child = this.starGroup.children[0];
+        this.starGroup.remove(child);
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+      }
+      if (count === 0) return;
+      const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
+      const vertexCount = baseGeometry.attributes.position.count;
+      const dummyColors = new Float32Array(vertexCount * 3);
+      for (let i = 0; i < vertexCount; i++) {
+        dummyColors[i * 3] = 1;
+        dummyColors[i * 3 + 1] = 1;
+        dummyColors[i * 3 + 2] = 1;
+      }
+      baseGeometry.setAttribute('color', new THREE.BufferAttribute(dummyColors, 3));
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 1.0,
+        vertexColors: true
+      });
+      this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
+      this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+      this.starGroup.add(this.instancedMesh);
     }
-    baseGeometry.setAttribute('color', new THREE.BufferAttribute(dummyColors, 3));
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 1.0,
-      vertexColors: true
-    });
-    const instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
+    this.updateStarPositions(stars);
+  }
+
+  updateStarPositions(stars) {
+    if (!this.instancedMesh) return;
     const dummy = new THREE.Object3D();
-    const colors = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
+    const colors = this.instancedMesh.instanceColor.array;
+    for (let i = 0; i < stars.length; i++) {
       const star = stars[i];
       let pos;
       if (this.mapType === 'TrueCoordinates') {
@@ -459,15 +470,14 @@ class MapManager {
       dummy.position.copy(pos);
       dummy.scale.set(scale, scale, scale);
       dummy.updateMatrix();
-      instancedMesh.setMatrixAt(i, dummy.matrix);
+      this.instancedMesh.setMatrixAt(i, dummy.matrix);
       const color = new THREE.Color(star.displayColor || '#ffffff');
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
     }
-    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
-    instancedMesh.instanceColor.needsUpdate = true;
-    this.starGroup.add(instancedMesh);
+    this.instancedMesh.instanceMatrix.needsUpdate = true;
+    this.instancedMesh.instanceColor.needsUpdate = true;
     this.starObjects = stars;
   }
 

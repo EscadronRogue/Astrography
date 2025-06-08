@@ -239,6 +239,7 @@ export function createConstellationOverlayForMollweide() {
     }
   });
 
+  const lambda0 = getMollweideLambda0();
   const colorMapping = computeConstellationColorMapping();
   const overlays = [];
 
