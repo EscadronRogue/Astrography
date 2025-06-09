@@ -228,15 +228,16 @@ export function applyFilters(allStars) {
         enableConnections: false,
         enableIsolationFilter: false,
         enableDensityFilter: false,
-        isolation: 7,
+        isolation: 5,
         isolationTolerance: 0,
-        densityThresholdStars: 5,
+        density: 5,
+        densityTolerance: 0,
         enableIsolationLabeling: false,
         enableDensityLabeling: false,
         minDistance: 0,
         maxDistance: 20,
-        isolationGridSize: 0,
-        densityGridSize: 0,
+        isolationGridSize: 1,
+        densityGridSize: 1,
         showClouds: false,
         showGalacticPlane: false,
         showEclipticPlane: false,
@@ -258,15 +259,16 @@ export function applyFilters(allStars) {
     enableConnections: (formData.get('enable-connections') !== null),
     enableIsolationFilter: (formData.get('enable-isolation-filter') !== null),
     enableDensityFilter: (formData.get('enable-density-filter') !== null),
-    isolation: parseFloat(formData.get('isolation')) || 7,
+    isolation: parseFloat(formData.get('isolation')) || 5,
     isolationTolerance: parseInt(formData.get('isolation-tolerance')) || 0,
-    densityThresholdStars: parseFloat(formData.get('density-subdivision-percent')) || 5,
+    density: parseFloat(formData.get('density')) || 5,
+    densityTolerance: parseInt(formData.get('density-tolerance')) || 0,
     enableIsolationLabeling: (formData.get('enable-isolation-labeling') !== null),
     enableDensityLabeling: (formData.get('enable-density-labeling') !== null),
     minDistance: formData.get('min-distance'),
     maxDistance: formData.get('max-distance'),
-    isolationGridSize: parseFloat(formData.get('isolation-grid-size')) || 0,
-    densityGridSize: parseFloat(formData.get('density-grid-size')) || 0,
+    isolationGridSize: parseFloat(formData.get('isolation-grid-size')) || 1,
+    densityGridSize: parseFloat(formData.get('density-grid-size')) || 1,
     showClouds: (formData.getAll('dust-clouds').length > 0),
     showGalacticPlane: (formData.get('show-galactic-plane') !== null),
     showEclipticPlane: (formData.get('show-ecliptic-plane') !== null),
@@ -357,30 +359,25 @@ export function applyFilters(allStars) {
 
   // --- Density Filter Handling ---
   if (filters.enableDensityFilter) {
-    // For density, assume grid subdivision threshold is taken from the slider.
-    const densityThreshold = filters.densityThresholdStars; // Already a number from slider
+    const gridSize = computeIsolationGridSize(filters.densityGridSize);
     if (
       !densityOverlay ||
       densityOverlay.minDistance !== parseFloat(filters.minDistance) ||
       densityOverlay.maxDistance !== parseFloat(filters.maxDistance) ||
-      densityOverlay.subdivisionThresholdPercent !== densityThreshold
+      densityOverlay.gridSize !== gridSize
     ) {
       if (densityOverlay) {
         densityOverlay.cubesData.forEach(cell => {
           window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-          window.globeMap.scene.remove(cell.globeMesh);
-          window.mollweideMap.scene.remove(cell.mollweideMesh);
         });
         densityOverlay.adjacentLines.forEach(obj => {
           window.globeMap.scene.remove(obj.line);
           window.mollweideMap.scene.remove(obj.lineM);
         });
       }
-      densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, densityThreshold);
+      densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       densityOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.add(cell.tcMesh);
-        window.globeMap.scene.add(cell.globeMesh);
-        window.mollweideMap.scene.add(cell.mollweideMesh);
       });
       densityOverlay.adjacentLines.forEach(obj => {
         window.globeMap.scene.add(obj.line);
@@ -392,8 +389,6 @@ export function applyFilters(allStars) {
     if (densityOverlay) {
       densityOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-        window.globeMap.scene.remove(cell.globeMesh);
-        window.mollweideMap.scene.remove(cell.mollweideMesh);
       });
       densityOverlay.adjacentLines.forEach(obj => {
         window.globeMap.scene.remove(obj.line);
@@ -419,7 +414,8 @@ export function applyFilters(allStars) {
     enableDensityFilter: filters.enableDensityFilter,
     isolation: filters.isolation,
     isolationTolerance: filters.isolationTolerance,
-    densityThresholdStars: filters.densityThresholdStars,
+    density: filters.density,
+    densityTolerance: filters.densityTolerance,
     enableIsolationLabeling: filters.enableIsolationLabeling,
     enableDensityLabeling: filters.enableDensityLabeling,
     minDistance: filters.minDistance,
