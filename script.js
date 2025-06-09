@@ -272,6 +272,7 @@ async function buildAndApplyFilters() {
   trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
   globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
   globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
+  mollweideMap.addStars(currentFilteredStars);
   mollweideMap.updateStarPositions(currentFilteredStars);
   mollweideMap.updateConnections(currentFilteredStars, currentConnections);
   mollweideMap.labelManager.refreshLabels(currentFilteredStars);
@@ -663,6 +664,7 @@ function updateMollweideView() {
     updateMollweidePosition(star);
   });
 
+  mollweideMap.addStars(currentFilteredStars);
   mollweideMap.updateStarPositions(currentFilteredStars);
   mollweideMap.updateConnectionPositions(currentFilteredStars, currentConnections);
   mollweideMap.labelManager.refreshLabels(currentFilteredStars);
