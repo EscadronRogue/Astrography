@@ -1,7 +1,8 @@
 // /filters/constellationFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, radToMollweide } from '../utils/geometryUtils.js';
+import { minimalRADifference } from '../utils.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -19,6 +20,7 @@ export async function loadConstellationBoundaries() {
     for (const line of lines) {
       const parts = line.split(/\s+/);
       if (parts.length < 8) continue;
+      const type = parts[1];
       const raStr1 = parts[2];
       const decStr1 = parts[3];
       const raStr2 = parts[4];
@@ -29,7 +31,7 @@ export async function loadConstellationBoundaries() {
       const dec1 = parseDec(decStr1);
       const ra2 = parseRA(raStr2);
       const dec2 = parseDec(decStr2);
-      boundaryData.push({ ra1, dec1, ra2, dec2, const1: c1, const2: c2 });
+      boundaryData.push({ type, ra1, dec1, ra2, dec2, const1: c1, const2: c2 });
     }
     console.log(`[ConstellationFilter] Boundaries: loaded ${boundaryData.length} lines.`);
   } catch (err) {
@@ -87,14 +89,23 @@ export function createConstellationBoundariesForGlobe() {
   const lines = [];
   const R = 100;
   boundaryData.forEach(b => {
-    const p1 = radToSphere(b.ra1, b.dec1, R);
-    const p2 = radToSphere(b.ra2, b.dec2, R);
-    // Create a smooth curved line using a CatmullRom curve
-    const curve = new THREE.CatmullRomCurve3(
-      getGreatCirclePoints(p1, p2, R, 32)
-    );
-    const points = curve.getPoints(32);
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+    let points;
+    if (b.type && b.type.startsWith('P')) {
+      const raDiff = minimalRADifference(b.ra2 - b.ra1);
+      const pts = [];
+      for (let i = 0; i <= 32; i++) {
+        const ra = b.ra1 + raDiff * (i / 32);
+        pts.push(radToSphere(ra, b.dec1, R));
+      }
+      points = pts;
+    } else {
+      const p1 = radToSphere(b.ra1, b.dec1, R);
+      const p2 = radToSphere(b.ra2, b.dec2, R);
+      points = getGreatCirclePoints(p1, p2, R, 32);
+    }
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geomPts = curve.getPoints(32);
+    const geometry = new THREE.BufferGeometry().setFromPoints(geomPts);
     const material = new THREE.LineDashedMaterial({
       color: 0x888888,
       dashSize: 2,
@@ -136,9 +147,19 @@ export function updateConstellationBoundariesForMollweide(lineSegs) {
   const array = posAttr.array;
   let idx = 0;
   data.forEach(seg => {
-    const pStart = radToSphere(seg.ra1, seg.dec1, R);
-    const pEnd   = radToSphere(seg.ra2, seg.dec2, R);
-    const arcPts  = greatCircleToMollweide(pStart, pEnd, R, 16, lambda0);
+    let arcPts;
+    if (seg.type && seg.type.startsWith('P')) {
+      const raDiff = minimalRADifference(seg.ra2 - seg.ra1);
+      arcPts = [];
+      for (let i = 0; i <= 16; i++) {
+        const ra = seg.ra1 + raDiff * (i / 16);
+        arcPts.push(radToMollweide(ra, seg.dec1, R, lambda0));
+      }
+    } else {
+      const pStart = radToSphere(seg.ra1, seg.dec1, R);
+      const pEnd   = radToSphere(seg.ra2, seg.dec2, R);
+      arcPts  = greatCircleToMollweide(pStart, pEnd, R, 16, lambda0);
+    }
     for (let j = 0; j < arcPts.length - 1; j++) {
       const splits = splitMollweideWrap(arcPts[j], arcPts[j + 1]);
       for (let s = 0; s < 2; s++) {
