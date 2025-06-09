@@ -58,12 +58,30 @@ function eclipticToEquatorial(lambda, beta = 0) {
 }
 
 export function createGalacticPlaneMesh(size = 250) {
-  const geom = new THREE.PlaneGeometry(size, size);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-  const mesh = new THREE.Mesh(geom, mat);
-  const pole = radToSphere(alphaGP, deltaGP, 1);
-  mesh.lookAt(pole);
-  return mesh;
+  const half = size / 2;
+  const dirs = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].map(l => {
+    const { ra, dec } = galacticToEquatorial(l, 0);
+    return radToSphere(ra, dec, half);
+  });
+  const positions = [
+    dirs[0].x, dirs[0].y, dirs[0].z,
+    dirs[1].x, dirs[1].y, dirs[1].z,
+    dirs[2].x, dirs[2].y, dirs[2].z,
+    dirs[2].x, dirs[2].y, dirs[2].z,
+    dirs[3].x, dirs[3].y, dirs[3].z,
+    dirs[0].x, dirs[0].y, dirs[0].z
+  ];
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.computeVertexNormals();
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    opacity: 0.2,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  return new THREE.Mesh(geom, mat);
 }
 
 export function createEclipticPlaneMesh(size = 250) {
