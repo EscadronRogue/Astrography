@@ -147,7 +147,6 @@ class DensityGridOverlay {
           const neighbor = cellMap.get(neighborKey);
           const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
           const positions = [];
-          const colors = [];
           const mollPts = getGreatCirclePoints(cell.globeMesh.position,
             neighbor.globeMesh.position, 100, 16).map(v => {
               const { ra, dec } = vectorToRaDecRad(v, 100);
@@ -161,13 +160,11 @@ class DensityGridOverlay {
           const geomM = new THREE.BufferGeometry().setFromPoints(pointsM);
           for (let i = 0; i < points.length; i++) {
             positions.push(points[i].x, points[i].y, points[i].z);
-            colors.push(1, 0, 0);
           }
           const geom = new THREE.BufferGeometry();
           geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
           const mat = new THREE.LineBasicMaterial({
-            vertexColors: true,
+            color: 0xff0000,
             transparent: true,
             opacity: 0.3,
             linewidth: 2
@@ -210,17 +207,34 @@ class DensityGridOverlay {
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       cell.active = pct >= 0.25;
       const alpha = 0.5 * pct;
+      const color = new THREE.Color(0xffff00).lerp(new THREE.Color(0xff0000), pct);
       cell.tcMesh.material.opacity = alpha;
       cell.globeMesh.material.opacity = alpha;
       cell.mollweideMesh.material.opacity = alpha;
+      cell.tcMesh.material.color.copy(color);
+      cell.globeMesh.material.color.copy(color);
+      cell.mollweideMesh.material.color.copy(color);
       cell.tcMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale, scale, 1);
     });
     this.adjacentLines.forEach(obj => {
       const { line, lineM, cell1, cell2 } = obj;
-      line.visible = cell1.active && cell2.active;
-      lineM.visible = cell1.active && cell2.active;
+      const visible = cell1.active && cell2.active;
+      line.visible = visible;
+      lineM.visible = visible;
+      if (visible) {
+        const c1 = cell1.tcMesh.material.color;
+        const c2 = cell2.tcMesh.material.color;
+        const avgColor = c1.clone().lerp(c2, 0.5);
+        const avgOpacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
+        line.material.color.copy(avgColor);
+        line.material.opacity = avgOpacity;
+        line.material.vertexColors = false;
+        line.material.needsUpdate = true;
+        lineM.material.color.copy(avgColor);
+        lineM.material.opacity = avgOpacity;
+      }
     });
     if (sceneTC) {
       this.cubesData.forEach(c => { sceneTC.add(c.tcMesh); });
