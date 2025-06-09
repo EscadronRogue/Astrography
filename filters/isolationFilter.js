@@ -1,7 +1,7 @@
 // /filters/isolationFilter.js
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densityColorUtils.js';
+import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor, darkenColor } from './densityColorUtils.js';
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries } from './constellationFilter.js';
@@ -163,9 +163,20 @@ class IsolationGridOverlay {
             const segsM = splitMollweideWrap(mollPts[m], mollPts[m + 1]);
             segsM.forEach(([s,e]) => { pointsM.push(s, e); });
           }
-          const geomM = new THREE.BufferGeometry().setFromPoints(pointsM);
           const c1 = cell.tcMesh.material.color; // use cube color
           const c2 = neighbor.tcMesh.material.color;
+          const colorsM = [];
+          for (let i = 0; i < pointsM.length; i++) {
+            let t = i / (pointsM.length - 1);
+            colorsM.push(
+              THREE.MathUtils.lerp(c1.r, c2.r, t),
+              THREE.MathUtils.lerp(c1.g, c2.g, t),
+              THREE.MathUtils.lerp(c1.b, c2.b, t)
+            );
+          }
+          const geomM = new THREE.BufferGeometry();
+          geomM.setAttribute('position', new THREE.Float32BufferAttribute(pointsM.flatMap(p=>[p.x,p.y,p.z]), 3));
+          geomM.setAttribute('color', new THREE.Float32BufferAttribute(colorsM,3));
           for (let i = 0; i < points.length; i++) {
             positions.push(points[i].x, points[i].y, points[i].z);
             let t = i / (points.length - 1);
@@ -187,7 +198,7 @@ class IsolationGridOverlay {
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
           const mollMat = new THREE.LineBasicMaterial({
-            color: 0x0000ff,
+            vertexColors: true,
             transparent: true,
             opacity: 0.9,
             linewidth: 5
@@ -216,26 +227,50 @@ class IsolationGridOverlay {
       computeCellDistances(cell, extendedStars);
     });
 
-    // Update each cell's active state based on the isolation criteria.
+    // Compute isolation distances and min/max for color/opacity scaling
+    const isoDistances = [];
     this.cubesData.forEach(cell => {
       let isoDist = Infinity;
       if (cell.distances && cell.distances.length > toleranceVal) {
         isoDist = cell.distances[toleranceVal];
       }
-      // Show cell if the distance to the Nth nearest star is at least the isolation threshold.
+      cell.isoDist = isoDist;
+      isoDistances.push(isoDist);
+    });
+
+    const minIso = Math.min(...isoDistances);
+    const maxIso = Math.max(...isoDistances);
+    const baseBlue = new THREE.Color(0x0000ff);
+    const lightBlue = lightenColor(baseBlue.clone(), 0.4);
+    const darkBlue = darkenColor(baseBlue.clone(), 0.4);
+
+    // Update each cell's visual state based on isolation
+    this.cubesData.forEach(cell => {
+      const isoDist = cell.isoDist;
+      const isoRatio = (maxIso === minIso) ? 0 : (isoDist - minIso) / (maxIso - minIso);
+
       cell.active = (isoDist >= isolationVal);
-      let ratio = cell.tcPos.length() / this.maxDistance;
-      if (ratio > 1) ratio = 1;
-      const alpha = THREE.MathUtils.lerp(0.1, 0.3, ratio);
-      // Update TrueCoordinates cube
+
+      const color = lightBlue.clone().lerp(darkBlue, isoRatio);
+      const alpha = THREE.MathUtils.lerp(0.1, 0.5, isoRatio);
+
       cell.tcMesh.visible = cell.active;
       cell.tcMesh.material.opacity = alpha;
-      // For the globe projection, we only update its position and scale.
+      cell.tcMesh.material.color.copy(color);
+
+      const distRatio = Math.min(1, cell.tcPos.length() / this.maxDistance);
+      const scale = THREE.MathUtils.lerp(20.0, 0.1, distRatio);
+
       cell.globeMesh.visible = cell.active;
-      const scale = THREE.MathUtils.lerp(20.0, 0.1, ratio);
+      cell.globeMesh.material.opacity = alpha;
+      cell.globeMesh.material.color.copy(color);
       cell.globeMesh.scale.set(scale, scale, 1);
+
       cell.mollweideMesh.visible = cell.active;
+      cell.mollweideMesh.material.opacity = alpha;
+      cell.mollweideMesh.material.color.copy(color);
       cell.mollweideMesh.scale.set(scale, scale, 1);
+
       const lambda = minimalRADifference(cell.raRad - getMollweideLambda0());
       cell.mollweideMesh.position.set(
         cell.mollXFactor * lambda,
@@ -278,8 +313,23 @@ class IsolationGridOverlay {
         line.geometry.attributes.color.needsUpdate = true;
         const avgScale = (cell1.globeMesh.scale.x + cell2.globeMesh.scale.x) / 2;
         line.material.linewidth = avgScale;
+        line.material.opacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
         line.visible = true;
-        lineM.geometry.setFromPoints(ptsM);
+        const flatPtsM = ptsM.flatMap(p=>[p.x,p.y,p.z]);
+        const colorsM = [];
+        for (let mi = 0; mi < ptsM.length; mi++) {
+          let t = mi / (ptsM.length - 1);
+          colorsM.push(
+            THREE.MathUtils.lerp(c1.r, c2.r, t),
+            THREE.MathUtils.lerp(c1.g, c2.g, t),
+            THREE.MathUtils.lerp(c1.b, c2.b, t)
+          );
+        }
+        lineM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(flatPtsM, 3));
+        lineM.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colorsM, 3));
+        lineM.geometry.attributes.position.needsUpdate = true;
+        lineM.geometry.attributes.color.needsUpdate = true;
+        lineM.material.opacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
         lineM.visible = true;
       } else {
         line.visible = false;
@@ -327,7 +377,23 @@ class IsolationGridOverlay {
         const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
         segs.forEach(([s,e]) => { pts.push(s, e); });
       }
-      obj.lineM.geometry.setFromPoints(pts);
+      const flat = pts.flatMap(p=>[p.x,p.y,p.z]);
+      const c1 = obj.cell1.tcMesh.material.color;
+      const c2 = obj.cell2.tcMesh.material.color;
+      const cols = [];
+      for (let i = 0; i < pts.length; i++) {
+        let t = i / (pts.length - 1);
+        cols.push(
+          THREE.MathUtils.lerp(c1.r, c2.r, t),
+          THREE.MathUtils.lerp(c1.g, c2.g, t),
+          THREE.MathUtils.lerp(c1.b, c2.b, t)
+        );
+      }
+      obj.lineM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(flat,3));
+      obj.lineM.geometry.setAttribute('color', new THREE.Float32BufferAttribute(cols,3));
+      obj.lineM.geometry.attributes.position.needsUpdate = true;
+      obj.lineM.geometry.attributes.color.needsUpdate = true;
+      obj.lineM.material.opacity = (obj.cell1.tcMesh.material.opacity + obj.cell2.tcMesh.material.opacity) / 2;
     });
   }
 
