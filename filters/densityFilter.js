@@ -218,11 +218,11 @@ class DensityGridOverlay {
             const c2 = cells.find(c => c.id === jId);
             const c3 = cells.find(c => c.id === kId);
             const geomG = createSphericalTriangleGeometry(c1.globeMesh.position, c2.globeMesh.position, c3.globeMesh.position, 2, 100);
-            const matG = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.3, side: THREE.DoubleSide, blending: THREE.NoBlending, depthWrite: false });
+            const matG = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.5, side: THREE.DoubleSide, blending: THREE.NoBlending, depthWrite: false });
             const meshG = new THREE.Mesh(geomG, matG);
 
             const geomM = createMollweideTriangleGeometry(c1.globeMesh.position, c2.globeMesh.position, c3.globeMesh.position, getMollweideLambda0(), 16);
-            const matM = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.NoBlending, depthWrite: false });
+            const matM = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.5, side: THREE.DoubleSide, blending: THREE.NoBlending, depthWrite: false });
             const meshM = new THREE.Mesh(geomM, matM);
             this.triangleMeshes.push({ meshG, meshM, cell1: c1, cell2: c2, cell3: c3 });
           }

@@ -366,18 +366,45 @@ export function createSphericalTriangleGeometry(v1, v2, v3, subdivisions = 2, R 
  * @returns {THREE.BufferGeometry}
  */
 export function createMollweideTriangleGeometry(v1, v2, v3, lambda0 = mollweideLambda0, segments = 16) {
+  const vertsOrig = [v1, v2, v3].map(v => {
+    const { ra, dec } = vectorToRaDecRad(v, 100);
+    return radToMollweide(ra, dec, 100, lambda0);
+  });
+  const vertsWrapped = adjustMollweideTriangleWrap(vertsOrig[0], vertsOrig[1], vertsOrig[2]);
+  const shifts = vertsWrapped.map((v, i) => v.x - vertsOrig[i].x);
+
   const arcs = [
     greatCircleToMollweide(v1, v2, 100, segments, lambda0),
     greatCircleToMollweide(v2, v3, 100, segments, lambda0),
     greatCircleToMollweide(v3, v1, 100, segments, lambda0)
-  ];
+  ].map((arr, idx) => {
+    const dxStart = shifts[idx];
+    const dxEnd = shifts[(idx + 1) % 3];
+    return arr.map((p, i) => {
+      const t = arr.length > 1 ? i / (arr.length - 1) : 0;
+      const dx = dxStart + (dxEnd - dxStart) * t;
+      const np = p.clone();
+      np.x += dx;
+      while (np.x > 200) np.x -= 400;
+      while (np.x < -200) np.x += 400;
+      return np;
+    });
+  });
+
   const boundary = [];
   boundary.push(...arcs[0].slice(0, -1));
   boundary.push(...arcs[1].slice(0, -1));
   boundary.push(...arcs[2].slice(0, -1));
+
   const center = new THREE.Vector3().addVectors(v1, v2).add(v3).normalize();
   const { ra, dec } = vectorToRaDecRad(center, 1);
-  const centerM = radToMollweide(ra, dec, 100, lambda0);
+  let centerM = radToMollweide(ra, dec, 100, lambda0);
+  const avgShift = (shifts[0] + shifts[1] + shifts[2]) / 3;
+  centerM = centerM.clone();
+  centerM.x += avgShift;
+  while (centerM.x > 200) centerM.x -= 400;
+  while (centerM.x < -200) centerM.x += 400;
+
   const positions = [];
   for (let i = 0; i < boundary.length; i++) {
     const next = (i + 1) % boundary.length;
