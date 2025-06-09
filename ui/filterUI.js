@@ -61,6 +61,10 @@ export function initFilterUI() {
   const densitySlider = document.getElementById('density-slider');
   const densityNumber = document.getElementById('density-number');
   const densityToleranceSlider = document.getElementById('density-tolerance-slider');
+  const densityBottomSlider = document.getElementById('density-bottom-slider');
+  const densityBottomNumber = document.getElementById('density-bottom-number');
+  const densityTopSlider = document.getElementById('density-top-slider');
+  const densityTopNumber = document.getElementById('density-top-number');
   const densityGridSlider = document.getElementById('density-grid-slider');
   const densityGridNumber = document.getElementById('density-grid-number');
   enableDensityChk.addEventListener('change', function () {
@@ -68,6 +72,10 @@ export function initFilterUI() {
     densitySlider.disabled = !enabled;
     densityNumber.disabled = !enabled;
     densityToleranceSlider.disabled = !enabled;
+    densityBottomSlider.disabled = !enabled;
+    densityBottomNumber.disabled = !enabled;
+    densityTopSlider.disabled = !enabled;
+    densityTopNumber.disabled = !enabled;
     densityGridSlider.disabled = !enabled;
     densityGridNumber.disabled = !enabled;
   });
@@ -81,6 +89,22 @@ export function initFilterUI() {
   });
   densityToleranceSlider.addEventListener('input', function () {
     document.getElementById('density-tolerance-value').textContent = this.value;
+  });
+  densityBottomSlider.addEventListener('input', function () {
+    densityBottomNumber.value = this.value;
+    document.getElementById('density-bottom-value').textContent = this.value;
+  });
+  densityBottomNumber.addEventListener('input', function () {
+    densityBottomSlider.value = this.value;
+    document.getElementById('density-bottom-value').textContent = this.value;
+  });
+  densityTopSlider.addEventListener('input', function () {
+    densityTopNumber.value = this.value;
+    document.getElementById('density-top-value').textContent = this.value;
+  });
+  densityTopNumber.addEventListener('input', function () {
+    densityTopSlider.value = this.value;
+    document.getElementById('density-top-value').textContent = this.value;
   });
   densityGridSlider.addEventListener('input', function () {
     densityGridNumber.value = this.value;

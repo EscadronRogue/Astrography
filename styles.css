@@ -244,7 +244,9 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
 
 #connection-value,
 #density-value,
-#tolerance-value {
+#tolerance-value,
+#density-top-value,
+#density-bottom-value {
   font-weight: bold;
   margin-left: 5px;
   color: #ff6f61;
