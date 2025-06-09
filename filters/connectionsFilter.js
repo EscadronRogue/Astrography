@@ -1,7 +1,9 @@
 // filters/connectionsFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { adjustMollweideWrap, splitMollweideWrap } from '../utils/geometryUtils.js';
+import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
+
+const GC_SEGMENTS = 32;
 
 /**
  * Helper: Returns a THREE.Vector3 for a star’s position.
@@ -122,7 +124,7 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
 }
 
 export function createMollweideConnectionSegments(pairs) {
-  const segCount = pairs.length * 2; // up to 2 segments per pair
+  const segCount = pairs.length * GC_SEGMENTS * 2; // each GC segment may wrap
   const positions = new Float32Array(segCount * 2 * 3);
   const colors = new Float32Array(segCount * 2 * 3);
   const geometry = new THREE.BufferGeometry();
@@ -135,40 +137,47 @@ export function createMollweideConnectionSegments(pairs) {
     linewidth: 1
   });
   const lineSegs = new THREE.LineSegments(geometry, material);
-  lineSegs.userData.pairs = pairs;
+  lineSegs.userData = { pairs, segments: GC_SEGMENTS };
   updateMollweideConnectionSegments(lineSegs);
   return lineSegs;
 }
 
 export function updateMollweideConnectionSegments(lineSegs) {
   const pairs = lineSegs.userData.pairs || [];
+  const segsCount = lineSegs.userData.segments || GC_SEGMENTS;
   const posAttr = lineSegs.geometry.getAttribute('position');
   const colorAttr = lineSegs.geometry.getAttribute('color');
   let idx = 0;
   pairs.forEach(pair => {
-    const segs = splitMollweideWrap(
-      pair.starA.mollweidePosition,
-      pair.starB.mollweidePosition
-    );
+    const p1 = pair.starA.spherePosition;
+    const p2 = pair.starB.spherePosition;
+    if (!p1 || !p2) return;
+    const pts = greatCircleToMollweide(p1, p2, 100, segsCount, getMollweideLambda0());
     const cA = new THREE.Color(pair.starA.displayColor || '#ffffff');
     const cB = new THREE.Color(pair.starB.displayColor || '#ffffff');
-    for (let i = 0; i < 2; i++) {
-      if (i < segs.length) {
-        const s = segs[i][0];
-        const e = segs[i][1];
+    for (let j = 0; j < pts.length - 1; j++) {
+      const segs = splitMollweideWrap(pts[j], pts[j + 1]);
+      segs.forEach(([s, e]) => {
+        if (idx + 6 > posAttr.array.length) return;
         posAttr.array[idx] = s.x; posAttr.array[idx+1] = s.y; posAttr.array[idx+2] = s.z;
         posAttr.array[idx+3] = e.x; posAttr.array[idx+4] = e.y; posAttr.array[idx+5] = e.z;
-        colorAttr.array[idx] = cA.r; colorAttr.array[idx+1] = cA.g; colorAttr.array[idx+2] = cA.b;
-        colorAttr.array[idx+3] = cB.r; colorAttr.array[idx+4] = cB.g; colorAttr.array[idx+5] = cB.b;
-      } else {
-        posAttr.array[idx] = posAttr.array[idx+1] = posAttr.array[idx+2] = 0;
-        posAttr.array[idx+3] = posAttr.array[idx+4] = posAttr.array[idx+5] = 0;
-        colorAttr.array[idx] = colorAttr.array[idx+1] = colorAttr.array[idx+2] = 0;
-        colorAttr.array[idx+3] = colorAttr.array[idx+4] = colorAttr.array[idx+5] = 0;
-      }
-      idx += 6;
+        const t1 = j / (pts.length - 1);
+        const t2 = (j + 1) / (pts.length - 1);
+        colorAttr.array[idx]   = THREE.MathUtils.lerp(cA.r, cB.r, t1);
+        colorAttr.array[idx+1] = THREE.MathUtils.lerp(cA.g, cB.g, t1);
+        colorAttr.array[idx+2] = THREE.MathUtils.lerp(cA.b, cB.b, t1);
+        colorAttr.array[idx+3] = THREE.MathUtils.lerp(cA.r, cB.r, t2);
+        colorAttr.array[idx+4] = THREE.MathUtils.lerp(cA.g, cB.g, t2);
+        colorAttr.array[idx+5] = THREE.MathUtils.lerp(cA.b, cB.b, t2);
+        idx += 6;
+      });
     }
   });
+  // zero out remaining
+  for (; idx < posAttr.array.length; idx++) {
+    posAttr.array[idx] = 0;
+    colorAttr.array[idx] = 0;
+  }
   posAttr.needsUpdate = true;
   colorAttr.needsUpdate = true;
   lineSegs.computeLineDistances();

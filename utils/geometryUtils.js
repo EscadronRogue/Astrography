@@ -146,6 +146,19 @@ export function vectorToRaDec(vector, R = 100) {
 }
 
 /**
+ * Converts a sphere coordinate to RA/DEC in **radians**.
+ * @param {THREE.Vector3} vector - The vector position.
+ * @param {number} [R=100] - The sphere radius.
+ * @returns {{ra:number, dec:number}} - RA and DEC in radians.
+ */
+export function vectorToRaDecRad(vector, R = 100) {
+  const dec = Math.asin(vector.y / R);
+  let ra = Math.atan2(-vector.z, -vector.x);
+  if (ra < 0) ra += 2 * Math.PI;
+  return { ra, dec };
+}
+
+/**
  * Caching mechanism for converting RA/DEC to sphere coordinates.
  * Returns a THREE.Vector3 corresponding to the inputs.
  */
@@ -255,4 +268,22 @@ export function splitMollweideWrap(p1, p2) {
   } else {
     return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
   }
+}
+
+/**
+ * Generates Mollweide coordinates for the great-circle arc between two
+ * 3D positions on the celestial sphere.
+ * @param {THREE.Vector3} p1 - Start vector on the sphere.
+ * @param {THREE.Vector3} p2 - End vector on the sphere.
+ * @param {number} [R=100] - Sphere radius.
+ * @param {number} [segments=32] - Number of segments along the arc.
+ * @param {number} [lambda0=mollweideLambda0] - Central meridian for projection.
+ * @returns {THREE.Vector3[]} Array of Mollweide coordinates along the arc.
+ */
+export function greatCircleToMollweide(p1, p2, R = 100, segments = 32, lambda0 = mollweideLambda0) {
+  const gcPoints = getGreatCirclePoints(p1, p2, R, segments);
+  return gcPoints.map(v => {
+    const { ra, dec } = vectorToRaDecRad(v, R);
+    return radToMollweide(ra, dec, R, lambda0);
+  });
 }

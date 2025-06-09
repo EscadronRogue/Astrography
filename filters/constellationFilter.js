@@ -1,7 +1,7 @@
 // /filters/constellationFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap, splitMollweideWrap } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide } from '../utils/geometryUtils.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -116,7 +116,7 @@ export function createConstellationBoundariesForMollweide() {
     gapSize: 1,
     linewidth: 1
   });
-  const maxSegments = boundaryData.length * 2; // each boundary can wrap
+  const maxSegments = boundaryData.length * 32; // 16 segments per boundary, each may wrap
   const positions = new Float32Array(maxSegments * 2 * 3); // 2 vertices per segment
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -136,30 +136,25 @@ export function updateConstellationBoundariesForMollweide(lineSegs) {
   const array = posAttr.array;
   let idx = 0;
   data.forEach(seg => {
-    const p1 = cachedRadToMollweide(seg.ra1, seg.dec1, R, lambda0);
-    const p2 = cachedRadToMollweide(seg.ra2, seg.dec2, R, lambda0);
-    const segments = splitMollweideWrap(p1, p2);
-    for (let i = 0; i < 2; i++) {
-      if (i < segments.length) {
-        const s = segments[i][0];
-        const e = segments[i][1];
-        array[idx++] = s.x;
-        array[idx++] = s.y;
-        array[idx++] = 0;
-        array[idx++] = e.x;
-        array[idx++] = e.y;
-        array[idx++] = 0;
-      } else {
-        // degenerate segment
-        array[idx++] = 0;
-        array[idx++] = 0;
-        array[idx++] = 0;
-        array[idx++] = 0;
-        array[idx++] = 0;
-        array[idx++] = 0;
+    const pStart = radToSphere(seg.ra1, seg.dec1, R);
+    const pEnd   = radToSphere(seg.ra2, seg.dec2, R);
+    const arcPts  = greatCircleToMollweide(pStart, pEnd, R, 16, lambda0);
+    for (let j = 0; j < arcPts.length - 1; j++) {
+      const splits = splitMollweideWrap(arcPts[j], arcPts[j + 1]);
+      for (let s = 0; s < 2; s++) {
+        if (s < splits.length) {
+          const a = splits[s][0];
+          const b = splits[s][1];
+          array[idx++] = a.x; array[idx++] = a.y; array[idx++] = 0;
+          array[idx++] = b.x; array[idx++] = b.y; array[idx++] = 0;
+        } else {
+          array[idx++] = 0; array[idx++] = 0; array[idx++] = 0;
+          array[idx++] = 0; array[idx++] = 0; array[idx++] = 0;
+        }
       }
     }
   });
+  for (; idx < array.length; idx++) array[idx] = 0;
   posAttr.needsUpdate = true;
   lineSegs.computeLineDistances();
 }
