@@ -175,7 +175,7 @@ class IsolationGridOverlay {
             vertexColors: true,
             transparent: true,
             opacity: 0.3,
-            linewidth: 1
+            linewidth: 2
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
@@ -267,17 +267,23 @@ class IsolationGridOverlay {
       }
     });
 
-    // Re‑add the new cell meshes to the scenes.
-    if (sceneTC && sceneGlobe && sceneMoll) {
+    // Re‑add the updated meshes to the scenes. Only the cubes are shown for
+    // True Coordinates, while the Globe and Mollweide maps display just the
+    // connecting lines.
+    if (sceneTC) {
       this.cubesData.forEach(cell => {
         sceneTC.add(cell.tcMesh);
-        sceneGlobe.add(cell.globeMesh);
-        sceneMoll.add(cell.mollweideMesh);
       });
-    this.adjacentLines.forEach(obj => {
-      sceneGlobe.add(obj.line);
-      sceneMoll.add(obj.lineM);
-    });
+    }
+    if (sceneGlobe) {
+      this.adjacentLines.forEach(obj => {
+        sceneGlobe.add(obj.line);
+      });
+    }
+    if (sceneMoll) {
+      this.adjacentLines.forEach(obj => {
+        sceneMoll.add(obj.lineM);
+      });
     }
   }
 

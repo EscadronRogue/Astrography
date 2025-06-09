@@ -418,6 +418,12 @@ class MapManager {
           setMollweideLambda0(lambda0);
           scheduleMollweideUpdate();
         },
+        leftCallback: () => {
+          if (enableIsolationFilterFlag && isolationOverlay &&
+              typeof isolationOverlay.refreshMollweide === 'function') {
+            isolationOverlay.refreshMollweide();
+          }
+        },
         panCameraLeft: true,
         panCameraRight: false
       });
