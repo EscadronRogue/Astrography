@@ -200,17 +200,34 @@ class DensityGridOverlay {
       this.computeCellDensity(cell, extendedStars, radius, tolerance);
     });
 
-    this.maxDensity = this.cubesData.reduce((m, c) => Math.max(m, c.density), 0);
+    const densities = this.cubesData.map(c => c.density);
+    const sorted = densities.slice().sort((a, b) => a - b);
+    const q1Idx = Math.floor(sorted.length * 0.25);
+    const q3Idx = Math.floor(sorted.length * 0.75);
+    const minD = sorted[0];
+    const maxD = sorted[sorted.length - 1];
+    const q1 = sorted[q1Idx];
+    const q3 = sorted[q3Idx];
 
     this.cubesData.forEach(cell => {
-      const pct = this.maxDensity > 0 ? cell.density / this.maxDensity : 0;
       const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
-      cell.active = pct >= 0.25;
-      const alpha = 0.5 * pct;
-      const baseRed = new THREE.Color(0xff0000);
-      const lightRed = lightenColor(baseRed.clone(), 0.4);
-      const color = lightRed.clone().lerp(baseRed, pct);
+      let color = new THREE.Color(0xffffff);
+      let alpha = 0;
+      if (cell.density <= q1) {
+        const t = q1 === minD ? 0 : (cell.density - minD) / (q1 - minD);
+        color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0xffffff), t);
+        alpha = 0.5 * (1 - t);
+        cell.active = true;
+      } else if (cell.density >= q3) {
+        const t = q3 === maxD ? 0 : (cell.density - q3) / (maxD - q3);
+        color = new THREE.Color(0xffffff).lerp(new THREE.Color(0xff0000), t);
+        alpha = 0.5 * t;
+        cell.active = true;
+      } else {
+        cell.active = false;
+      }
+
       cell.tcMesh.material.opacity = alpha;
       cell.globeMesh.material.opacity = alpha;
       cell.mollweideMesh.material.opacity = alpha;
