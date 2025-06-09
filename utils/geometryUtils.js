@@ -241,33 +241,31 @@ export function splitMollweideWrap(p1, p2) {
     return [[a, b]];
   }
   let left = a, right = b;
-  let swapped = false;
-  if (left.x > right.x) { left = b; right = a; swapped = true; }
+  if (left.x > right.x) { left = b; right = a; }
 
-  const shifted = right.clone();
-  shifted.x -= 400;
-
-  const dx = shifted.x - left.x;
-  const dy = shifted.y - left.y;
-  const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
-  const B = 2 * (left.x * dx / (200 * 200) + left.y * dy / (100 * 100));
-  const C = (left.x * left.x) / (200 * 200) + (left.y * left.y) / (100 * 100) - 1;
-  const disc = B * B - 4 * A * C;
-  if (disc < 0) return [[a, b]];
-  const sqrtDisc = Math.sqrt(disc);
-  const t1 = (-B - sqrtDisc) / (2 * A);
-  const t2 = (-B + sqrtDisc) / (2 * A);
-  const t = (t1 >= 0 && t1 <= 1) ? t1 : (t2 >= 0 && t2 <= 1 ? t2 : null);
-  if (t === null) return [[a, b]];
-  const ix = left.x + dx * t;
-  const iy = left.y + dy * t;
-  const edgeLeft = new THREE.Vector3(ix, iy, 0);
-  const edgeRight = new THREE.Vector3(-ix, iy, 0);
-  if (!swapped) {
-    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
-  } else {
+  function attempt(shift) {
+    const shifted = right.clone();
+    shifted.x += shift;
+    const dx = shifted.x - left.x;
+    const dy = shifted.y - left.y;
+    const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
+    const B = 2 * (left.x * dx / (200 * 200) + left.y * dy / (100 * 100));
+    const C = (left.x * left.x) / (200 * 200) + (left.y * left.y) / (100 * 100) - 1;
+    const disc = B * B - 4 * A * C;
+    if (disc < 0) return null;
+    const sqrtDisc = Math.sqrt(disc);
+    const t1 = (-B - sqrtDisc) / (2 * A);
+    const t2 = (-B + sqrtDisc) / (2 * A);
+    const t = (t1 >= 0 && t1 <= 1) ? t1 : (t2 >= 0 && t2 <= 1 ? t2 : null);
+    if (t === null) return null;
+    const ix = left.x + dx * t;
+    const iy = left.y + dy * t;
+    const edgeLeft = new THREE.Vector3(ix, iy, 0);
+    const edgeRight = new THREE.Vector3(ix - shift, iy, 0);
     return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
   }
+
+  return attempt(-400) || attempt(400) || [[a, b]];
 }
 
 /**
