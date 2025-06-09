@@ -56,22 +56,37 @@ export function initFilterUI() {
     isolationGridSlider.value = this.value;
   });
 
-  // Density Filter UI controls – now only the Subdivision Threshold control.
+  // Density Filter UI controls (mirrors Isolation Filter configuration).
   const enableDensityChk = document.getElementById('enable-density-filter');
-  const densitySubdivisionSlider = document.getElementById('density-subdivision-percent-slider');
-  const densitySubdivisionNumber = document.getElementById('density-subdivision-percent-number');
+  const densitySlider = document.getElementById('density-slider');
+  const densityNumber = document.getElementById('density-number');
+  const densityToleranceSlider = document.getElementById('density-tolerance-slider');
+  const densityGridSlider = document.getElementById('density-grid-slider');
+  const densityGridNumber = document.getElementById('density-grid-number');
   enableDensityChk.addEventListener('change', function () {
     const enabled = this.checked;
-    densitySubdivisionSlider.disabled = !enabled;
-    densitySubdivisionNumber.disabled = !enabled;
+    densitySlider.disabled = !enabled;
+    densityNumber.disabled = !enabled;
+    densityToleranceSlider.disabled = !enabled;
+    densityGridSlider.disabled = !enabled;
+    densityGridNumber.disabled = !enabled;
   });
-  densitySubdivisionSlider.addEventListener('input', function () {
-    densitySubdivisionNumber.value = this.value;
-    document.getElementById('density-subdivision-percent-value').textContent = this.value;
+  densitySlider.addEventListener('input', function () {
+    densityNumber.value = this.value;
+    document.getElementById('density-value').textContent = this.value;
   });
-  densitySubdivisionNumber.addEventListener('input', function () {
-    densitySubdivisionSlider.value = this.value;
-    document.getElementById('density-subdivision-percent-value').textContent = this.value;
+  densityNumber.addEventListener('input', function () {
+    densitySlider.value = this.value;
+    document.getElementById('density-value').textContent = this.value;
+  });
+  densityToleranceSlider.addEventListener('input', function () {
+    document.getElementById('density-tolerance-value').textContent = this.value;
+  });
+  densityGridSlider.addEventListener('input', function () {
+    densityGridNumber.value = this.value;
+  });
+  densityGridNumber.addEventListener('input', function () {
+    densityGridSlider.value = this.value;
   });
 
   // Distance slider sync.

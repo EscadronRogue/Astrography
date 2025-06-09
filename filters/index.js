@@ -230,7 +230,8 @@ export function applyFilters(allStars) {
         enableDensityFilter: false,
         isolation: 7,
         isolationTolerance: 0,
-        densityThresholdStars: 5,
+        density: 7,
+        densityTolerance: 0,
         enableIsolationLabeling: false,
         enableDensityLabeling: false,
         minDistance: 0,
@@ -260,7 +261,8 @@ export function applyFilters(allStars) {
     enableDensityFilter: (formData.get('enable-density-filter') !== null),
     isolation: parseFloat(formData.get('isolation')) || 7,
     isolationTolerance: parseInt(formData.get('isolation-tolerance')) || 0,
-    densityThresholdStars: parseFloat(formData.get('density-subdivision-percent')) || 5,
+    density: parseFloat(formData.get('density')) || 7,
+    densityTolerance: parseInt(formData.get('density-tolerance')) || 0,
     enableIsolationLabeling: (formData.get('enable-isolation-labeling') !== null),
     enableDensityLabeling: (formData.get('enable-density-labeling') !== null),
     minDistance: formData.get('min-distance'),
@@ -357,13 +359,12 @@ export function applyFilters(allStars) {
 
   // --- Density Filter Handling ---
   if (filters.enableDensityFilter) {
-    // For density, assume grid subdivision threshold is taken from the slider.
-    const densityThreshold = filters.densityThresholdStars; // Already a number from slider
+    const gridSize = computeIsolationGridSize(filters.densityGridSize);
     if (
       !densityOverlay ||
       densityOverlay.minDistance !== parseFloat(filters.minDistance) ||
       densityOverlay.maxDistance !== parseFloat(filters.maxDistance) ||
-      densityOverlay.subdivisionThresholdPercent !== densityThreshold
+      densityOverlay.gridSize !== gridSize
     ) {
       if (densityOverlay) {
         densityOverlay.cubesData.forEach(cell => {
@@ -376,7 +377,7 @@ export function applyFilters(allStars) {
           window.mollweideMap.scene.remove(obj.lineM);
         });
       }
-      densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, densityThreshold);
+      densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       densityOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.add(cell.tcMesh);
         window.globeMap.scene.add(cell.globeMesh);
@@ -419,7 +420,8 @@ export function applyFilters(allStars) {
     enableDensityFilter: filters.enableDensityFilter,
     isolation: filters.isolation,
     isolationTolerance: filters.isolationTolerance,
-    densityThresholdStars: filters.densityThresholdStars,
+    density: filters.density,
+    densityTolerance: filters.densityTolerance,
     enableIsolationLabeling: filters.enableIsolationLabeling,
     enableDensityLabeling: filters.enableDensityLabeling,
     minDistance: filters.minDistance,
