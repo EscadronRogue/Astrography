@@ -50,7 +50,7 @@ function eclipticToEquatorial(lambda, beta = 0) {
   const cosL = Math.cos(lambda);
   const sinDec = sinB * Math.cos(epsilon) + cosB * Math.sin(epsilon) * sinL;
   const dec = Math.asin(sinDec);
-  const y = sinL * Math.cos(epsilon) - sinB * Math.sin(epsilon) * cosL / cosB;
+  const y = sinL * Math.cos(epsilon) - (sinB / cosB) * Math.sin(epsilon);
   const x = cosL;
   let ra = Math.atan2(y, x);
   if (ra < 0) ra += 2 * Math.PI;
@@ -255,7 +255,7 @@ export function createGalacticDirectionLabelsTrue(R = 100) {
   galacticDirectionData().forEach(d => {
     const eq = galacticToEquatorial(d.l, 0);
     const pos = radToSphere(eq.ra, eq.dec, R);
-    const sprite = createTextSprite(d.label);
+    const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
     sprite.position.copy(pos);
     labels.push(sprite);
   });
@@ -267,7 +267,7 @@ export function createGalacticDirectionLabelsGlobe(R = 102) {
   galacticDirectionData().forEach(d => {
     const eq = galacticToEquatorial(d.l, 0);
     const pos = radToSphere(eq.ra, eq.dec, R);
-    const sprite = createTextSprite(d.label);
+    const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
     sprite.position.copy(pos);
     const normal = pos.clone().normalize();
     const globalUp = new THREE.Vector3(0, 1, 0);
@@ -288,7 +288,7 @@ export function createGalacticDirectionLabelsMollweide(R = 100) {
   galacticDirectionData().forEach(d => {
     const eq = galacticToEquatorial(d.l, 0);
     const p = radToMollweide(eq.ra, eq.dec, R, lambda0);
-    const sprite = createTextSprite(d.label);
+    const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
     sprite.position.set(p.x, p.y, 0);
     labels.push(sprite);
   });
