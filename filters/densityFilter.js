@@ -202,12 +202,12 @@ class DensityGridOverlay {
 
     const densities = this.cubesData.map(c => c.density);
     const sorted = densities.slice().sort((a, b) => a - b);
-    const q1Idx = Math.floor(sorted.length * 0.25);
-    const q3Idx = Math.floor(sorted.length * 0.75);
+    const q10Idx = Math.floor(sorted.length * 0.10);
+    const q90Idx = Math.floor(sorted.length * 0.90);
     const minD = sorted[0];
     const maxD = sorted[sorted.length - 1];
-    const q1 = sorted[q1Idx];
-    const q3 = sorted[q3Idx];
+    const q1 = sorted[q10Idx];
+    const q3 = sorted[q90Idx];
 
     this.cubesData.forEach(cell => {
       const ratio = cell.tcPos.length() / this.maxDistance;
