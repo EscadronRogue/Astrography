@@ -227,32 +227,59 @@ export function splitMollweideWrap(p1, p2) {
   if (Math.abs(a.x - b.x) <= 200) {
     return [[a, b]];
   }
-  let left = a, right = b;
-  let swapped = false;
-  if (left.x > right.x) { left = b; right = a; swapped = true; }
 
-  const shifted = right.clone();
-  shifted.x -= 400;
+  let left = a,
+    right = b,
+    swapped = false;
+  if (left.x > right.x) {
+    left = b;
+    right = a;
+    swapped = true;
+  }
 
-  const dx = shifted.x - left.x;
-  const dy = shifted.y - left.y;
+  const iLeft = lineEllipseIntersection(
+    left,
+    new THREE.Vector3(right.x - 400, right.y, right.z)
+  );
+  const iRight = lineEllipseIntersection(
+    right,
+    new THREE.Vector3(left.x + 400, left.y, left.z)
+  );
+
+  if (!iLeft || !iRight) return [[a, b]];
+
+  if (!swapped) {
+    return [
+      [left.clone(), iLeft],
+      [iRight, right.clone()]
+    ];
+  } else {
+    return [
+      [left.clone(), iRight],
+      [iLeft, right.clone()]
+    ];
+  }
+}
+
+function lineEllipseIntersection(p1, p2) {
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
   const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
-  const B = 2 * (left.x * dx / (200 * 200) + left.y * dy / (100 * 100));
-  const C = (left.x * left.x) / (200 * 200) + (left.y * left.y) / (100 * 100) - 1;
+  const B =
+    2 * ((p1.x * dx) / (200 * 200) + (p1.y * dy) / (100 * 100));
+  const C =
+    (p1.x * p1.x) / (200 * 200) +
+    (p1.y * p1.y) / (100 * 100) -
+    1;
   const disc = B * B - 4 * A * C;
-  if (disc < 0) return [[a, b]];
+  if (disc < 0) return null;
   const sqrtDisc = Math.sqrt(disc);
   const t1 = (-B - sqrtDisc) / (2 * A);
   const t2 = (-B + sqrtDisc) / (2 * A);
-  const t = (t1 >= 0 && t1 <= 1) ? t1 : (t2 >= 0 && t2 <= 1 ? t2 : null);
-  if (t === null) return [[a, b]];
-  const ix = left.x + dx * t;
-  const iy = left.y + dy * t;
-  const edgeLeft = new THREE.Vector3(ix, iy, 0);
-  const edgeRight = new THREE.Vector3(ix + 400, iy, 0);
-  if (!swapped) {
-    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
-  } else {
-    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
-  }
+  let t = null;
+  if (t1 >= 0 && t1 <= 1) t = t1;
+  if (t2 >= 0 && t2 <= 1 && (t === null || t2 < t)) t = t2;
+  if (t === null) return null;
+  return new THREE.Vector3(p1.x + dx * t, p1.y + dy * t, 0);
 }
+
