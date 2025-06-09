@@ -345,7 +345,9 @@ export function applyFilters(allStars) {
     maxDistance: filters.maxDistance,
     isolationGridSize: filters.isolationGridSize,
     densityGridSize: filters.densityGridSize,
-    showClouds: filters.showClouds
+    showClouds: filters.showClouds,
+    isolationOverlay,
+    densityOverlay
   };
 }
 
