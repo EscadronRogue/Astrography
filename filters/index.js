@@ -238,19 +238,22 @@ export function applyFilters(allStars) {
     ) {
       // Remove any existing meshes.
       if (isolationOverlay) {
-      isolationOverlay.cubesData.forEach(cell => {
-        if (window.trueCoordinatesMap.scene.children.includes(cell.tcMesh)) {
-          window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-        }
-      });
-      isolationOverlay.adjacentLines.forEach(obj => {
-        if (window.globeMap.scene.children.includes(obj.line)) {
-          window.globeMap.scene.remove(obj.line);
-        }
-        if (window.mollweideMap.scene.children.includes(obj.lineM)) {
-          window.mollweideMap.scene.remove(obj.lineM);
-        }
-      });
+        isolationOverlay.cubesData.forEach(cell => {
+          if (window.trueCoordinatesMap.scene.children.includes(cell.tcMesh)) {
+            window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+          }
+          if (window.mollweideMap.scene.children.includes(cell.mollweideMesh)) {
+            window.mollweideMap.scene.remove(cell.mollweideMesh);
+          }
+        });
+        isolationOverlay.adjacentLines.forEach(obj => {
+          if (window.globeMap.scene.children.includes(obj.line)) {
+            window.globeMap.scene.remove(obj.line);
+          }
+          if (window.mollweideMap.scene.children.includes(obj.lineM)) {
+            window.mollweideMap.scene.remove(obj.lineM);
+          }
+        });
       }
       isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       // Add new meshes.
@@ -267,6 +270,7 @@ export function applyFilters(allStars) {
     if (isolationOverlay) {
       isolationOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        window.mollweideMap.scene.remove(cell.mollweideMesh);
       });
       isolationOverlay.adjacentLines.forEach(obj => {
         window.globeMap.scene.remove(obj.line);
@@ -345,7 +349,9 @@ export function applyFilters(allStars) {
     maxDistance: filters.maxDistance,
     isolationGridSize: filters.isolationGridSize,
     densityGridSize: filters.densityGridSize,
-    showClouds: filters.showClouds
+    showClouds: filters.showClouds,
+    isolationOverlay,
+    densityOverlay
   };
 }
 

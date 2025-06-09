@@ -179,7 +179,13 @@ class IsolationGridOverlay {
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
-          const lineM = new THREE.Line(geomM, mat.clone());
+          const mollMat = new THREE.LineBasicMaterial({
+            color: 0x0000ff,
+            transparent: true,
+            opacity: 0.9,
+            linewidth: 5
+          });
+          const lineM = new THREE.Line(geomM, mollMat);
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
         }
       });

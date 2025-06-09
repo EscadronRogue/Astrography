@@ -244,7 +244,9 @@ async function buildAndApplyFilters() {
     maxDistance,
     isolationGridSize,
     densityGridSize,
-    showClouds
+    showClouds,
+    isolationOverlay: returnedIsolationOverlay,
+    densityOverlay: returnedDensityOverlay
   } = filters;
 
   showConstellationBoundariesFlag = showConstellationBoundaries;
@@ -253,6 +255,10 @@ async function buildAndApplyFilters() {
   enableIsolationFilterFlag = enableIsolationFilter;
   enableDensityFilterFlag = enableDensityFilter;
   showCloudsFlag = showClouds;
+
+  // store overlay references for external refresh calls
+  isolationOverlay = returnedIsolationOverlay;
+  densityOverlay = returnedDensityOverlay;
 
   currentFilteredStars = filteredStars;
   currentConnections = connections;
