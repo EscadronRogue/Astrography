@@ -243,53 +243,65 @@ export function adjustMollweideWrap(p1, p2) {
 export function splitMollweideWrap(p1, p2) {
   const a = p1.clone();
   const b = p2.clone();
-  let raWrap = false;
-  if (typeof a.ra === 'number' && typeof b.ra === 'number') {
+
+  // When RA/Dec metadata is present, detect boundary crossing using RA.
+  if (
+    typeof a.ra === 'number' && typeof b.ra === 'number' &&
+    typeof a.dec === 'number' && typeof b.dec === 'number'
+  ) {
     const twopi = 2 * Math.PI;
-    const r1 = ((a.ra - mollweideLambda0 + Math.PI) % twopi) - Math.PI;
-    const r2 = ((b.ra - mollweideLambda0 + Math.PI) % twopi) - Math.PI;
-    raWrap = Math.abs(r1 - r2) > Math.PI;
+    const boundary = (mollweideLambda0 + Math.PI) % twopi;
+    const norm = r => { r %= twopi; if (r < 0) r += twopi; return r; };
+
+    let ra1 = norm(a.ra);
+    let ra2 = norm(b.ra);
+    let diff = ra2 - ra1;
+    if (diff > Math.PI) ra2 -= twopi;
+    else if (diff < -Math.PI) ra2 += twopi;
+
+    let rb = boundary;
+    while (rb - ra1 > Math.PI) rb -= twopi;
+    while (rb - ra1 < -Math.PI) rb += twopi;
+
+    const crosses = (ra1 <= rb && rb <= ra2) || (ra2 <= rb && rb <= ra1);
+    if (crosses) {
+      const t = (rb - ra1) / (ra2 - ra1);
+      const decCross = a.dec + t * (b.dec - a.dec);
+      const edgeL = radToMollweide(rb, decCross, 100, mollweideLambda0);
+      const edgeR = edgeL.clone();
+      edgeR.x *= -1;
+      return [ [a, edgeL], [edgeR, b] ];
+    }
   }
-  if (Math.abs(a.x - b.x) < 200 && !raWrap) {
+
+  // Fallback to geometric wrap detection when RA info is missing or no crossing
+  if (Math.abs(a.x - b.x) < 200) {
     return [[a, b]];
   }
-  let didShift = false;
-  if (Math.abs(a.x - b.x) < 200 && raWrap) {
-    if (a.x > b.x) a.x -= 400; else b.x += 400;
-    didShift = true;
-  }
+
   let left = a, right = b;
   let swapped = false;
   if (left.x > right.x) { left = b; right = a; swapped = true; }
 
-  const shiftedPt = right.clone();
-  shiftedPt.x -= 400;
+  const shifted = right.clone();
+  shifted.x -= 400;
 
-  const dx = shiftedPt.x - left.x;
-  const dy = shiftedPt.y - left.y;
+  const dx = shifted.x - left.x;
+  const dy = shifted.y - left.y;
   const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
   const B = 2 * (left.x * dx / (200 * 200) + left.y * dy / (100 * 100));
   const C = (left.x * left.x) / (200 * 200) + (left.y * left.y) / (100 * 100) - 1;
   const disc = B * B - 4 * A * C;
-  if (disc < 0) {
-    if (didShift) { if (a.x < -200) a.x += 400; if (a.x > 200) a.x -= 400; if (b.x < -200) b.x += 400; if (b.x > 200) b.x -= 400; }
-    return [[a, b]];
-  }
+  if (disc < 0) return [[a, b]];
   const sqrtDisc = Math.sqrt(disc);
   const t1 = (-B - sqrtDisc) / (2 * A);
   const t2 = (-B + sqrtDisc) / (2 * A);
   const t = (t1 >= 0 && t1 <= 1) ? t1 : (t2 >= 0 && t2 <= 1 ? t2 : null);
-  if (t === null) {
-    if (didShift) { if (a.x < -200) a.x += 400; if (a.x > 200) a.x -= 400; if (b.x < -200) b.x += 400; if (b.x > 200) b.x -= 400; }
-    return [[a, b]];
-  }
+  if (t === null) return [[a, b]];
   const ix = left.x + dx * t;
   const iy = left.y + dy * t;
   const edgeLeft = new THREE.Vector3(ix, iy, 0);
   const edgeRight = new THREE.Vector3(-ix, iy, 0);
-  if (didShift) {
-    if (a.x < -200) a.x += 400; if (a.x > 200) a.x -= 400; if (b.x < -200) b.x += 400; if (b.x > 200) b.x -= 400;
-  }
   if (!swapped) {
     return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
   } else {
