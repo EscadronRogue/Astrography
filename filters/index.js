@@ -238,32 +238,24 @@ export function applyFilters(allStars) {
     ) {
       // Remove any existing meshes.
       if (isolationOverlay) {
-        isolationOverlay.cubesData.forEach(cell => {
-          if (window.trueCoordinatesMap.scene.children.includes(cell.tcMesh)) {
-            window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-          }
-          if (window.globeMap.scene.children.includes(cell.globeMesh)) {
-            window.globeMap.scene.remove(cell.globeMesh);
-          }
-          if (window.mollweideMap.scene.children.includes(cell.mollweideMesh)) {
-            window.mollweideMap.scene.remove(cell.mollweideMesh);
-          }
-        });
-        isolationOverlay.adjacentLines.forEach(obj => {
-          if (window.globeMap.scene.children.includes(obj.line)) {
-            window.globeMap.scene.remove(obj.line);
-          }
-          if (window.mollweideMap.scene.children.includes(obj.lineM)) {
-            window.mollweideMap.scene.remove(obj.lineM);
-          }
-        });
+      isolationOverlay.cubesData.forEach(cell => {
+        if (window.trueCoordinatesMap.scene.children.includes(cell.tcMesh)) {
+          window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        }
+      });
+      isolationOverlay.adjacentLines.forEach(obj => {
+        if (window.globeMap.scene.children.includes(obj.line)) {
+          window.globeMap.scene.remove(obj.line);
+        }
+        if (window.mollweideMap.scene.children.includes(obj.lineM)) {
+          window.mollweideMap.scene.remove(obj.lineM);
+        }
+      });
       }
       isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       // Add new meshes.
       isolationOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.add(cell.tcMesh);
-        window.globeMap.scene.add(cell.globeMesh);
-        window.mollweideMap.scene.add(cell.mollweideMesh);
       });
       isolationOverlay.adjacentLines.forEach(obj => {
         window.globeMap.scene.add(obj.line);
@@ -275,8 +267,6 @@ export function applyFilters(allStars) {
     if (isolationOverlay) {
       isolationOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-        window.globeMap.scene.remove(cell.globeMesh);
-        window.mollweideMap.scene.remove(cell.mollweideMesh);
       });
       isolationOverlay.adjacentLines.forEach(obj => {
         window.globeMap.scene.remove(obj.line);
