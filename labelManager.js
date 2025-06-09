@@ -192,10 +192,13 @@ export class LabelManager {
    */
   computeLabelOffset(star, starPos) {
     if (this.mapType === 'TrueCoordinates' || this.mapType === 'Mollweide') {
-      // Small offset in X and Y
-      return new THREE.Vector3(1, 1, 0).multiplyScalar(
-        THREE.MathUtils.clamp(star.displaySize / 2, 0.5, 1.5)
-      );
+      // Small offset in X and Y. For large Mollweide stars, bump the distance
+      // slightly so the text isn't obscured by the star sphere.
+      let dist = THREE.MathUtils.clamp(star.displaySize / 2, 0.5, 1.5);
+      if (this.mapType === 'Mollweide' && star.displaySize >= 5) {
+        dist = Math.min(dist * 1.2, 2);
+      }
+      return new THREE.Vector3(1, 1, 0).multiplyScalar(dist);
     } else {
       // For the Globe, offset tangentially around the star on the sphere
       const normal = starPos.clone().normalize();
