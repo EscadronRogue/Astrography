@@ -259,6 +259,48 @@ function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150
   return sprite;
 }
 
+function createTextPlane(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = `${fontSize}px Arial`;
+  const textWidth = ctx.measureText(text).width;
+  canvas.width = textWidth + 20;
+  canvas.height = fontSize * 1.2;
+  ctx.font = `${fontSize}px Arial`;
+  ctx.fillStyle = color;
+  ctx.fillText(text, 10, fontSize);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const material = new THREE.ShaderMaterial({
+    uniforms: { map: { value: texture }, opacity: { value: opacity } },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D map;
+      uniform float opacity;
+      varying vec2 vUv;
+      void main() {
+        vec2 uvCorrected = gl_FrontFacing ? vUv : vec2(1.0 - vUv.x, vUv.y);
+        vec4 color = texture2D(map, uvCorrected);
+        gl_FragColor = vec4(color.rgb, color.a * opacity);
+      }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide
+  });
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(canvas.width / 100, canvas.height / 100),
+    material
+  );
+  plane.renderOrder = 1;
+  return plane;
+}
+
 function galacticDirectionData() {
   return [
     { l: 0, label: 'Galactic Center' },
@@ -285,17 +327,16 @@ export function createGalacticDirectionLabelsGlobe(R = 102) {
   galacticDirectionData().forEach(d => {
     const eq = galacticToEquatorial(d.l, 0);
     const pos = radToSphere(eq.ra, eq.dec, R);
-    const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
-    sprite.position.copy(pos);
+    const mesh = createTextPlane(d.label, '#ffffff', 0.8, 450);
+    mesh.position.copy(pos);
     const normal = pos.clone().normalize();
     const globalUp = new THREE.Vector3(0, 1, 0);
     let desiredUp = globalUp.clone().sub(normal.clone().multiplyScalar(globalUp.dot(normal)));
     if (desiredUp.lengthSq() < 1e-6) desiredUp = new THREE.Vector3(0, 0, 1); else desiredUp.normalize();
     const desiredRight = new THREE.Vector3().crossVectors(desiredUp, normal).normalize();
     const matrix = new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal);
-    sprite.setRotationFromMatrix(matrix);
-    sprite.renderOrder = 1;
-    labels.push(sprite);
+    mesh.setRotationFromMatrix(matrix);
+    labels.push(mesh);
   });
   return labels;
 }
