@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
+import { lightenColor } from './densityColorUtils.js';
 
 class DensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2) {
@@ -207,7 +208,9 @@ class DensityGridOverlay {
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       cell.active = pct >= 0.25;
       const alpha = 0.5 * pct;
-      const color = new THREE.Color(0xffff00).lerp(new THREE.Color(0xff0000), pct);
+      const baseRed = new THREE.Color(0xff0000);
+      const lightRed = lightenColor(baseRed.clone(), 0.4);
+      const color = lightRed.clone().lerp(baseRed, pct);
       cell.tcMesh.material.opacity = alpha;
       cell.globeMesh.material.opacity = alpha;
       cell.mollweideMesh.material.opacity = alpha;
