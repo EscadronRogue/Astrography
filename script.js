@@ -379,7 +379,8 @@ class MapManager {
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
     if (mapType === 'Mollweide') {
       const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-      this.frustumSize = 200;
+      // Use a larger frustum so the entire Mollweide projection fits on screen
+      this.frustumSize = 400;
       this.camera = new THREE.OrthographicCamera(
         (-this.frustumSize * aspect) / 2,
         (this.frustumSize * aspect) / 2,
@@ -479,7 +480,8 @@ class MapManager {
         pos = star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0);
       }
       const size = star.displaySize !== undefined ? star.displaySize : 1;
-      const scale = size * 0.2;
+      const baseScale = this.mapType === 'Mollweide' ? 0.4 : 0.2;
+      const scale = size * baseScale;
       dummy.position.copy(pos);
       dummy.scale.set(scale, scale, scale);
       dummy.updateMatrix();
@@ -647,7 +649,7 @@ function updateSelectedStarHighlight() {
   globeMap.scene.add(selectedHighlightGlobe);
 
   let posMoll = selectedStarData.mollweidePosition ? selectedStarData.mollweidePosition : projectStarMollweide(selectedStarData);
-  let radiusMoll = (selectedStarData.displaySize || 2) * 0.2 * 1.2;
+  let radiusMoll = (selectedStarData.displaySize || 2) * 0.4 * 1.2;
   const highlightGeomMoll = new THREE.SphereGeometry(radiusMoll, 16, 16);
   const highlightMatMoll = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
   selectedHighlightMollweide = new THREE.Mesh(highlightGeomMoll, highlightMatMoll);
