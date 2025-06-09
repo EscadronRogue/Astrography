@@ -230,6 +230,49 @@ export function adjustMollweideWrap(p1, p2) {
 }
 
 /**
+ * Adjust three Mollweide points so the resulting triangle spans the
+ * smallest horizontal range possible while keeping the shape contiguous.
+ * @param {THREE.Vector3} p1
+ * @param {THREE.Vector3} p2
+ * @param {THREE.Vector3} p3
+ * @returns {[THREE.Vector3, THREE.Vector3, THREE.Vector3]}
+ */
+export function adjustMollweideTriangleWrap(p1, p2, p3) {
+  const verts = [p1.clone(), p2.clone(), p3.clone()];
+  let best = verts.map(v => v.clone());
+  let minRange = Infinity;
+  for (let base = 0; base < 3; base++) {
+    const arr = verts.map(v => v.clone());
+    for (let i = 0; i < 3; i++) {
+      if (i === base) continue;
+      while (arr[i].x - arr[base].x > 200) arr[i].x -= 400;
+      while (arr[base].x - arr[i].x > 200) arr[i].x += 400;
+    }
+    const xs = arr.map(v => v.x);
+    const range = Math.max(...xs) - Math.min(...xs);
+    if (range < minRange) {
+      minRange = range;
+      best = arr.map(v => v.clone());
+    }
+  }
+  const xs = best.map(v => v.x);
+  let center = (Math.max(...xs) + Math.min(...xs)) / 2;
+  while (center > 200) {
+    best.forEach(v => { v.x -= 400; });
+    center -= 400;
+  }
+  while (center < -200) {
+    best.forEach(v => { v.x += 400; });
+    center += 400;
+  }
+  best.forEach(v => {
+    while (v.x > 200) v.x -= 400;
+    while (v.x < -200) v.x += 400;
+  });
+  return best;
+}
+
+/**
  * Splits a Mollweide segment at the map boundary if needed so that
  * wrapped lines appear on the opposite side instead of bleeding out.
  * Returns an array of [start, end] pairs.

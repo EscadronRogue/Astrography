@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, adjustMollweideWrap } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, adjustMollweideTriangleWrap } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 
 class DensityGridOverlay {
@@ -232,15 +232,8 @@ class DensityGridOverlay {
               radToMollweide(c2.raRad, c2.decRad, 100, getMollweideLambda0()),
               radToMollweide(c3.raRad, c3.decRad, 100, getMollweideLambda0())
             ];
-            const mPos = [];
-            vertsM.forEach((v, idx) => {
-              if (idx > 0) {
-                const [adj] = adjustMollweideWrap(v, vertsM[idx - 1]);
-                v = adj;
-                vertsM[idx] = v;
-              }
-              mPos.push(v.x, v.y, 0);
-            });
+            const [a1,a2,a3] = adjustMollweideTriangleWrap(vertsM[0], vertsM[1], vertsM[2]);
+            const mPos = [a1,a2,a3].flatMap(v => [v.x, v.y, 0]);
             const geomM = new THREE.BufferGeometry();
             geomM.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
             geomM.setIndex([0,1,2]);
@@ -305,15 +298,8 @@ class DensityGridOverlay {
           radToMollweide(cell2.raRad, cell2.decRad, 100, getMollweideLambda0()),
           radToMollweide(cell3.raRad, cell3.decRad, 100, getMollweideLambda0())
         ];
-        const mPos = [];
-        vertsM.forEach((v, idx) => {
-          if (idx > 0) {
-            const [adj] = adjustMollweideWrap(v, vertsM[idx - 1]);
-            v = adj;
-            vertsM[idx] = v;
-          }
-          mPos.push(v.x, v.y, 0);
-        });
+        const [a1,a2,a3] = adjustMollweideTriangleWrap(vertsM[0], vertsM[1], vertsM[2]);
+        const mPos = [a1,a2,a3].flatMap(v => [v.x, v.y, 0]);
         meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
         meshM.geometry.attributes.position.needsUpdate = true;
       }
@@ -360,15 +346,8 @@ class DensityGridOverlay {
         radToMollweide(obj.cell2.raRad, obj.cell2.decRad, 100, lambda0),
         radToMollweide(obj.cell3.raRad, obj.cell3.decRad, 100, lambda0)
       ];
-      const mPos = [];
-      verts.forEach((v, idx) => {
-        if (idx > 0) {
-          const [adj] = adjustMollweideWrap(v, verts[idx - 1]);
-          v = adj;
-          verts[idx] = v;
-        }
-        mPos.push(v.x, v.y, 0);
-      });
+      const [a1,a2,a3] = adjustMollweideTriangleWrap(verts[0], verts[1], verts[2]);
+      const mPos = [a1,a2,a3].flatMap(v => [v.x, v.y, 0]);
       obj.meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
       obj.meshM.geometry.attributes.position.needsUpdate = true;
     });
