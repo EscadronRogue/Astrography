@@ -244,65 +244,29 @@ class IsolationGridOverlay {
       );
     });
 
-    // Update the adjacent lines.
+    // Hide previously created connection lines and rely on the square meshes
+    // themselves to visualize the filter regions.
     this.adjacentLines.forEach(obj => {
-      const { line, lineM, cell1, cell2 } = obj;
-      if (cell1.globeMesh.visible && cell2.globeMesh.visible) {
-        const points = getGreatCirclePoints(cell1.globeMesh.position, cell2.globeMesh.position, 100, 16);
-        const positions = [];
-        const colors = [];
-        const mollPoints = getGreatCirclePoints(cell1.globeMesh.position,
-          cell2.globeMesh.position, 100, 16).map(v => {
-            const { ra, dec } = vectorToRaDecRad(v, 100);
-            return radToMollweide(ra, dec, 100, getMollweideLambda0());
-          });
-        const ptsM = [];
-        for (let mi = 0; mi < mollPoints.length - 1; mi++) {
-          const segs = splitMollweideWrap(mollPoints[mi], mollPoints[mi + 1]);
-          segs.forEach(([s,e]) => { ptsM.push(s, e); });
-        }
-        const c1 = cell1.tcMesh.material.color;
-        const c2 = cell2.tcMesh.material.color;
-        for (let i = 0; i < points.length; i++) {
-          positions.push(points[i].x, points[i].y, points[i].z);
-          let t = i / (points.length - 1);
-          colors.push(
-            THREE.MathUtils.lerp(c1.r, c2.r, t),
-            THREE.MathUtils.lerp(c1.g, c2.g, t),
-            THREE.MathUtils.lerp(c1.b, c2.b, t)
-          );
-        }
-        line.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        line.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        line.geometry.attributes.position.needsUpdate = true;
-        line.geometry.attributes.color.needsUpdate = true;
-        const avgScale = (cell1.globeMesh.scale.x + cell2.globeMesh.scale.x) / 2;
-        line.material.linewidth = avgScale;
-        line.visible = true;
-        lineM.geometry.setFromPoints(ptsM);
-        lineM.visible = true;
-      } else {
-        line.visible = false;
-        lineM.visible = false;
-      }
+      obj.line.visible = false;
+      obj.lineM.visible = false;
     });
 
-    // Re‑add the updated meshes to the scenes. Only the cubes are shown for
-    // True Coordinates, while the Globe and Mollweide maps display just the
-    // connecting lines.
+    // Re‑add the updated meshes to the scenes. For the Globe and Mollweide
+    // projections we now use the square meshes instead of the connection lines
+    // to create filled polygons representing the filter surface.
     if (sceneTC) {
       this.cubesData.forEach(cell => {
         sceneTC.add(cell.tcMesh);
       });
     }
     if (sceneGlobe) {
-      this.adjacentLines.forEach(obj => {
-        sceneGlobe.add(obj.line);
+      this.cubesData.forEach(cell => {
+        sceneGlobe.add(cell.globeMesh);
       });
     }
     if (sceneMoll) {
-      this.adjacentLines.forEach(obj => {
-        sceneMoll.add(obj.lineM);
+      this.cubesData.forEach(cell => {
+        sceneMoll.add(cell.mollweideMesh);
       });
     }
   }
@@ -317,17 +281,8 @@ class IsolationGridOverlay {
       );
     });
     this.adjacentLines.forEach(obj => {
-      const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
-        obj.cell2.globeMesh.position, 100, 16).map(v => {
-          const { ra, dec } = vectorToRaDecRad(v, 100);
-          return radToMollweide(ra, dec, 100, lambda0);
-        });
-      const pts = [];
-      for (let i = 0; i < gcPts.length - 1; i++) {
-        const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
-        segs.forEach(([s,e]) => { pts.push(s, e); });
-      }
-      obj.lineM.geometry.setFromPoints(pts);
+      obj.line.visible = false;
+      obj.lineM.visible = false;
     });
   }
 

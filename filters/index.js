@@ -323,23 +323,13 @@ export function applyFilters(allStars) {
             window.mollweideMap.scene.remove(cell.mollweideMesh);
           }
         });
-        isolationOverlay.adjacentLines.forEach(obj => {
-          if (window.globeMap.scene.children.includes(obj.line)) {
-            window.globeMap.scene.remove(obj.line);
-          }
-          if (window.mollweideMap.scene.children.includes(obj.lineM)) {
-            window.mollweideMap.scene.remove(obj.lineM);
-          }
-        });
       }
       isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       // Add new meshes.
       isolationOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.add(cell.tcMesh);
-      });
-      isolationOverlay.adjacentLines.forEach(obj => {
-        window.globeMap.scene.add(obj.line);
-        window.mollweideMap.scene.add(obj.lineM);
+        window.globeMap.scene.add(cell.globeMesh);
+        window.mollweideMap.scene.add(cell.mollweideMesh);
       });
     }
     updateIsolationFilter(allStars, isolationOverlay, window.trueCoordinatesMap.scene, window.globeMap.scene, window.mollweideMap.scene);
@@ -347,11 +337,8 @@ export function applyFilters(allStars) {
     if (isolationOverlay) {
       isolationOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        window.globeMap.scene.remove(cell.globeMesh);
         window.mollweideMap.scene.remove(cell.mollweideMesh);
-      });
-      isolationOverlay.adjacentLines.forEach(obj => {
-        window.globeMap.scene.remove(obj.line);
-        window.mollweideMap.scene.remove(obj.lineM);
       });
       isolationOverlay = null;
     }
@@ -369,19 +356,15 @@ export function applyFilters(allStars) {
       if (densityOverlay) {
         densityOverlay.cubesData.forEach(cell => {
           window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-        });
-        densityOverlay.adjacentLines.forEach(obj => {
-          window.globeMap.scene.remove(obj.line);
-          window.mollweideMap.scene.remove(obj.lineM);
+          window.globeMap.scene.remove(cell.globeMesh);
+          window.mollweideMap.scene.remove(cell.mollweideMesh);
         });
       }
       densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       densityOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.add(cell.tcMesh);
-      });
-      densityOverlay.adjacentLines.forEach(obj => {
-        window.globeMap.scene.add(obj.line);
-        window.mollweideMap.scene.add(obj.lineM);
+        window.globeMap.scene.add(cell.globeMesh);
+        window.mollweideMap.scene.add(cell.mollweideMesh);
       });
     }
     updateDensityFilter(allStars, densityOverlay, window.trueCoordinatesMap.scene, window.globeMap.scene, window.mollweideMap.scene);
@@ -389,10 +372,8 @@ export function applyFilters(allStars) {
     if (densityOverlay) {
       densityOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-      });
-      densityOverlay.adjacentLines.forEach(obj => {
-        window.globeMap.scene.remove(obj.line);
-        window.mollweideMap.scene.remove(obj.lineM);
+        window.globeMap.scene.remove(cell.globeMesh);
+        window.mollweideMap.scene.remove(cell.mollweideMesh);
       });
       densityOverlay = null;
     }

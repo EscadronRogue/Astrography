@@ -217,19 +217,19 @@ class DensityGridOverlay {
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale, scale, 1);
     });
+    // Hide connection lines and rely on square meshes to depict the surface
     this.adjacentLines.forEach(obj => {
-      const { line, lineM, cell1, cell2 } = obj;
-      line.visible = cell1.active && cell2.active;
-      lineM.visible = cell1.active && cell2.active;
+      obj.line.visible = false;
+      obj.lineM.visible = false;
     });
     if (sceneTC) {
       this.cubesData.forEach(c => { sceneTC.add(c.tcMesh); });
     }
     if (sceneGlobe) {
-      this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
+      this.cubesData.forEach(cell => { sceneGlobe.add(cell.globeMesh); });
     }
     if (sceneMoll) {
-      this.adjacentLines.forEach(o => { sceneMoll.add(o.lineM); });
+      this.cubesData.forEach(cell => { sceneMoll.add(cell.mollweideMesh); });
     }
   }
 
@@ -243,17 +243,8 @@ class DensityGridOverlay {
       );
     });
     this.adjacentLines.forEach(obj => {
-      const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
-        obj.cell2.globeMesh.position, 100, 16).map(v => {
-          const { ra, dec } = vectorToRaDecRad(v, 100);
-          return radToMollweide(ra, dec, 100, lambda0);
-        });
-      const pts = [];
-      for (let i = 0; i < gcPts.length - 1; i++) {
-        const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
-        segs.forEach(([s,e]) => { pts.push(s, e); });
-      }
-      obj.lineM.geometry.setFromPoints(pts);
+      obj.line.visible = false;
+      obj.lineM.visible = false;
     });
   }
 }
