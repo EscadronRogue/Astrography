@@ -103,25 +103,22 @@ class DensityGridOverlay {
       }
     }
 
-    const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
-      return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
-    });
-    this.cubesData.forEach(cell => this.computeCellDensity(cell, extendedStars));
-    this.maxDensity = this.cubesData.reduce((m,c) => Math.max(m, c.density), 0);
     this.computeAdjacentLines();
   }
 
-  computeCellDensity(cell, stars) {
-    let sum = 0;
-    const cellPos = cell.tcPos;
-    stars.forEach(star => {
+  computeCellDensity(cell, stars, radius = 10, tolerance = 0) {
+    const dArr = stars.map(star => {
       const starPos = star.truePosition ? star.truePosition : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
-      const d = cellPos.distanceTo(starPos);
-      if (d >= 10) return;
-      const weight = 1 - d / 10;
-      sum += weight;
+      return cell.tcPos.distanceTo(starPos);
     });
+    dArr.sort((a, b) => a - b);
+    let sum = 0;
+    for (let i = tolerance; i < dArr.length; i++) {
+      const d = dArr[i];
+      if (d > radius) continue;
+      const weight = 1 - d / radius;
+      sum += weight;
+    }
     cell.density = sum;
   }
 
@@ -191,9 +188,24 @@ class DensityGridOverlay {
   }
 
   update(stars, sceneTC, sceneGlobe, sceneMoll) {
-    const maxD = this.maxDensity || 0;
+    const radiusSlider = document.getElementById('density-slider');
+    const tolSlider = document.getElementById('density-tolerance-slider');
+    const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
+    const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
+
+    const extendedStars = stars.filter(star => {
+      const d = star.Distance_from_the_Sun;
+      return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
+    });
+
     this.cubesData.forEach(cell => {
-      const pct = maxD > 0 ? cell.density / maxD : 0;
+      this.computeCellDensity(cell, extendedStars, radius, tolerance);
+    });
+
+    this.maxDensity = this.cubesData.reduce((m, c) => Math.max(m, c.density), 0);
+
+    this.cubesData.forEach(cell => {
+      const pct = this.maxDensity > 0 ? cell.density / this.maxDensity : 0;
       const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       cell.active = pct >= 0.25;
@@ -202,8 +214,6 @@ class DensityGridOverlay {
       cell.globeMesh.material.opacity = alpha;
       cell.mollweideMesh.material.opacity = alpha;
       cell.tcMesh.visible = cell.active;
-      cell.globeMesh.visible = cell.active;
-      cell.mollweideMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale, scale, 1);
     });
@@ -212,12 +222,15 @@ class DensityGridOverlay {
       line.visible = cell1.active && cell2.active;
       lineM.visible = cell1.active && cell2.active;
     });
-    this.cubesData.forEach(c => {
-      sceneTC.add(c.tcMesh);
-      sceneGlobe.add(c.globeMesh);
-      sceneMoll.add(c.mollweideMesh);
-    });
-    this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); sceneMoll.add(o.lineM); });
+    if (sceneTC) {
+      this.cubesData.forEach(c => { sceneTC.add(c.tcMesh); });
+    }
+    if (sceneGlobe) {
+      this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
+    }
+    if (sceneMoll) {
+      this.adjacentLines.forEach(o => { sceneMoll.add(o.lineM); });
+    }
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
