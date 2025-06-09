@@ -287,3 +287,20 @@ export function greatCircleToMollweide(p1, p2, R = 100, segments = 32, lambda0 =
     return radToMollweide(ra, dec, R, lambda0);
   });
 }
+
+export function wrapMollweidePolygon(points) {
+  if (!points.length) return [];
+  const wrapped = [points[0].clone()];
+  for (let i = 1; i < points.length; i++) {
+    const prev = wrapped[i - 1];
+    const curr = points[i].clone();
+    while (curr.x - prev.x > 200) curr.x -= 400;
+    while (prev.x - curr.x > 200) curr.x += 400;
+    wrapped.push(curr);
+  }
+  wrapped.forEach(p => {
+    while (p.x > 200) p.x -= 400;
+    while (p.x < -200) p.x += 400;
+  });
+  return wrapped;
+}

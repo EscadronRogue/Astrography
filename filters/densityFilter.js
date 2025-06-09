@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, radToSphere } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, radToSphere, wrapMollweidePolygon } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 
 class DensityGridOverlay {
@@ -171,7 +171,7 @@ class DensityGridOverlay {
           const mat = new THREE.LineBasicMaterial({
             vertexColors: true,
             transparent: true,
-            opacity: 0.3,
+            opacity: 0.5,
             linewidth: 2
           });
           const line = new THREE.Line(geom, mat);
@@ -179,7 +179,7 @@ class DensityGridOverlay {
           const mollMat = new THREE.LineBasicMaterial({
             color: 0xff0000,
             transparent: true,
-            opacity: 0.9,
+            opacity: 0.5,
             linewidth: 5
           });
           const lineM = new THREE.LineSegments(geomM, mollMat);
@@ -270,8 +270,18 @@ class DensityGridOverlay {
     const clusters = this.getActiveClusters();
     clusters.forEach(cluster => {
       if (cluster.length < 3) return;
-      const pts = cluster.map(c => new THREE.Vector2(c.raRad, c.decRad));
-      const hull = computeConvexHull(pts);
+      const sinSum = cluster.reduce((s, c) => s + Math.sin(c.raRad), 0);
+      const cosSum = cluster.reduce((s, c) => s + Math.cos(c.raRad), 0);
+      const meanRa = Math.atan2(sinSum, cosSum);
+      const pts = cluster.map(c => new THREE.Vector2(
+        minimalRADifference(c.raRad - meanRa), c.decRad));
+      const hullAdj = computeConvexHull(pts);
+      const hull = hullAdj.map(p => {
+        let ra = p.x + meanRa;
+        if (ra < 0) ra += 2 * Math.PI;
+        if (ra >= 2 * Math.PI) ra -= 2 * Math.PI;
+        return new THREE.Vector2(ra, p.y);
+      });
       if (hull.length < 3) return;
 
       const sphereVerts = hull.map(p => radToSphere(p.x, p.y, 100));
@@ -286,16 +296,16 @@ class DensityGridOverlay {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
       g.computeVertexNormals();
-      const m = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+      const m = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
       const meshG = new THREE.Mesh(g, m);
       this.surfaceMeshesGlobe.push(meshG);
       if (sceneGlobe) sceneGlobe.add(meshG);
 
-      const hullMoll = hull.map(p => radToMollweide(p.x, p.y, 100, getMollweideLambda0()))
-        .map(v => new THREE.Vector2(v.x, v.y));
+      const hullMollRaw = hull.map(p => radToMollweide(p.x, p.y, 100, getMollweideLambda0()));
+      const hullMoll = wrapMollweidePolygon(hullMollRaw).map(v => new THREE.Vector2(v.x, v.y));
       const shape = new THREE.Shape(hullMoll);
       const g2 = new THREE.ShapeGeometry(shape);
-      const m2 = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+      const m2 = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
       const meshM = new THREE.Mesh(g2, m2);
       this.surfaceMeshesMoll.push(meshM);
       if (sceneMoll) sceneMoll.add(meshM);
