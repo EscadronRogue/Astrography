@@ -2,7 +2,7 @@
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densityColorUtils.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries } from './constellationFilter.js';
 
@@ -155,8 +155,10 @@ class IsolationGridOverlay {
           const colors = [];
           const posM1 = cell.mollweideMesh.position.clone();
           const posM2 = neighbor.mollweideMesh.position.clone();
-          const [adj1, adj2] = adjustMollweideWrap(posM1, posM2);
-          const geomM = new THREE.BufferGeometry().setFromPoints([adj1, adj2]);
+          const segsM = splitMollweideWrap(posM1, posM2);
+          const pointsM = [];
+          segsM.forEach(([s,e]) => { pointsM.push(s, e); });
+          const geomM = new THREE.BufferGeometry().setFromPoints(pointsM);
           const c1 = cell.tcMesh.material.color; // use cube color
           const c2 = neighbor.tcMesh.material.color;
           for (let i = 0; i < points.length; i++) {
@@ -185,7 +187,7 @@ class IsolationGridOverlay {
             opacity: 0.9,
             linewidth: 5
           });
-          const lineM = new THREE.Line(geomM, mollMat);
+          const lineM = new THREE.LineSegments(geomM, mollMat);
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
         }
       });
@@ -246,7 +248,9 @@ class IsolationGridOverlay {
         const colors = [];
         const posM1 = cell1.mollweideMesh.position.clone();
         const posM2 = cell2.mollweideMesh.position.clone();
-        const [adj1, adj2] = adjustMollweideWrap(posM1, posM2);
+        const segs = splitMollweideWrap(posM1, posM2);
+        const ptsM = [];
+        segs.forEach(([s,e]) => { ptsM.push(s, e); });
         const c1 = cell1.tcMesh.material.color;
         const c2 = cell2.tcMesh.material.color;
         for (let i = 0; i < points.length; i++) {
@@ -265,7 +269,7 @@ class IsolationGridOverlay {
         const avgScale = (cell1.globeMesh.scale.x + cell2.globeMesh.scale.x) / 2;
         line.material.linewidth = avgScale;
         line.visible = true;
-        lineM.geometry.setFromPoints([adj1, adj2]);
+        lineM.geometry.setFromPoints(ptsM);
         lineM.visible = true;
       } else {
         line.visible = false;
@@ -305,8 +309,10 @@ class IsolationGridOverlay {
     this.adjacentLines.forEach(obj => {
       const p1 = obj.cell1.mollweideMesh.position.clone();
       const p2 = obj.cell2.mollweideMesh.position.clone();
-      const [a, b] = adjustMollweideWrap(p1, p2);
-      obj.lineM.geometry.setFromPoints([a, b]);
+      const segs = splitMollweideWrap(p1, p2);
+      const pts = [];
+      segs.forEach(([s,e]) => { pts.push(s, e); });
+      obj.lineM.geometry.setFromPoints(pts);
     });
   }
 
