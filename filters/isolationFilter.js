@@ -23,8 +23,8 @@ class IsolationGridOverlay {
     this.regionLabelsGroupTC = new THREE.Group();
     this.regionLabelsGroupGlobe = new THREE.Group();
     this.regionLabelsGroupMoll = new THREE.Group();
-    this.surfaceMeshGlobe = null;
-    this.surfaceMeshMoll = null;
+    this.surfaceMeshesGlobe = [];
+    this.surfaceMeshesMoll = [];
   }
 
   createGrid(stars) {
@@ -336,40 +336,75 @@ class IsolationGridOverlay {
   }
 
   updateSurfaceMeshes(sceneGlobe, sceneMoll) {
-    if (this.surfaceMeshGlobe && sceneGlobe) sceneGlobe.remove(this.surfaceMeshGlobe);
-    if (this.surfaceMeshMoll && sceneMoll) sceneMoll.remove(this.surfaceMeshMoll);
-    this.surfaceMeshGlobe = null;
-    this.surfaceMeshMoll = null;
+    this.surfaceMeshesGlobe.forEach(mesh => { if (sceneGlobe) sceneGlobe.remove(mesh); });
+    this.surfaceMeshesMoll.forEach(mesh => { if (sceneMoll) sceneMoll.remove(mesh); });
+    this.surfaceMeshesGlobe = [];
+    this.surfaceMeshesMoll = [];
 
-    const active = this.cubesData.filter(c => c.active);
-    if (active.length < 3) return;
-    const pts = active.map(c => new THREE.Vector2(c.raRad, c.decRad));
-    const hull = computeConvexHull(pts);
-    if (hull.length < 3) return;
+    const clusters = this.getActiveClusters();
+    clusters.forEach(cluster => {
+      if (cluster.length < 3) return;
+      const pts = cluster.map(c => new THREE.Vector2(c.raRad, c.decRad));
+      const hull = computeConvexHull(pts);
+      if (hull.length < 3) return;
 
-    const sphereVerts = hull.map(p => radToSphere(p.x, p.y, 100));
-    const posArr = [];
-    for (let i = 1; i < sphereVerts.length - 1; i++) {
-      posArr.push(
-        sphereVerts[0].x, sphereVerts[0].y, sphereVerts[0].z,
-        sphereVerts[i].x, sphereVerts[i].y, sphereVerts[i].z,
-        sphereVerts[i + 1].x, sphereVerts[i + 1].y, sphereVerts[i + 1].z
-      );
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
-    g.computeVertexNormals();
-    const m = new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
-    this.surfaceMeshGlobe = new THREE.Mesh(g, m);
-    if (sceneGlobe) sceneGlobe.add(this.surfaceMeshGlobe);
+      const sphereVerts = hull.map(p => radToSphere(p.x, p.y, 100));
+      const posArr = [];
+      for (let i = 1; i < sphereVerts.length - 1; i++) {
+        posArr.push(
+          sphereVerts[0].x, sphereVerts[0].y, sphereVerts[0].z,
+          sphereVerts[i].x, sphereVerts[i].y, sphereVerts[i].z,
+          sphereVerts[i + 1].x, sphereVerts[i + 1].y, sphereVerts[i + 1].z
+        );
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+      g.computeVertexNormals();
+      const m = new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+      const meshG = new THREE.Mesh(g, m);
+      this.surfaceMeshesGlobe.push(meshG);
+      if (sceneGlobe) sceneGlobe.add(meshG);
 
-    const hullMoll = hull.map(p => radToMollweide(p.x, p.y, 100, getMollweideLambda0()))
-      .map(v => new THREE.Vector2(v.x, v.y));
-    const shape = new THREE.Shape(hullMoll);
-    const g2 = new THREE.ShapeGeometry(shape);
-    const m2 = new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
-    this.surfaceMeshMoll = new THREE.Mesh(g2, m2);
-    if (sceneMoll) sceneMoll.add(this.surfaceMeshMoll);
+      const hullMoll = hull.map(p => radToMollweide(p.x, p.y, 100, getMollweideLambda0()))
+        .map(v => new THREE.Vector2(v.x, v.y));
+      const shape = new THREE.Shape(hullMoll);
+      const g2 = new THREE.ShapeGeometry(shape);
+      const m2 = new THREE.MeshBasicMaterial({ color: 0x0000ff, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+      const meshM = new THREE.Mesh(g2, m2);
+      this.surfaceMeshesMoll.push(meshM);
+      if (sceneMoll) sceneMoll.add(meshM);
+    });
+  }
+
+  getActiveClusters() {
+    const neighbors = new Map();
+    this.cubesData.forEach(c => {
+      if (c.active) neighbors.set(c.id, []);
+    });
+    this.adjacentLines.forEach(obj => {
+      const { cell1, cell2 } = obj;
+      if (cell1.active && cell2.active) {
+        neighbors.get(cell1.id).push(cell2);
+        neighbors.get(cell2.id).push(cell1);
+      }
+    });
+    const visited = new Set();
+    const clusters = [];
+    this.cubesData.forEach(cell => {
+      if (!cell.active || visited.has(cell.id)) return;
+      const stack = [cell];
+      visited.add(cell.id);
+      const cluster = [];
+      while (stack.length > 0) {
+        const c = stack.pop();
+        cluster.push(c);
+        neighbors.get(c.id).forEach(n => {
+          if (!visited.has(n.id)) { visited.add(n.id); stack.push(n); }
+        });
+      }
+      clusters.push(cluster);
+    });
+    return clusters;
   }
 
   async assignConstellationsToCells() {

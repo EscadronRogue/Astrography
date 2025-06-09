@@ -331,11 +331,11 @@ export function applyFilters(allStars) {
             window.mollweideMap.scene.remove(obj.lineM);
           }
         });
-        if (isolationOverlay.surfaceMeshGlobe) {
-          window.globeMap.scene.remove(isolationOverlay.surfaceMeshGlobe);
+        if (isolationOverlay.surfaceMeshesGlobe) {
+          isolationOverlay.surfaceMeshesGlobe.forEach(m => window.globeMap.scene.remove(m));
         }
-        if (isolationOverlay.surfaceMeshMoll) {
-          window.mollweideMap.scene.remove(isolationOverlay.surfaceMeshMoll);
+        if (isolationOverlay.surfaceMeshesMoll) {
+          isolationOverlay.surfaceMeshesMoll.forEach(m => window.mollweideMap.scene.remove(m));
         }
       }
       isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
@@ -359,11 +359,11 @@ export function applyFilters(allStars) {
         window.globeMap.scene.remove(obj.line);
         window.mollweideMap.scene.remove(obj.lineM);
       });
-      if (isolationOverlay.surfaceMeshGlobe) {
-        window.globeMap.scene.remove(isolationOverlay.surfaceMeshGlobe);
+      if (isolationOverlay.surfaceMeshesGlobe) {
+        isolationOverlay.surfaceMeshesGlobe.forEach(m => window.globeMap.scene.remove(m));
       }
-      if (isolationOverlay.surfaceMeshMoll) {
-        window.mollweideMap.scene.remove(isolationOverlay.surfaceMeshMoll);
+      if (isolationOverlay.surfaceMeshesMoll) {
+        isolationOverlay.surfaceMeshesMoll.forEach(m => window.mollweideMap.scene.remove(m));
       }
       isolationOverlay = null;
     }
@@ -386,11 +386,11 @@ export function applyFilters(allStars) {
           window.globeMap.scene.remove(obj.line);
           window.mollweideMap.scene.remove(obj.lineM);
         });
-        if (densityOverlay.surfaceMeshGlobe) {
-          window.globeMap.scene.remove(densityOverlay.surfaceMeshGlobe);
+        if (densityOverlay.surfaceMeshesGlobe) {
+          densityOverlay.surfaceMeshesGlobe.forEach(m => window.globeMap.scene.remove(m));
         }
-        if (densityOverlay.surfaceMeshMoll) {
-          window.mollweideMap.scene.remove(densityOverlay.surfaceMeshMoll);
+        if (densityOverlay.surfaceMeshesMoll) {
+          densityOverlay.surfaceMeshesMoll.forEach(m => window.mollweideMap.scene.remove(m));
         }
       }
       densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
@@ -412,11 +412,11 @@ export function applyFilters(allStars) {
         window.globeMap.scene.remove(obj.line);
         window.mollweideMap.scene.remove(obj.lineM);
       });
-      if (densityOverlay.surfaceMeshGlobe) {
-        window.globeMap.scene.remove(densityOverlay.surfaceMeshGlobe);
+      if (densityOverlay.surfaceMeshesGlobe) {
+        densityOverlay.surfaceMeshesGlobe.forEach(m => window.globeMap.scene.remove(m));
       }
-      if (densityOverlay.surfaceMeshMoll) {
-        window.mollweideMap.scene.remove(densityOverlay.surfaceMeshMoll);
+      if (densityOverlay.surfaceMeshesMoll) {
+        densityOverlay.surfaceMeshesMoll.forEach(m => window.mollweideMap.scene.remove(m));
       }
       densityOverlay = null;
     }
