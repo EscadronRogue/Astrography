@@ -51,6 +51,7 @@ export async function setupFilterUI(allStars) {
   });
   addConstellationsFieldset();
   addGlobeSurfaceFieldset();
+  addPlanesFieldset();
   // Clouds fieldset is added in the UI file.
   await loadConstellationBoundaries();
   await loadConstellationCenters();
@@ -146,6 +147,69 @@ function addGlobeSurfaceFieldset() {
   filterForm.appendChild(fs);
 }
 
+function addPlanesFieldset() {
+  const fs = document.createElement('fieldset');
+  const legend = document.createElement('legend');
+  legend.classList.add('collapsible');
+  legend.textContent = 'Planes';
+  fs.appendChild(legend);
+
+  const contentDiv = document.createElement('div');
+  contentDiv.classList.add('filter-content');
+  contentDiv.style.maxHeight = '0px';
+  legend.addEventListener('click', () => {
+    legend.classList.toggle('active');
+    const isActive = legend.classList.contains('active');
+    legend.setAttribute('aria-expanded', isActive);
+    contentDiv.style.maxHeight = isActive ? contentDiv.scrollHeight + 'px' : '0px';
+  });
+
+  const galDiv = document.createElement('div');
+  galDiv.classList.add('filter-item');
+  const galChk = document.createElement('input');
+  galChk.type = 'checkbox';
+  galChk.id = 'show-galactic-plane';
+  galChk.name = 'show-galactic-plane';
+  galChk.checked = false;
+  const galLbl = document.createElement('label');
+  galLbl.htmlFor = 'show-galactic-plane';
+  galLbl.textContent = 'Show Galactic Plane';
+  galDiv.appendChild(galChk);
+  galDiv.appendChild(galLbl);
+  contentDiv.appendChild(galDiv);
+
+  const eclDiv = document.createElement('div');
+  eclDiv.classList.add('filter-item');
+  const eclChk = document.createElement('input');
+  eclChk.type = 'checkbox';
+  eclChk.id = 'show-ecliptic-plane';
+  eclChk.name = 'show-ecliptic-plane';
+  eclChk.checked = false;
+  const eclLbl = document.createElement('label');
+  eclLbl.htmlFor = 'show-ecliptic-plane';
+  eclLbl.textContent = 'Show Ecliptic Plane';
+  eclDiv.appendChild(eclChk);
+  eclDiv.appendChild(eclLbl);
+  contentDiv.appendChild(eclDiv);
+
+  const eqDiv = document.createElement('div');
+  eqDiv.classList.add('filter-item');
+  const eqChk = document.createElement('input');
+  eqChk.type = 'checkbox';
+  eqChk.id = 'show-celestial-equator';
+  eqChk.name = 'show-celestial-equator';
+  eqChk.checked = false;
+  const eqLbl = document.createElement('label');
+  eqLbl.htmlFor = 'show-celestial-equator';
+  eqLbl.textContent = 'Show Celestial Equator';
+  eqDiv.appendChild(eqChk);
+  eqDiv.appendChild(eqLbl);
+  contentDiv.appendChild(eqDiv);
+
+  fs.appendChild(contentDiv);
+  filterForm.appendChild(fs);
+}
+
 export function applyFilters(allStars) {
   if (!filterForm) {
     filterForm = document.getElementById('filters-form');
@@ -155,6 +219,8 @@ export function applyFilters(allStars) {
         connections: [],
         globeFilteredStars: allStars,
         globeConnections: [],
+        mollweideFilteredStars: allStars,
+        mollweideConnections: [],
         showConstellationBoundaries: false,
         showConstellationNames: false,
         showConstellationOverlay: false,
@@ -171,7 +237,10 @@ export function applyFilters(allStars) {
         maxDistance: 20,
         isolationGridSize: 0,
         densityGridSize: 0,
-        showClouds: false
+        showClouds: false,
+        showGalacticPlane: false,
+        showEclipticPlane: false,
+        showCelestialEquator: false
       };
     }
   }
@@ -198,7 +267,10 @@ export function applyFilters(allStars) {
     maxDistance: formData.get('max-distance'),
     isolationGridSize: parseFloat(formData.get('isolation-grid-size')) || 0,
     densityGridSize: parseFloat(formData.get('density-grid-size')) || 0,
-    showClouds: (formData.getAll('dust-clouds').length > 0)
+    showClouds: (formData.getAll('dust-clouds').length > 0),
+    showGalacticPlane: (formData.get('show-galactic-plane') !== null),
+    showEclipticPlane: (formData.get('show-ecliptic-plane') !== null),
+    showCelestialEquator: (formData.get('show-celestial-equator') !== null)
   };
 
   let filteredStars = applyDistanceFilter(allStars, filters);
@@ -209,11 +281,14 @@ export function applyFilters(allStars) {
   filteredStars = applyOpacityFilter(filteredStars, filters);
 
   const globeFiltered = filteredStars.filter(s => s.Common_name_of_the_star !== 'Sol');
+  const mollweideFiltered = filteredStars.filter(s => s.Common_name_of_the_star !== 'Sol');
   let pairs = [];
   let globePairs = [];
+  let mollweidePairs = [];
   if (filters.enableConnections) {
     pairs = computeConnectionPairs(filteredStars, filters.connections);
     globePairs = computeConnectionPairs(globeFiltered, filters.connections);
+    mollweidePairs = computeConnectionPairs(mollweideFiltered, filters.connections);
   }
 
   applyGlobeSurfaceFilter(filters);
@@ -333,6 +408,8 @@ export function applyFilters(allStars) {
     connections: pairs,
     globeFilteredStars: globeFiltered,
     globeConnections: globePairs,
+    mollweideFilteredStars: mollweideFiltered,
+    mollweideConnections: mollweidePairs,
     showConstellationBoundaries: filters.showConstellationBoundaries,
     showConstellationNames: filters.showConstellationNames,
     showConstellationOverlay: filters.showConstellationOverlay,
@@ -350,6 +427,9 @@ export function applyFilters(allStars) {
     isolationGridSize: filters.isolationGridSize,
     densityGridSize: filters.densityGridSize,
     showClouds: filters.showClouds,
+    showGalacticPlane: filters.showGalacticPlane,
+    showEclipticPlane: filters.showEclipticPlane,
+    showCelestialEquator: filters.showCelestialEquator,
     isolationOverlay,
     densityOverlay
   };
