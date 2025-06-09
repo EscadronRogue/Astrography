@@ -13,7 +13,7 @@
 // Only this file changed. Public API and all other files are untouched.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap } from '../utils/geometryUtils.js';
 
 export class DensityGridOverlay {
   /**
@@ -238,8 +238,10 @@ export class DensityGridOverlay {
       line.visible = true;
       const p1 = cell1.mollweideMesh.position.clone();
       const p2 = cell2.mollweideMesh.position.clone();
-      const [adj1, adj2] = adjustMollweideWrap(p1, p2);
-      lineM.geometry.setFromPoints([adj1, adj2]);
+      const segs = splitMollweideWrap(p1, p2);
+      const ptsM = [];
+      segs.forEach(([s, e]) => { ptsM.push(s, e); });
+      lineM.geometry.setFromPoints(ptsM);
       lineM.visible = true;
     });
 
@@ -262,8 +264,10 @@ export class DensityGridOverlay {
     this.adjacentLines.forEach(obj => {
       const p1 = obj.cell1.mollweideMesh.position.clone();
       const p2 = obj.cell2.mollweideMesh.position.clone();
-      const [a, b] = adjustMollweideWrap(p1, p2);
-      obj.lineM.geometry.setFromPoints([a, b]);
+      const segs = splitMollweideWrap(p1, p2);
+      const pts = [];
+      segs.forEach(([s, e]) => { pts.push(s, e); });
+      obj.lineM.geometry.setFromPoints(pts);
     });
   }
 
@@ -345,10 +349,10 @@ export class DensityGridOverlay {
         const dec2 = Math.asin(b.center.y / b.center.length());
         const pM1 = cachedRadToMollweide(ra1, dec1, 100, getMollweideLambda0());
         const pM2 = cachedRadToMollweide(ra2, dec2, 100, getMollweideLambda0());
-        if (Math.abs(pM1.x - pM2.x) > 200) {
-          if (pM1.x > pM2.x) pM1.x -= 400; else pM2.x -= 400;
-        }
-        const geomM = new THREE.BufferGeometry().setFromPoints([pM1, pM2]);
+        const segsM = splitMollweideWrap(pM1, pM2);
+        const pointsM = [];
+        segsM.forEach(([s, e]) => { pointsM.push(s, e); });
+        const geomM = new THREE.BufferGeometry().setFromPoints(pointsM);
 
         const mat = new THREE.LineBasicMaterial({
           vertexColors : true,
@@ -359,7 +363,7 @@ export class DensityGridOverlay {
 
         this.adjacentLines.push({
           line  : new THREE.Line(geom, mat),
-          lineM : new THREE.Line(geomM, mat.clone()),
+          lineM : new THREE.LineSegments(geomM, mat.clone()),
           cell1 : a,
           cell2 : b
         });
