@@ -122,6 +122,8 @@ function updateMollweidePosition(star) {
   const lambda = minimalRADifference(star.raRad - getMollweideLambda0());
   if (!star.mollweidePosition) star.mollweidePosition = new THREE.Vector3();
   star.mollweidePosition.set(star.mollXFactor * lambda, star.mollY, 0);
+  star.mollweidePosition.ra = star.raRad;
+  star.mollweidePosition.dec = star.decRad;
 }
 
 function createGlobeGrid(R = 100, options = {}) {

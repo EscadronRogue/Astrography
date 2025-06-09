@@ -194,14 +194,20 @@ export function radToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda0) {
   }
   const x = (2 * R / Math.PI) * lambda * Math.cos(theta);
   const y = R * Math.sin(theta);
-  return new THREE.Vector3(x, y, 0);
+  const vec = new THREE.Vector3(x, y, 0);
+  vec.ra = ra;
+  vec.dec = dec;
+  return vec;
 }
 
 const radToMollweideCache = new Map();
 export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda0) {
   const key = `${ra}_${dec}_${R}_${lambda0}`;
   if (radToMollweideCache.has(key)) {
-    return radToMollweideCache.get(key).clone();
+    const cached = radToMollweideCache.get(key).clone();
+    cached.ra = ra;
+    cached.dec = dec;
+    return cached;
   }
   const vec = radToMollweide(ra, dec, R, lambda0);
   radToMollweideCache.set(key, vec.clone());
@@ -237,32 +243,53 @@ export function adjustMollweideWrap(p1, p2) {
 export function splitMollweideWrap(p1, p2) {
   const a = p1.clone();
   const b = p2.clone();
-  if (Math.abs(a.x - b.x) < 200) {
+  let raWrap = false;
+  if (typeof a.ra === 'number' && typeof b.ra === 'number') {
+    const twopi = 2 * Math.PI;
+    const r1 = ((a.ra - mollweideLambda0 + Math.PI) % twopi) - Math.PI;
+    const r2 = ((b.ra - mollweideLambda0 + Math.PI) % twopi) - Math.PI;
+    raWrap = Math.abs(r1 - r2) > Math.PI;
+  }
+  if (Math.abs(a.x - b.x) < 200 && !raWrap) {
     return [[a, b]];
+  }
+  let didShift = false;
+  if (Math.abs(a.x - b.x) < 200 && raWrap) {
+    if (a.x > b.x) a.x -= 400; else b.x += 400;
+    didShift = true;
   }
   let left = a, right = b;
   let swapped = false;
   if (left.x > right.x) { left = b; right = a; swapped = true; }
 
-  const shifted = right.clone();
-  shifted.x -= 400;
+  const shiftedPt = right.clone();
+  shiftedPt.x -= 400;
 
-  const dx = shifted.x - left.x;
-  const dy = shifted.y - left.y;
+  const dx = shiftedPt.x - left.x;
+  const dy = shiftedPt.y - left.y;
   const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
   const B = 2 * (left.x * dx / (200 * 200) + left.y * dy / (100 * 100));
   const C = (left.x * left.x) / (200 * 200) + (left.y * left.y) / (100 * 100) - 1;
   const disc = B * B - 4 * A * C;
-  if (disc < 0) return [[a, b]];
+  if (disc < 0) {
+    if (didShift) { if (a.x < -200) a.x += 400; if (a.x > 200) a.x -= 400; if (b.x < -200) b.x += 400; if (b.x > 200) b.x -= 400; }
+    return [[a, b]];
+  }
   const sqrtDisc = Math.sqrt(disc);
   const t1 = (-B - sqrtDisc) / (2 * A);
   const t2 = (-B + sqrtDisc) / (2 * A);
   const t = (t1 >= 0 && t1 <= 1) ? t1 : (t2 >= 0 && t2 <= 1 ? t2 : null);
-  if (t === null) return [[a, b]];
+  if (t === null) {
+    if (didShift) { if (a.x < -200) a.x += 400; if (a.x > 200) a.x -= 400; if (b.x < -200) b.x += 400; if (b.x > 200) b.x -= 400; }
+    return [[a, b]];
+  }
   const ix = left.x + dx * t;
   const iy = left.y + dy * t;
   const edgeLeft = new THREE.Vector3(ix, iy, 0);
   const edgeRight = new THREE.Vector3(-ix, iy, 0);
+  if (didShift) {
+    if (a.x < -200) a.x += 400; if (a.x > 200) a.x -= 400; if (b.x < -200) b.x += 400; if (b.x > 200) b.x -= 400;
+  }
   if (!swapped) {
     return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
   } else {
