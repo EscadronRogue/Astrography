@@ -19,10 +19,12 @@ class IsolationGridOverlay {
     this.gridSize = gridSize;
     this.cubesData = [];
     this.adjacentLines = [];
+    this.triangleMeshes = [];
     this.regionClusters = [];
     this.regionLabelsGroupTC = new THREE.Group();
     this.regionLabelsGroupGlobe = new THREE.Group();
     this.regionLabelsGroupMoll = new THREE.Group();
+    this.lineColor = 0x0000ff;
   }
 
   createGrid(stars) {
@@ -192,11 +194,65 @@ class IsolationGridOverlay {
             opacity: 0.9,
             linewidth: 5
           });
-          const lineM = new THREE.LineSegments(geomM, mollMat);
-          this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
-        }
-      });
+        const lineM = new THREE.LineSegments(geomM, mollMat);
+        this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
+      }
     });
+  });
+
+    this.computeTriangles();
+  }
+
+  computeTriangles() {
+    this.triangleMeshes = [];
+    const neighbors = new Map();
+    this.adjacentLines.forEach(obj => {
+      const a = obj.cell1.id;
+      const b = obj.cell2.id;
+      if (!neighbors.has(a)) neighbors.set(a, new Set());
+      if (!neighbors.has(b)) neighbors.set(b, new Set());
+      neighbors.get(a).add(b);
+      neighbors.get(b).add(a);
+    });
+
+    const cells = this.cubesData;
+    for (let i = 0; i < cells.length; i++) {
+      const ni = neighbors.get(cells[i].id);
+      if (!ni) continue;
+      ni.forEach(jId => {
+        if (jId <= cells[i].id) return;
+        const nj = neighbors.get(jId);
+        if (!nj) return;
+        ni.forEach(kId => {
+          if (kId <= jId) return;
+          if (nj.has(kId) && neighbors.get(kId)?.has(cells[i].id)) {
+            const c1 = cells[i];
+            const c2 = cells.find(c => c.id === jId);
+            const c3 = cells.find(c => c.id === kId);
+            const vertsG = [c1.globeMesh.position, c2.globeMesh.position, c3.globeMesh.position];
+            const gPos = [];
+            vertsG.forEach(v => { gPos.push(v.x, v.y, v.z); });
+            const geomG = new THREE.BufferGeometry();
+            geomG.setAttribute('position', new THREE.Float32BufferAttribute(gPos,3));
+            geomG.setIndex([0,1,2]);
+            geomG.computeVertexNormals();
+            const matG = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+            const meshG = new THREE.Mesh(geomG, matG);
+
+            const vertsM = [c1.mollweideMesh.position, c2.mollweideMesh.position, c3.mollweideMesh.position];
+            const mPos = [];
+            vertsM.forEach(v => { mPos.push(v.x, v.y, 0); });
+            const geomM = new THREE.BufferGeometry();
+            geomM.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
+            geomM.setIndex([0,1,2]);
+            geomM.computeVertexNormals();
+            const matM = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+            const meshM = new THREE.Mesh(geomM, matM);
+            this.triangleMeshes.push({ meshG, meshM, cell1: c1, cell2: c2, cell3: c3 });
+          }
+        });
+      });
+    }
   }
 
   // Updated update() method now accepts sceneTC, sceneGlobe, and sceneMoll to re-add new meshes.
@@ -287,6 +343,23 @@ class IsolationGridOverlay {
       }
     });
 
+    this.triangleMeshes.forEach(obj => {
+      const { meshG, meshM, cell1, cell2, cell3 } = obj;
+      const visible = cell1.active && cell2.active && cell3.active;
+      meshG.visible = visible;
+      meshM.visible = visible;
+      if (visible) {
+        const gPos = [cell1.globeMesh.position, cell2.globeMesh.position, cell3.globeMesh.position]
+          .flatMap(v => [v.x, v.y, v.z]);
+        meshG.geometry.setAttribute('position', new THREE.Float32BufferAttribute(gPos,3));
+        meshG.geometry.attributes.position.needsUpdate = true;
+        const mPos = [cell1.mollweideMesh.position, cell2.mollweideMesh.position, cell3.mollweideMesh.position]
+          .flatMap(v => [v.x, v.y, 0]);
+        meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
+        meshM.geometry.attributes.position.needsUpdate = true;
+      }
+    });
+
     // Re‑add the updated meshes to the scenes. Only the cubes are shown for
     // True Coordinates, while the Globe and Mollweide maps display just the
     // connecting lines.
@@ -299,10 +372,16 @@ class IsolationGridOverlay {
       this.adjacentLines.forEach(obj => {
         sceneGlobe.add(obj.line);
       });
+      this.triangleMeshes.forEach(obj => {
+        sceneGlobe.add(obj.meshG);
+      });
     }
     if (sceneMoll) {
       this.adjacentLines.forEach(obj => {
         sceneMoll.add(obj.lineM);
+      });
+      this.triangleMeshes.forEach(obj => {
+        sceneMoll.add(obj.meshM);
       });
     }
   }
@@ -328,6 +407,17 @@ class IsolationGridOverlay {
         segs.forEach(([s,e]) => { pts.push(s, e); });
       }
       obj.lineM.geometry.setFromPoints(pts);
+    });
+
+    this.triangleMeshes.forEach(obj => {
+      const verts = [obj.cell1.globeMesh.position, obj.cell2.globeMesh.position, obj.cell3.globeMesh.position]
+        .map(v => {
+          const { ra, dec } = vectorToRaDecRad(v, 100);
+          return radToMollweide(ra, dec, 100, lambda0);
+        });
+      const pos = verts.flatMap(v => [v.x, v.y, 0]);
+      obj.meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+      obj.meshM.geometry.attributes.position.needsUpdate = true;
     });
   }
 
