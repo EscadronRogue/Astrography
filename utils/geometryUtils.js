@@ -224,7 +224,7 @@ export function adjustMollweideWrap(p1, p2) {
 export function splitMollweideWrap(p1, p2) {
   const a = p1.clone();
   const b = p2.clone();
-  if (Math.abs(a.x - b.x) <= 200) {
+  if (Math.abs(a.x - b.x) < 200) {
     return [[a, b]];
   }
   let left = a, right = b;
@@ -249,7 +249,7 @@ export function splitMollweideWrap(p1, p2) {
   const ix = left.x + dx * t;
   const iy = left.y + dy * t;
   const edgeLeft = new THREE.Vector3(ix, iy, 0);
-  const edgeRight = new THREE.Vector3(ix + 400, iy, 0);
+  const edgeRight = new THREE.Vector3(-ix, iy, 0);
   if (!swapped) {
     return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
   } else {
