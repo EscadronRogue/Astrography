@@ -13,7 +13,7 @@
 // Only this file changed. Public API and all other files are untouched.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide } from '../utils/geometryUtils.js';
 
 export class DensityGridOverlay {
   /**
@@ -236,11 +236,16 @@ export class DensityGridOverlay {
       line.geometry.attributes.position.needsUpdate = true;
       line.geometry.attributes.color.needsUpdate    = true;
       line.visible = true;
-      const p1 = cell1.mollweideMesh.position.clone();
-      const p2 = cell2.mollweideMesh.position.clone();
-      const segs = splitMollweideWrap(p1, p2);
+      const mollPts = getGreatCirclePoints(cell1.globeMesh.position,
+                             cell2.globeMesh.position, 100, 16).map(v => {
+                               const { ra, dec } = vectorToRaDecRad(v, 100);
+                               return radToMollweide(ra, dec, 100, getMollweideLambda0());
+                             });
       const ptsM = [];
-      segs.forEach(([s, e]) => { ptsM.push(s, e); });
+      for (let mi = 0; mi < mollPts.length - 1; mi++) {
+        const segs = splitMollweideWrap(mollPts[mi], mollPts[mi + 1]);
+        segs.forEach(([s, e]) => { ptsM.push(s, e); });
+      }
       lineM.geometry.setFromPoints(ptsM);
       lineM.visible = true;
     });
@@ -262,11 +267,16 @@ export class DensityGridOverlay {
       cell.mollweideMesh.position.copy(p);
     });
     this.adjacentLines.forEach(obj => {
-      const p1 = obj.cell1.mollweideMesh.position.clone();
-      const p2 = obj.cell2.mollweideMesh.position.clone();
-      const segs = splitMollweideWrap(p1, p2);
+      const arc = getGreatCirclePoints(obj.cell1.globeMesh.position,
+                       obj.cell2.globeMesh.position, 100, 16).map(v => {
+                         const { ra, dec } = vectorToRaDecRad(v, 100);
+                         return radToMollweide(ra, dec, 100, lambda0);
+                       });
       const pts = [];
-      segs.forEach(([s, e]) => { pts.push(s, e); });
+      for (let i = 0; i < arc.length - 1; i++) {
+        const segs = splitMollweideWrap(arc[i], arc[i + 1]);
+        segs.forEach(([s, e]) => { pts.push(s, e); });
+      }
       obj.lineM.geometry.setFromPoints(pts);
     });
   }
@@ -343,15 +353,15 @@ export class DensityGridOverlay {
           new THREE.Float32BufferAttribute(pos, 3));
         geom.setAttribute('color',
           new THREE.Float32BufferAttribute(col, 3));
-        const ra1 = Math.atan2(-a.center.z, -a.center.x);
-        const dec1 = Math.asin(a.center.y / a.center.length());
-        const ra2 = Math.atan2(-b.center.z, -b.center.x);
-        const dec2 = Math.asin(b.center.y / b.center.length());
-        const pM1 = cachedRadToMollweide(ra1, dec1, 100, getMollweideLambda0());
-        const pM2 = cachedRadToMollweide(ra2, dec2, 100, getMollweideLambda0());
-        const segsM = splitMollweideWrap(pM1, pM2);
+        const arcM = pts.map(v => {
+          const { ra, dec } = vectorToRaDecRad(v, 100);
+          return radToMollweide(ra, dec, 100, getMollweideLambda0());
+        });
         const pointsM = [];
-        segsM.forEach(([s, e]) => { pointsM.push(s, e); });
+        for (let k = 0; k < arcM.length - 1; k++) {
+          const segsM = splitMollweideWrap(arcM[k], arcM[k + 1]);
+          segsM.forEach(([s, e]) => { pointsM.push(s, e); });
+        }
         const geomM = new THREE.BufferGeometry().setFromPoints(pointsM);
 
         const mat = new THREE.LineBasicMaterial({
