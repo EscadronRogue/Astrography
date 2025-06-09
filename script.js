@@ -8,6 +8,16 @@ import { initIsolationFilter, updateIsolationFilter } from './filters/isolationF
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
 import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct import
+import {
+  createGalacticPlaneMesh,
+  createEclipticPlaneMesh,
+  createGalacticPlaneGlobe,
+  createEclipticPlaneGlobe,
+  createGalacticPlaneMollweide,
+  updateGalacticPlaneMollweide,
+  createEclipticPlaneMollweide,
+  updateEclipticPlaneMollweide
+} from './filters/planesFilter.js';
 import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
@@ -35,12 +45,20 @@ let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
 let isolationOverlay = null;
 let densityOverlay = null;
+let galacticPlaneTrue = null;
+let eclipticPlaneTrue = null;
+let galacticPlaneGlobe = null;
+let eclipticPlaneGlobe = null;
+let galacticPlaneMoll = null;
+let eclipticPlaneMoll = null;
 let showConstellationBoundariesFlag = false;
 let showConstellationNamesFlag = false;
 let showConstellationOverlayFlag = false;
 let enableIsolationFilterFlag = false;
 let enableDensityFilterFlag = false;
 let showCloudsFlag = false;
+let showGalacticPlaneFlag = false;
+let showEclipticPlaneFlag = false;
 
 function getStarTruePosition(star) {
   const R = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
@@ -245,6 +263,8 @@ async function buildAndApplyFilters() {
     isolationGridSize,
     densityGridSize,
     showClouds,
+    showGalacticPlane,
+    showEclipticPlane,
     isolationOverlay: returnedIsolationOverlay,
     densityOverlay: returnedDensityOverlay
   } = filters;
@@ -255,6 +275,8 @@ async function buildAndApplyFilters() {
   enableIsolationFilterFlag = enableIsolationFilter;
   enableDensityFilterFlag = enableDensityFilter;
   showCloudsFlag = showClouds;
+  showGalacticPlaneFlag = showGalacticPlane;
+  showEclipticPlaneFlag = showEclipticPlane;
 
   // store overlay references for external refresh calls
   isolationOverlay = returnedIsolationOverlay;
@@ -320,6 +342,8 @@ async function buildAndApplyFilters() {
     updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
   }
 
+  applyPlanes(showGalacticPlane, showEclipticPlane);
+
   applyGlobeSurface(globeOpaqueSurface);
 }
 
@@ -351,6 +375,50 @@ function removeConstellationOverlayObjectsFromGlobe() {
     constellationOverlayMoll.forEach(mesh => mollweideMap.scene.remove(mesh));
   }
   constellationOverlayMoll = [];
+}
+
+function applyPlanes(showGal, showEcl) {
+  if (showGal) {
+    if (!galacticPlaneTrue) {
+      galacticPlaneTrue = createGalacticPlaneMesh(200);
+      trueCoordinatesMap.scene.add(galacticPlaneTrue);
+    }
+    if (!galacticPlaneGlobe) {
+      galacticPlaneGlobe = createGalacticPlaneGlobe(100);
+      globeMap.scene.add(galacticPlaneGlobe);
+    }
+    if (!galacticPlaneMoll) {
+      galacticPlaneMoll = createGalacticPlaneMollweide();
+      mollweideMap.scene.add(galacticPlaneMoll);
+    } else {
+      updateGalacticPlaneMollweide(galacticPlaneMoll);
+    }
+  } else {
+    if (galacticPlaneTrue) { trueCoordinatesMap.scene.remove(galacticPlaneTrue); galacticPlaneTrue.geometry.dispose(); galacticPlaneTrue.material.dispose(); galacticPlaneTrue = null; }
+    if (galacticPlaneGlobe) { globeMap.scene.remove(galacticPlaneGlobe); galacticPlaneGlobe.geometry.dispose(); galacticPlaneGlobe.material.dispose(); galacticPlaneGlobe = null; }
+    if (galacticPlaneMoll) { mollweideMap.scene.remove(galacticPlaneMoll); galacticPlaneMoll.geometry.dispose(); galacticPlaneMoll.material.dispose(); galacticPlaneMoll = null; }
+  }
+
+  if (showEcl) {
+    if (!eclipticPlaneTrue) {
+      eclipticPlaneTrue = createEclipticPlaneMesh(200);
+      trueCoordinatesMap.scene.add(eclipticPlaneTrue);
+    }
+    if (!eclipticPlaneGlobe) {
+      eclipticPlaneGlobe = createEclipticPlaneGlobe(100);
+      globeMap.scene.add(eclipticPlaneGlobe);
+    }
+    if (!eclipticPlaneMoll) {
+      eclipticPlaneMoll = createEclipticPlaneMollweide();
+      mollweideMap.scene.add(eclipticPlaneMoll);
+    } else {
+      updateEclipticPlaneMollweide(eclipticPlaneMoll);
+    }
+  } else {
+    if (eclipticPlaneTrue) { trueCoordinatesMap.scene.remove(eclipticPlaneTrue); eclipticPlaneTrue.geometry.dispose(); eclipticPlaneTrue.material.dispose(); eclipticPlaneTrue = null; }
+    if (eclipticPlaneGlobe) { globeMap.scene.remove(eclipticPlaneGlobe); eclipticPlaneGlobe.geometry.dispose(); eclipticPlaneGlobe.material.dispose(); eclipticPlaneGlobe = null; }
+    if (eclipticPlaneMoll) { mollweideMap.scene.remove(eclipticPlaneMoll); eclipticPlaneMoll.geometry.dispose(); eclipticPlaneMoll.material.dispose(); eclipticPlaneMoll = null; }
+  }
 }
 
 function applyGlobeSurface(isOpaque) {
@@ -713,6 +781,12 @@ function updateMollweideView() {
     if (typeof densityOverlay.refreshMollweide === 'function') {
       densityOverlay.refreshMollweide();
     }
+  }
+  if (showGalacticPlaneFlag && galacticPlaneMoll) {
+    updateGalacticPlaneMollweide(galacticPlaneMoll);
+  }
+  if (showEclipticPlaneFlag && eclipticPlaneMoll) {
+    updateEclipticPlaneMollweide(eclipticPlaneMoll);
   }
 }
 window.updateMollweideView = updateMollweideView;
