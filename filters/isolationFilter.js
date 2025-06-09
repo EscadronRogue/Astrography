@@ -239,9 +239,20 @@ class IsolationGridOverlay {
             const matG = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
             const meshG = new THREE.Mesh(geomG, matG);
 
-            const vertsM = [c1.mollweideMesh.position, c2.mollweideMesh.position, c3.mollweideMesh.position];
+            const vertsM = [
+              radToMollweide(c1.raRad, c1.decRad, 100, getMollweideLambda0()),
+              radToMollweide(c2.raRad, c2.decRad, 100, getMollweideLambda0()),
+              radToMollweide(c3.raRad, c3.decRad, 100, getMollweideLambda0())
+            ];
             const mPos = [];
-            vertsM.forEach(v => { mPos.push(v.x, v.y, 0); });
+            vertsM.forEach((v, idx) => {
+              if (idx > 0) {
+                const [adj] = adjustMollweideWrap(v, vertsM[idx - 1]);
+                v = adj;
+                vertsM[idx] = v;
+              }
+              mPos.push(v.x, v.y, 0);
+            });
             const geomM = new THREE.BufferGeometry();
             geomM.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
             geomM.setIndex([0,1,2]);
@@ -353,8 +364,20 @@ class IsolationGridOverlay {
           .flatMap(v => [v.x, v.y, v.z]);
         meshG.geometry.setAttribute('position', new THREE.Float32BufferAttribute(gPos,3));
         meshG.geometry.attributes.position.needsUpdate = true;
-        const mPos = [cell1.mollweideMesh.position, cell2.mollweideMesh.position, cell3.mollweideMesh.position]
-          .flatMap(v => [v.x, v.y, 0]);
+        const vertsM = [
+          radToMollweide(cell1.raRad, cell1.decRad, 100, getMollweideLambda0()),
+          radToMollweide(cell2.raRad, cell2.decRad, 100, getMollweideLambda0()),
+          radToMollweide(cell3.raRad, cell3.decRad, 100, getMollweideLambda0())
+        ];
+        const mPos = [];
+        vertsM.forEach((v, idx) => {
+          if (idx > 0) {
+            const [adj] = adjustMollweideWrap(v, vertsM[idx - 1]);
+            v = adj;
+            vertsM[idx] = v;
+          }
+          mPos.push(v.x, v.y, 0);
+        });
         meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
         meshM.geometry.attributes.position.needsUpdate = true;
       }
@@ -410,13 +433,21 @@ class IsolationGridOverlay {
     });
 
     this.triangleMeshes.forEach(obj => {
-      const verts = [obj.cell1.globeMesh.position, obj.cell2.globeMesh.position, obj.cell3.globeMesh.position]
-        .map(v => {
-          const { ra, dec } = vectorToRaDecRad(v, 100);
-          return radToMollweide(ra, dec, 100, lambda0);
-        });
-      const pos = verts.flatMap(v => [v.x, v.y, 0]);
-      obj.meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+      const verts = [
+        radToMollweide(obj.cell1.raRad, obj.cell1.decRad, 100, lambda0),
+        radToMollweide(obj.cell2.raRad, obj.cell2.decRad, 100, lambda0),
+        radToMollweide(obj.cell3.raRad, obj.cell3.decRad, 100, lambda0)
+      ];
+      const mPos = [];
+      verts.forEach((v, idx) => {
+        if (idx > 0) {
+          const [adj] = adjustMollweideWrap(v, verts[idx - 1]);
+          v = adj;
+          verts[idx] = v;
+        }
+        mPos.push(v.x, v.y, 0);
+      });
+      obj.meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
       obj.meshM.geometry.attributes.position.needsUpdate = true;
     });
   }
