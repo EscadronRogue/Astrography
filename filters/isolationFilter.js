@@ -281,6 +281,9 @@ class IsolationGridOverlay {
       });
     }
     if (sceneMoll) {
+      this.cubesData.forEach(cell => {
+        sceneMoll.add(cell.mollweideMesh);
+      });
       this.adjacentLines.forEach(obj => {
         sceneMoll.add(obj.lineM);
       });
