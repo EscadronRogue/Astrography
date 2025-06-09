@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, radToSphere } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 
 class DensityGridOverlay {
@@ -10,6 +10,8 @@ class DensityGridOverlay {
     this.cubesData = [];
     this.adjacentLines = [];
     this.maxDensity = 0;
+    this.surfaceMeshGlobe = null;
+    this.surfaceMeshMoll = null;
   }
 
   createGrid(stars) {
@@ -231,6 +233,8 @@ class DensityGridOverlay {
     if (sceneMoll) {
       this.adjacentLines.forEach(o => { sceneMoll.add(o.lineM); });
     }
+
+    this.updateSurfaceMeshes(sceneGlobe, sceneMoll);
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
@@ -256,6 +260,67 @@ class DensityGridOverlay {
       obj.lineM.geometry.setFromPoints(pts);
     });
   }
+
+  updateSurfaceMeshes(sceneGlobe, sceneMoll) {
+    if (this.surfaceMeshGlobe && sceneGlobe) sceneGlobe.remove(this.surfaceMeshGlobe);
+    if (this.surfaceMeshMoll && sceneMoll) sceneMoll.remove(this.surfaceMeshMoll);
+    this.surfaceMeshGlobe = null;
+    this.surfaceMeshMoll = null;
+
+    const active = this.cubesData.filter(c => c.active);
+    if (active.length < 3) return;
+    const pts = active.map(c => new THREE.Vector2(c.raRad, c.decRad));
+    const hull = computeConvexHull(pts);
+    if (hull.length < 3) return;
+
+    const sphereVerts = hull.map(p => radToSphere(p.x, p.y, 100));
+    const posArr = [];
+    for (let i = 1; i < sphereVerts.length - 1; i++) {
+      posArr.push(
+        sphereVerts[0].x, sphereVerts[0].y, sphereVerts[0].z,
+        sphereVerts[i].x, sphereVerts[i].y, sphereVerts[i].z,
+        sphereVerts[i + 1].x, sphereVerts[i + 1].y, sphereVerts[i + 1].z
+      );
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+    g.computeVertexNormals();
+    const m = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+    this.surfaceMeshGlobe = new THREE.Mesh(g, m);
+    if (sceneGlobe) sceneGlobe.add(this.surfaceMeshGlobe);
+
+    const hullMoll = hull.map(p => radToMollweide(p.x, p.y, 100, getMollweideLambda0()))
+      .map(v => new THREE.Vector2(v.x, v.y));
+    const shape = new THREE.Shape(hullMoll);
+    const g2 = new THREE.ShapeGeometry(shape);
+    const m2 = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.15, side: THREE.DoubleSide });
+    this.surfaceMeshMoll = new THREE.Mesh(g2, m2);
+    if (sceneMoll) sceneMoll.add(this.surfaceMeshMoll);
+  }
+}
+
+function computeConvexHull(points) {
+  if (points.length < 3) return [];
+  points.sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower = [];
+  for (const p of points) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = points.length - 1; i >= 0; i--) {
+    const p = points[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+  upper.pop();
+  lower.pop();
+  return lower.concat(upper);
 }
 
 export function initDensityFilter(minDistance, maxDistance, starArray, gridSize = 2) {

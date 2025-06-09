@@ -331,6 +331,12 @@ export function applyFilters(allStars) {
             window.mollweideMap.scene.remove(obj.lineM);
           }
         });
+        if (isolationOverlay.surfaceMeshGlobe) {
+          window.globeMap.scene.remove(isolationOverlay.surfaceMeshGlobe);
+        }
+        if (isolationOverlay.surfaceMeshMoll) {
+          window.mollweideMap.scene.remove(isolationOverlay.surfaceMeshMoll);
+        }
       }
       isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       // Add new meshes.
@@ -353,6 +359,12 @@ export function applyFilters(allStars) {
         window.globeMap.scene.remove(obj.line);
         window.mollweideMap.scene.remove(obj.lineM);
       });
+      if (isolationOverlay.surfaceMeshGlobe) {
+        window.globeMap.scene.remove(isolationOverlay.surfaceMeshGlobe);
+      }
+      if (isolationOverlay.surfaceMeshMoll) {
+        window.mollweideMap.scene.remove(isolationOverlay.surfaceMeshMoll);
+      }
       isolationOverlay = null;
     }
   }
@@ -374,6 +386,12 @@ export function applyFilters(allStars) {
           window.globeMap.scene.remove(obj.line);
           window.mollweideMap.scene.remove(obj.lineM);
         });
+        if (densityOverlay.surfaceMeshGlobe) {
+          window.globeMap.scene.remove(densityOverlay.surfaceMeshGlobe);
+        }
+        if (densityOverlay.surfaceMeshMoll) {
+          window.mollweideMap.scene.remove(densityOverlay.surfaceMeshMoll);
+        }
       }
       densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       densityOverlay.cubesData.forEach(cell => {
@@ -394,6 +412,12 @@ export function applyFilters(allStars) {
         window.globeMap.scene.remove(obj.line);
         window.mollweideMap.scene.remove(obj.lineM);
       });
+      if (densityOverlay.surfaceMeshGlobe) {
+        window.globeMap.scene.remove(densityOverlay.surfaceMeshGlobe);
+      }
+      if (densityOverlay.surfaceMeshMoll) {
+        window.mollweideMap.scene.remove(densityOverlay.surfaceMeshMoll);
+      }
       densityOverlay = null;
     }
   }
