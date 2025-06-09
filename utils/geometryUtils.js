@@ -238,37 +238,38 @@ export function adjustMollweideWrap(p1, p2) {
  * @returns {[THREE.Vector3, THREE.Vector3, THREE.Vector3]}
  */
 export function adjustMollweideTriangleWrap(p1, p2, p3) {
-  const verts = [p1.clone(), p2.clone(), p3.clone()];
-  let best = verts.map(v => v.clone());
+  const candidates = [-400, 0, 400];
+  let best = [p1.clone(), p2.clone(), p3.clone()];
   let minRange = Infinity;
-  for (let base = 0; base < 3; base++) {
-    const arr = verts.map(v => v.clone());
-    for (let i = 0; i < 3; i++) {
-      if (i === base) continue;
-      while (arr[i].x - arr[base].x > 200) arr[i].x -= 400;
-      while (arr[base].x - arr[i].x > 200) arr[i].x += 400;
-    }
-    const xs = arr.map(v => v.x);
-    const range = Math.max(...xs) - Math.min(...xs);
-    if (range < minRange) {
-      minRange = range;
-      best = arr.map(v => v.clone());
+
+  for (const s1 of candidates) {
+    for (const s2 of candidates) {
+      for (const s3 of candidates) {
+        const arr = [
+          new THREE.Vector3(p1.x + s1, p1.y, 0),
+          new THREE.Vector3(p2.x + s2, p2.y, 0),
+          new THREE.Vector3(p3.x + s3, p3.y, 0)
+        ];
+        const xs = arr.map(v => v.x);
+        const range = Math.max(...xs) - Math.min(...xs);
+        if (range < minRange) {
+          minRange = range;
+          best = arr.map(v => v.clone());
+        }
+      }
     }
   }
+
   const xs = best.map(v => v.x);
   let center = (Math.max(...xs) + Math.min(...xs)) / 2;
-  while (center > 200) {
-    best.forEach(v => { v.x -= 400; });
-    center -= 400;
-  }
-  while (center < -200) {
-    best.forEach(v => { v.x += 400; });
-    center += 400;
-  }
+  const shift = Math.round(center / 400);
+  best.forEach(v => { v.x -= shift * 400; });
+
   best.forEach(v => {
     while (v.x > 200) v.x -= 400;
     while (v.x < -200) v.x += 400;
   });
+
   return best;
 }
 
