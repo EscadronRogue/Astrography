@@ -259,7 +259,6 @@ export function applyFilters(allStars) {
       // Add new meshes.
       isolationOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.add(cell.tcMesh);
-        window.mollweideMap.scene.add(cell.mollweideMesh);
       });
       isolationOverlay.adjacentLines.forEach(obj => {
         window.globeMap.scene.add(obj.line);
