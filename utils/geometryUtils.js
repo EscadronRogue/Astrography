@@ -227,36 +227,36 @@ export function splitMollweideWrap(p1, p2) {
   if (Math.abs(a.x - b.x) <= 200) {
     return [[a, b]];
   }
-
-  let left = a,
-    right = b,
-    swapped = false;
+  let left = a.clone();
+  let right = b.clone();
+  let swapped = false;
   if (left.x > right.x) {
-    left = b;
-    right = a;
+    left = b.clone();
+    right = a.clone();
     swapped = true;
   }
 
-  const iLeft = lineEllipseIntersection(
-    left,
-    new THREE.Vector3(right.x - 400, right.y, right.z)
-  );
-  const iRight = lineEllipseIntersection(
-    right,
-    new THREE.Vector3(left.x + 400, left.y, left.z)
-  );
+  // Shift the right point to the left side of the map to compute the
+  // boundary intersection. This keeps the line collinear with the
+  // wrapped segment.
+  const shifted = right.clone();
+  shifted.x -= 400;
 
-  if (!iLeft || !iRight) return [[a, b]];
+  const edgeLeft = lineEllipseIntersection(left, shifted);
+  if (!edgeLeft) return [[a, b]];
+
+  const edgeRight = edgeLeft.clone();
+  edgeRight.x += 400;
 
   if (!swapped) {
     return [
-      [left.clone(), iLeft],
-      [iRight, right.clone()]
+      [left, edgeLeft],
+      [edgeRight, right]
     ];
   } else {
     return [
-      [left.clone(), iRight],
-      [iLeft, right.clone()]
+      [left, edgeRight],
+      [edgeLeft, right]
     ];
   }
 }
