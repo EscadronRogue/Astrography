@@ -12,18 +12,34 @@ const lOmega  = 32.93192 * DEG2RAD;
 // Obliquity of the ecliptic
 const epsilon = 23.43928 * DEG2RAD;
 
+// J2000 Galactic -> Equatorial rotation matrix (IAU, transpose of equatorial
+// to galactic matrix)
+const GAL_TO_EQ_MATRIX = [
+  [-0.0548755604162154, 0.4941094278755837, -0.8676661490190047],
+  [-0.8734370902348850, -0.4448296299600112, -0.1980763734312015],
+  [-0.4838350155487132, 0.7469822444972189, 0.4559837761750669]
+];
+
 function galacticToEquatorial(l, b) {
-  const sinb = Math.sin(b);
   const cosb = Math.cos(b);
-  const sinl = Math.sin(l - lOmega);
-  const cosl = Math.cos(l - lOmega);
-  const sinDec = sinb * Math.cos(deltaGP) + cosb * Math.sin(deltaGP) * cosl;
-  const dec = Math.asin(sinDec);
-  const y = sinl * cosb;
-  const x = cosb * cosl * Math.cos(deltaGP) - sinb * Math.sin(deltaGP);
-  let ra = Math.atan2(y, x) + alphaGP;
+  const vx = cosb * Math.cos(l);
+  const vy = cosb * Math.sin(l);
+  const vz = Math.sin(b);
+  const eqx =
+    GAL_TO_EQ_MATRIX[0][0] * vx +
+    GAL_TO_EQ_MATRIX[0][1] * vy +
+    GAL_TO_EQ_MATRIX[0][2] * vz;
+  const eqy =
+    GAL_TO_EQ_MATRIX[1][0] * vx +
+    GAL_TO_EQ_MATRIX[1][1] * vy +
+    GAL_TO_EQ_MATRIX[1][2] * vz;
+  const eqz =
+    GAL_TO_EQ_MATRIX[2][0] * vx +
+    GAL_TO_EQ_MATRIX[2][1] * vy +
+    GAL_TO_EQ_MATRIX[2][2] * vz;
+  let ra = Math.atan2(eqy, eqx);
   if (ra < 0) ra += 2 * Math.PI;
-  if (ra > 2 * Math.PI) ra -= 2 * Math.PI;
+  const dec = Math.asin(eqz);
   return { ra, dec };
 }
 
