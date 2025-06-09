@@ -10,6 +10,7 @@ class DensityGridOverlay {
     this.cubesData = [];
     this.adjacentLines = [];
     this.maxDensity = 0;
+    this.minDensity = 0;
   }
 
   createGrid(stars) {
@@ -159,9 +160,16 @@ class DensityGridOverlay {
             segsM.forEach(([s,e]) => { pointsM.push(s, e); });
           }
           const geomM = new THREE.BufferGeometry().setFromPoints(pointsM);
+          const c1 = cell.tcMesh.material.color;
+          const c2 = neighbor.tcMesh.material.color;
+          const avgColor = new THREE.Color(
+            (c1.r + c2.r) / 2,
+            (c1.g + c2.g) / 2,
+            (c1.b + c2.b) / 2
+          );
           for (let i = 0; i < points.length; i++) {
             positions.push(points[i].x, points[i].y, points[i].z);
-            colors.push(1, 0, 0);
+            colors.push(avgColor.r, avgColor.g, avgColor.b);
           }
           const geom = new THREE.BufferGeometry();
           geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -175,7 +183,7 @@ class DensityGridOverlay {
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
           const mollMat = new THREE.LineBasicMaterial({
-            color: 0xff0000,
+            color: avgColor,
             transparent: true,
             opacity: 0.9,
             linewidth: 5
@@ -203,13 +211,17 @@ class DensityGridOverlay {
     });
 
     this.maxDensity = this.cubesData.reduce((m, c) => Math.max(m, c.density), 0);
+    this.minDensity = this.cubesData.reduce((m, c) => Math.min(m, c.density), Infinity);
 
     this.cubesData.forEach(cell => {
       const pct = this.maxDensity > 0 ? cell.density / this.maxDensity : 0;
       const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       cell.active = pct >= 0.25;
-      const alpha = 0.5 * pct;
+      let alpha = 0;
+      if (this.maxDensity > this.minDensity) {
+        alpha = 0.5 * ((cell.density - this.minDensity) / (this.maxDensity - this.minDensity));
+      }
       cell.tcMesh.material.opacity = alpha;
       cell.globeMesh.material.opacity = alpha;
       cell.mollweideMesh.material.opacity = alpha;
