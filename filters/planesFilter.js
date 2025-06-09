@@ -12,18 +12,34 @@ const lOmega  = 32.93192 * DEG2RAD;
 // Obliquity of the ecliptic
 const epsilon = 23.43928 * DEG2RAD;
 
+// J2000 Galactic -> Equatorial rotation matrix (IAU, transpose of equatorial
+// to galactic matrix)
+const GAL_TO_EQ_MATRIX = [
+  [-0.0548755604162154, 0.4941094278755837, -0.8676661490190047],
+  [-0.8734370902348850, -0.4448296299600112, -0.1980763734312015],
+  [-0.4838350155487132, 0.7469822444972189, 0.4559837761750669]
+];
+
 function galacticToEquatorial(l, b) {
-  const sinb = Math.sin(b);
   const cosb = Math.cos(b);
-  const sinl = Math.sin(l - lOmega);
-  const cosl = Math.cos(l - lOmega);
-  const sinDec = sinb * Math.cos(deltaGP) + cosb * Math.sin(deltaGP) * cosl;
-  const dec = Math.asin(sinDec);
-  const y = sinl * cosb;
-  const x = cosb * cosl * Math.cos(deltaGP) - sinb * Math.sin(deltaGP);
-  let ra = Math.atan2(y, x) + alphaGP;
+  const vx = cosb * Math.cos(l);
+  const vy = cosb * Math.sin(l);
+  const vz = Math.sin(b);
+  const eqx =
+    GAL_TO_EQ_MATRIX[0][0] * vx +
+    GAL_TO_EQ_MATRIX[0][1] * vy +
+    GAL_TO_EQ_MATRIX[0][2] * vz;
+  const eqy =
+    GAL_TO_EQ_MATRIX[1][0] * vx +
+    GAL_TO_EQ_MATRIX[1][1] * vy +
+    GAL_TO_EQ_MATRIX[1][2] * vz;
+  const eqz =
+    GAL_TO_EQ_MATRIX[2][0] * vx +
+    GAL_TO_EQ_MATRIX[2][1] * vy +
+    GAL_TO_EQ_MATRIX[2][2] * vz;
+  let ra = Math.atan2(eqy, eqx);
   if (ra < 0) ra += 2 * Math.PI;
-  if (ra > 2 * Math.PI) ra -= 2 * Math.PI;
+  const dec = Math.asin(eqz);
   return { ra, dec };
 }
 
@@ -34,7 +50,7 @@ function eclipticToEquatorial(lambda, beta = 0) {
   const cosL = Math.cos(lambda);
   const sinDec = sinB * Math.cos(epsilon) + cosB * Math.sin(epsilon) * sinL;
   const dec = Math.asin(sinDec);
-  const y = sinL * Math.cos(epsilon) - sinB * Math.sin(epsilon) * cosL / cosB;
+  const y = sinL * Math.cos(epsilon) - (sinB / cosB) * Math.sin(epsilon);
   const x = cosL;
   let ra = Math.atan2(y, x);
   if (ra < 0) ra += 2 * Math.PI;
@@ -42,12 +58,30 @@ function eclipticToEquatorial(lambda, beta = 0) {
 }
 
 export function createGalacticPlaneMesh(size = 250) {
-  const geom = new THREE.PlaneGeometry(size, size);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.2, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-  const mesh = new THREE.Mesh(geom, mat);
-  const pole = radToSphere(alphaGP, deltaGP, 1);
-  mesh.lookAt(pole);
-  return mesh;
+  const half = size / 2;
+  const dirs = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].map(l => {
+    const { ra, dec } = galacticToEquatorial(l, 0);
+    return radToSphere(ra, dec, half);
+  });
+  const positions = [
+    dirs[0].x, dirs[0].y, dirs[0].z,
+    dirs[1].x, dirs[1].y, dirs[1].z,
+    dirs[2].x, dirs[2].y, dirs[2].z,
+    dirs[2].x, dirs[2].y, dirs[2].z,
+    dirs[3].x, dirs[3].y, dirs[3].z,
+    dirs[0].x, dirs[0].y, dirs[0].z
+  ];
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.computeVertexNormals();
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    opacity: 0.2,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false
+  });
+  return new THREE.Mesh(geom, mat);
 }
 
 export function createEclipticPlaneMesh(size = 250) {
@@ -205,4 +239,127 @@ export function updateCelestialEquatorMollweide(line) {
   geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   line.geometry.dispose();
   line.geometry = geom;
+}
+
+function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = `${fontSize}px Arial`;
+  const textWidth = ctx.measureText(text).width;
+  canvas.width = textWidth + 20;
+  canvas.height = fontSize * 1.2;
+  ctx.font = `${fontSize}px Arial`;
+  ctx.fillStyle = color;
+  ctx.fillText(text, 10, fontSize);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
+  return sprite;
+}
+
+function createTextPlane(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  ctx.font = `${fontSize}px Arial`;
+  const textWidth = ctx.measureText(text).width;
+  canvas.width = textWidth + 20;
+  canvas.height = fontSize * 1.2;
+  ctx.font = `${fontSize}px Arial`;
+  ctx.fillStyle = color;
+  ctx.fillText(text, 10, fontSize);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const material = new THREE.ShaderMaterial({
+    uniforms: { map: { value: texture }, opacity: { value: opacity } },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform sampler2D map;
+      uniform float opacity;
+      varying vec2 vUv;
+      void main() {
+        vec2 uvCorrected = gl_FrontFacing ? vUv : vec2(1.0 - vUv.x, vUv.y);
+        vec4 color = texture2D(map, uvCorrected);
+        gl_FragColor = vec4(color.rgb, color.a * opacity);
+      }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide
+  });
+  const plane = new THREE.Mesh(
+    new THREE.PlaneGeometry(canvas.width / 100, canvas.height / 100),
+    material
+  );
+  plane.renderOrder = 1;
+  return plane;
+}
+
+function galacticDirectionData() {
+  return [
+    { l: 0, label: 'Galactic Center' },
+    { l: Math.PI, label: 'Galactic Anticenter' },
+    { l: Math.PI / 2, label: 'Galactic Rotation' },
+    { l: 3 * Math.PI / 2, label: 'Galactic Anti-Rotation' }
+  ];
+}
+
+export function createGalacticDirectionLabelsTrue(R = 100) {
+  const labels = [];
+  galacticDirectionData().forEach(d => {
+    const eq = galacticToEquatorial(d.l, 0);
+    const pos = radToSphere(eq.ra, eq.dec, R);
+    const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
+    sprite.position.copy(pos);
+    labels.push(sprite);
+  });
+  return labels;
+}
+
+export function createGalacticDirectionLabelsGlobe(R = 102) {
+  const labels = [];
+  galacticDirectionData().forEach(d => {
+    const eq = galacticToEquatorial(d.l, 0);
+    const pos = radToSphere(eq.ra, eq.dec, R);
+    const mesh = createTextPlane(d.label, '#ffffff', 0.8, 450);
+    mesh.position.copy(pos);
+    const normal = pos.clone().normalize();
+    const globalUp = new THREE.Vector3(0, 1, 0);
+    let desiredUp = globalUp.clone().sub(normal.clone().multiplyScalar(globalUp.dot(normal)));
+    if (desiredUp.lengthSq() < 1e-6) desiredUp = new THREE.Vector3(0, 0, 1); else desiredUp.normalize();
+    const desiredRight = new THREE.Vector3().crossVectors(desiredUp, normal).normalize();
+    const matrix = new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal);
+    mesh.setRotationFromMatrix(matrix);
+    labels.push(mesh);
+  });
+  return labels;
+}
+
+export function createGalacticDirectionLabelsMollweide(R = 100) {
+  const lambda0 = getMollweideLambda0();
+  const labels = [];
+  galacticDirectionData().forEach(d => {
+    const eq = galacticToEquatorial(d.l, 0);
+    const p = radToMollweide(eq.ra, eq.dec, R, lambda0);
+    const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
+    sprite.position.set(p.x, p.y, 0);
+    labels.push(sprite);
+  });
+  return labels;
+}
+
+export function updateGalacticDirectionLabelsMollweide(labels, R = 100) {
+  const lambda0 = getMollweideLambda0();
+  const data = galacticDirectionData();
+  labels.forEach((sprite, i) => {
+    const eq = galacticToEquatorial(data[i].l, 0);
+    const p = radToMollweide(eq.ra, eq.dec, R, lambda0);
+    sprite.position.set(p.x, p.y, 0);
+  });
 }

@@ -99,7 +99,9 @@ export function createConstellationBoundariesForGlobe() {
       color: 0x888888,
       dashSize: 2,
       gapSize: 1,
-      linewidth: 1
+      linewidth: 1,
+      transparent: true,
+      opacity: 0.4
     });
     const line = new THREE.Line(geometry, material);
     line.computeLineDistances();
@@ -114,7 +116,9 @@ export function createConstellationBoundariesForMollweide() {
     color: 0x888888,
     dashSize: 2,
     gapSize: 1,
-    linewidth: 1
+    linewidth: 1,
+    transparent: true,
+    opacity: 0.4
   });
   const maxSegments = boundaryData.length * 32; // 16 segments per boundary, each may wrap
   const positions = new Float32Array(maxSegments * 2 * 3); // 2 vertices per segment

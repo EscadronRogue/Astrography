@@ -73,7 +73,9 @@ export class LabelManager {
       if (lineObj) this.scene.remove(lineObj);
 
       // Create the canvas-based label texture
-      const baseFontSize = (this.mapType === 'Globe' ? 64 : 24);
+      const baseFontSize = (this.mapType === 'Globe'
+        ? 64
+        : (this.mapType === 'Mollweide' ? 72 : 24));
       const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
       const fontSize = baseFontSize * scaleFactor;
 

@@ -20,7 +20,11 @@ import {
   createEclipticPlaneMollweide,
   updateEclipticPlaneMollweide,
   createCelestialEquatorMollweide,
-  updateCelestialEquatorMollweide
+  updateCelestialEquatorMollweide,
+  createGalacticDirectionLabelsGlobe,
+  createGalacticDirectionLabelsMollweide,
+  updateGalacticDirectionLabelsMollweide,
+  createGalacticDirectionLabelsTrue
 } from './filters/planesFilter.js';
 import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
@@ -60,6 +64,9 @@ let celestialEquatorGlobe = null;
 let galacticPlaneMoll = null;
 let eclipticPlaneMoll = null;
 let celestialEquatorMoll = null;
+let galacticDirectionLabelsTrue = [];
+let galacticDirectionLabelsGlobe = [];
+let galacticDirectionLabelsMoll = [];
 let showConstellationBoundariesFlag = false;
 let showConstellationNamesFlag = false;
 let showConstellationOverlayFlag = false;
@@ -411,10 +418,30 @@ function applyPlanes(showGal, showEcl, showEq) {
     } else {
       updateGalacticPlaneMollweide(galacticPlaneMoll);
     }
+    if (galacticDirectionLabelsTrue.length === 0) {
+      galacticDirectionLabelsTrue = createGalacticDirectionLabelsTrue();
+      galacticDirectionLabelsTrue.forEach(lbl => trueCoordinatesMap.scene.add(lbl));
+    }
+    if (galacticDirectionLabelsGlobe.length === 0) {
+      galacticDirectionLabelsGlobe = createGalacticDirectionLabelsGlobe();
+      galacticDirectionLabelsGlobe.forEach(lbl => globeMap.scene.add(lbl));
+    }
+    if (galacticDirectionLabelsMoll.length === 0) {
+      galacticDirectionLabelsMoll = createGalacticDirectionLabelsMollweide();
+      galacticDirectionLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
+    } else {
+      updateGalacticDirectionLabelsMollweide(galacticDirectionLabelsMoll);
+    }
   } else {
     if (galacticPlaneTrue) { trueCoordinatesMap.scene.remove(galacticPlaneTrue); galacticPlaneTrue.geometry.dispose(); galacticPlaneTrue.material.dispose(); galacticPlaneTrue = null; }
     if (galacticPlaneGlobe) { globeMap.scene.remove(galacticPlaneGlobe); galacticPlaneGlobe.geometry.dispose(); galacticPlaneGlobe.material.dispose(); galacticPlaneGlobe = null; }
     if (galacticPlaneMoll) { mollweideMap.scene.remove(galacticPlaneMoll); galacticPlaneMoll.geometry.dispose(); galacticPlaneMoll.material.dispose(); galacticPlaneMoll = null; }
+    galacticDirectionLabelsTrue.forEach(lbl => trueCoordinatesMap.scene.remove(lbl));
+    galacticDirectionLabelsTrue = [];
+    galacticDirectionLabelsGlobe.forEach(lbl => globeMap.scene.remove(lbl));
+    galacticDirectionLabelsGlobe = [];
+    galacticDirectionLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
+    galacticDirectionLabelsMoll = [];
   }
 
   if (showEcl) {
@@ -823,6 +850,9 @@ function updateMollweideView() {
   }
   if (showGalacticPlaneFlag && galacticPlaneMoll) {
     updateGalacticPlaneMollweide(galacticPlaneMoll);
+    if (galacticDirectionLabelsMoll.length > 0) {
+      updateGalacticDirectionLabelsMollweide(galacticDirectionLabelsMoll);
+    }
   }
   if (showEclipticPlaneFlag && eclipticPlaneMoll) {
     updateEclipticPlaneMollweide(eclipticPlaneMoll);
