@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, adjustMollweideTriangleWrap } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, createSphericalTriangleGeometry, createMollweideTriangleGeometry } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 
 class DensityGridOverlay {
@@ -217,28 +217,12 @@ class DensityGridOverlay {
             const c1 = cells[i];
             const c2 = cells.find(c => c.id === jId);
             const c3 = cells.find(c => c.id === kId);
-            const vertsG = [c1.globeMesh.position, c2.globeMesh.position, c3.globeMesh.position];
-            const gPos = [];
-            vertsG.forEach(v => { gPos.push(v.x, v.y, v.z); });
-            const geomG = new THREE.BufferGeometry();
-            geomG.setAttribute('position', new THREE.Float32BufferAttribute(gPos,3));
-            geomG.setIndex([0,1,2]);
-            geomG.computeVertexNormals();
-            const matG = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+            const geomG = createSphericalTriangleGeometry(c1.globeMesh.position, c2.globeMesh.position, c3.globeMesh.position, 2, 100);
+            const matG = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.3, side: THREE.DoubleSide, blending: THREE.NoBlending, depthWrite: false });
             const meshG = new THREE.Mesh(geomG, matG);
 
-            const vertsM = [
-              radToMollweide(c1.raRad, c1.decRad, 100, getMollweideLambda0()),
-              radToMollweide(c2.raRad, c2.decRad, 100, getMollweideLambda0()),
-              radToMollweide(c3.raRad, c3.decRad, 100, getMollweideLambda0())
-            ];
-            const [a1,a2,a3] = adjustMollweideTriangleWrap(vertsM[0], vertsM[1], vertsM[2]);
-            const mPos = [a1,a2,a3].flatMap(v => [v.x, v.y, 0]);
-            const geomM = new THREE.BufferGeometry();
-            geomM.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
-            geomM.setIndex([0,1,2]);
-            geomM.computeVertexNormals();
-            const matM = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+            const geomM = createMollweideTriangleGeometry(c1.globeMesh.position, c2.globeMesh.position, c3.globeMesh.position, getMollweideLambda0(), 16);
+            const matM = new THREE.MeshBasicMaterial({ color: this.lineColor, transparent: true, opacity: 0.9, side: THREE.DoubleSide, blending: THREE.NoBlending, depthWrite: false });
             const meshM = new THREE.Mesh(geomM, matM);
             this.triangleMeshes.push({ meshG, meshM, cell1: c1, cell2: c2, cell3: c3 });
           }
@@ -289,19 +273,10 @@ class DensityGridOverlay {
       meshG.visible = visible;
       meshM.visible = visible;
       if (visible) {
-        const gPos = [cell1.globeMesh.position, cell2.globeMesh.position, cell3.globeMesh.position]
-          .flatMap(v => [v.x, v.y, v.z]);
-        meshG.geometry.setAttribute('position', new THREE.Float32BufferAttribute(gPos,3));
-        meshG.geometry.attributes.position.needsUpdate = true;
-        const vertsM = [
-          radToMollweide(cell1.raRad, cell1.decRad, 100, getMollweideLambda0()),
-          radToMollweide(cell2.raRad, cell2.decRad, 100, getMollweideLambda0()),
-          radToMollweide(cell3.raRad, cell3.decRad, 100, getMollweideLambda0())
-        ];
-        const [a1,a2,a3] = adjustMollweideTriangleWrap(vertsM[0], vertsM[1], vertsM[2]);
-        const mPos = [a1,a2,a3].flatMap(v => [v.x, v.y, 0]);
-        meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
-        meshM.geometry.attributes.position.needsUpdate = true;
+        meshG.geometry.dispose();
+        meshM.geometry.dispose();
+        meshG.geometry = createSphericalTriangleGeometry(cell1.globeMesh.position, cell2.globeMesh.position, cell3.globeMesh.position, 2, 100);
+        meshM.geometry = createMollweideTriangleGeometry(cell1.globeMesh.position, cell2.globeMesh.position, cell3.globeMesh.position, getMollweideLambda0(), 16);
       }
     });
     if (sceneTC) {
@@ -341,15 +316,8 @@ class DensityGridOverlay {
     });
 
     this.triangleMeshes.forEach(obj => {
-      const verts = [
-        radToMollweide(obj.cell1.raRad, obj.cell1.decRad, 100, lambda0),
-        radToMollweide(obj.cell2.raRad, obj.cell2.decRad, 100, lambda0),
-        radToMollweide(obj.cell3.raRad, obj.cell3.decRad, 100, lambda0)
-      ];
-      const [a1,a2,a3] = adjustMollweideTriangleWrap(verts[0], verts[1], verts[2]);
-      const mPos = [a1,a2,a3].flatMap(v => [v.x, v.y, 0]);
-      obj.meshM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(mPos,3));
-      obj.meshM.geometry.attributes.position.needsUpdate = true;
+      obj.meshM.geometry.dispose();
+      obj.meshM.geometry = createMollweideTriangleGeometry(obj.cell1.globeMesh.position, obj.cell2.globeMesh.position, obj.cell3.globeMesh.position, lambda0, 16);
     });
   }
 }

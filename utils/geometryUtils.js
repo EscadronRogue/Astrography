@@ -331,3 +331,65 @@ export function greatCircleToMollweide(p1, p2, R = 100, segments = 32, lambda0 =
     return radToMollweide(ra, dec, R, lambda0);
   });
 }
+
+/**
+ * Creates a curved triangular patch on the sphere by subdividing a basic
+ * triangle whose vertices lie on the sphere surface.
+ * @param {THREE.Vector3} v1
+ * @param {THREE.Vector3} v2
+ * @param {THREE.Vector3} v3
+ * @param {number} [subdivisions=2]
+ * @param {number} [R=100]
+ * @returns {THREE.BufferGeometry}
+ */
+export function createSphericalTriangleGeometry(v1, v2, v3, subdivisions = 2, R = 100) {
+  const positions = [v1, v2, v3].flatMap(v => {
+    const p = v.clone().normalize().multiplyScalar(R);
+    return [p.x, p.y, p.z];
+  });
+  let geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setIndex([0, 1, 2]);
+  geom.computeVertexNormals();
+  geom = subdivideGeometry(geom, subdivisions);
+  return geom;
+}
+
+/**
+ * Generates a Mollweide-projected curved triangle by sampling the spherical
+ * surface and splitting segments that cross the wrap boundary.
+ * @param {THREE.Vector3} v1
+ * @param {THREE.Vector3} v2
+ * @param {THREE.Vector3} v3
+ * @param {number} [lambda0=mollweideLambda0]
+ * @param {number} [segments=16]
+ * @returns {THREE.BufferGeometry}
+ */
+export function createMollweideTriangleGeometry(v1, v2, v3, lambda0 = mollweideLambda0, segments = 16) {
+  const arcs = [
+    greatCircleToMollweide(v1, v2, 100, segments, lambda0),
+    greatCircleToMollweide(v2, v3, 100, segments, lambda0),
+    greatCircleToMollweide(v3, v1, 100, segments, lambda0)
+  ];
+  const boundary = [];
+  boundary.push(...arcs[0].slice(0, -1));
+  boundary.push(...arcs[1].slice(0, -1));
+  boundary.push(...arcs[2].slice(0, -1));
+  const center = new THREE.Vector3().addVectors(v1, v2).add(v3).normalize();
+  const { ra, dec } = vectorToRaDecRad(center, 1);
+  const centerM = radToMollweide(ra, dec, 100, lambda0);
+  const positions = [];
+  for (let i = 0; i < boundary.length; i++) {
+    const next = (i + 1) % boundary.length;
+    const segs = splitMollweideWrap(boundary[i], boundary[next]);
+    segs.forEach(([s, e]) => {
+      positions.push(centerM.x, centerM.y, 0);
+      positions.push(s.x, s.y, 0);
+      positions.push(e.x, e.y, 0);
+    });
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.computeVertexNormals();
+  return geom;
+}
