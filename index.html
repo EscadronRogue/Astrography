@@ -166,13 +166,25 @@
             </div>
             <div class="filter-item">
               <label for="density-slider">Density Radius (LY):</label>
-              <input type="range" id="density-slider" name="density" min="1" max="20" value="5" disabled />
-              <input type="number" id="density-number" name="density" min="1" max="20" value="5" disabled />
-              <span id="density-value">5</span> LY
+              <input type="range" id="density-slider" name="density" min="1" max="20" value="10" disabled />
+              <input type="number" id="density-number" name="density" min="1" max="20" value="10" disabled />
+              <span id="density-value">10</span> LY
             </div>
             <div class="filter-item">
               <label>Ignore this many closest stars: <span id="density-tolerance-value">0</span></label>
               <input type="range" id="density-tolerance-slider" name="density-tolerance" min="0" max="10" value="0" disabled />
+            </div>
+            <div class="filter-item">
+              <label for="density-bottom-slider">Bottom Cells %:</label>
+              <input type="range" id="density-bottom-slider" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
+              <input type="number" id="density-bottom-number" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
+              <span id="density-bottom-value">10</span>%
+            </div>
+            <div class="filter-item">
+              <label for="density-top-slider">Top Cells %:</label>
+              <input type="range" id="density-top-slider" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
+              <input type="number" id="density-top-number" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
+              <span id="density-top-value">10</span>%
             </div>
             <div class="filter-item">
               <input type="checkbox" id="enable-density-labeling" name="enable-density-labeling" />
