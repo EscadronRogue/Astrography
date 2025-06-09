@@ -86,7 +86,7 @@ export function createGalacticPlaneGlobe(R = 100, segments = 180) {
     const { ra, dec } = galacticToEquatorial(l, 0);
     pts.push(radToSphere(ra, dec, R));
   }
-  return createGreatCircleLine(pts, 0xffffff, 12);
+  return createGreatCircleLine(pts, 0xffffff, 20);
 }
 
 export function createEclipticPlaneGlobe(R = 100, segments = 180) {
@@ -96,7 +96,7 @@ export function createEclipticPlaneGlobe(R = 100, segments = 180) {
     const { ra, dec } = eclipticToEquatorial(lam, 0);
     pts.push(radToSphere(ra, dec, R));
   }
-  return createGreatCircleLine(pts, 0xffff00, 6);
+  return createGreatCircleLine(pts, 0xffff00, 10);
 }
 
 export function createCelestialEquatorGlobe(R = 100, segments = 180) {
@@ -106,13 +106,13 @@ export function createCelestialEquatorGlobe(R = 100, segments = 180) {
     const dec = 0;
     pts.push(radToSphere(ra, dec, R));
   }
-  return createGreatCircleLine(pts, 0xff0000, 6);
+  return createGreatCircleLine(pts, 0xff0000, 10);
 }
 
 export function createGalacticPlaneMollweide(segments = 180) {
   const line = new THREE.LineSegments(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 12, transparent: true, opacity: 0.5 })
+    new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 20, transparent: true, opacity: 0.5 })
   );
   line.userData.segments = segments;
   updateGalacticPlaneMollweide(line);
@@ -145,7 +145,7 @@ export function updateGalacticPlaneMollweide(line) {
 export function createEclipticPlaneMollweide(segments = 180) {
   const line = new THREE.LineSegments(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 6, transparent: true, opacity: 0.5 })
+    new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 10, transparent: true, opacity: 0.5 })
   );
   line.userData.segments = segments;
   updateEclipticPlaneMollweide(line);
@@ -155,7 +155,7 @@ export function createEclipticPlaneMollweide(segments = 180) {
 export function createCelestialEquatorMollweide(segments = 180) {
   const line = new THREE.LineSegments(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 6, transparent: true, opacity: 0.5 })
+    new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 10, transparent: true, opacity: 0.5 })
   );
   line.userData.segments = segments;
   updateCelestialEquatorMollweide(line);

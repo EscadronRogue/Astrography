@@ -219,6 +219,8 @@ export function applyFilters(allStars) {
         connections: [],
         globeFilteredStars: allStars,
         globeConnections: [],
+        mollweideFilteredStars: allStars,
+        mollweideConnections: [],
         showConstellationBoundaries: false,
         showConstellationNames: false,
         showConstellationOverlay: false,
@@ -279,11 +281,14 @@ export function applyFilters(allStars) {
   filteredStars = applyOpacityFilter(filteredStars, filters);
 
   const globeFiltered = filteredStars.filter(s => s.Common_name_of_the_star !== 'Sol');
+  const mollweideFiltered = filteredStars.filter(s => s.Common_name_of_the_star !== 'Sol');
   let pairs = [];
   let globePairs = [];
+  let mollweidePairs = [];
   if (filters.enableConnections) {
     pairs = computeConnectionPairs(filteredStars, filters.connections);
     globePairs = computeConnectionPairs(globeFiltered, filters.connections);
+    mollweidePairs = computeConnectionPairs(mollweideFiltered, filters.connections);
   }
 
   applyGlobeSurfaceFilter(filters);
@@ -403,6 +408,8 @@ export function applyFilters(allStars) {
     connections: pairs,
     globeFilteredStars: globeFiltered,
     globeConnections: globePairs,
+    mollweideFilteredStars: mollweideFiltered,
+    mollweideConnections: mollweidePairs,
     showConstellationBoundaries: filters.showConstellationBoundaries,
     showConstellationNames: filters.showConstellationNames,
     showConstellationOverlay: filters.showConstellationOverlay,

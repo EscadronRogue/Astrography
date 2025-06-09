@@ -33,6 +33,8 @@ let currentFilteredStars = [];
 let currentConnections = [];
 let currentGlobeFilteredStars = [];
 let currentGlobeConnections = [];
+let currentMollweideFilteredStars = [];
+let currentMollweideConnections = [];
 let selectedStarData = null;
 let selectedHighlightTrue = null;
 let selectedHighlightGlobe = null;
@@ -254,6 +256,8 @@ async function buildAndApplyFilters() {
     connections,
     globeFilteredStars,
     globeConnections,
+    mollweideFilteredStars,
+    mollweideConnections,
     showConstellationBoundaries,
     showConstellationNames,
     showConstellationOverlay,
@@ -296,12 +300,16 @@ async function buildAndApplyFilters() {
   currentConnections = connections;
   currentGlobeFilteredStars = globeFilteredStars;
   currentGlobeConnections = globeConnections;
+  currentMollweideFilteredStars = mollweideFilteredStars;
+  currentMollweideConnections = mollweideConnections;
 
   currentGlobeFilteredStars.forEach(star => {
     star.spherePosition = projectStarGlobe(star);
   });
   currentFilteredStars.forEach(star => {
     star.truePosition = getStarTruePosition(star);
+  });
+  currentMollweideFilteredStars.forEach(star => {
     precalcMollweideData(star);
     updateMollweidePosition(star);
   });
@@ -310,10 +318,10 @@ async function buildAndApplyFilters() {
   trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
   globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
   globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
-  mollweideMap.addStars(currentFilteredStars);
-  mollweideMap.updateStarPositions(currentFilteredStars);
-  mollweideMap.updateConnections(currentFilteredStars, currentConnections);
-  mollweideMap.labelManager.refreshLabels(currentFilteredStars);
+  mollweideMap.addStars(currentMollweideFilteredStars);
+  mollweideMap.updateStarPositions(currentMollweideFilteredStars);
+  mollweideMap.updateConnections(currentMollweideFilteredStars, currentMollweideConnections);
+  mollweideMap.labelManager.refreshLabels(currentMollweideFilteredStars);
 
   removeConstellationObjectsFromGlobe();
   removeConstellationOverlayObjectsFromGlobe();
@@ -770,15 +778,15 @@ function updateSelectedStarHighlight() {
 }
 
 function updateMollweideView() {
-  if (!currentFilteredStars || currentFilteredStars.length === 0) return;
-  currentFilteredStars.forEach(star => {
+  if (!currentMollweideFilteredStars || currentMollweideFilteredStars.length === 0) return;
+  currentMollweideFilteredStars.forEach(star => {
     updateMollweidePosition(star);
   });
 
-  mollweideMap.addStars(currentFilteredStars);
-  mollweideMap.updateStarPositions(currentFilteredStars);
-  mollweideMap.updateConnectionPositions(currentFilteredStars, currentConnections);
-  mollweideMap.labelManager.refreshLabels(currentFilteredStars);
+  mollweideMap.addStars(currentMollweideFilteredStars);
+  mollweideMap.updateStarPositions(currentMollweideFilteredStars);
+  mollweideMap.updateConnectionPositions(currentMollweideFilteredStars, currentMollweideConnections);
+  mollweideMap.labelManager.refreshLabels(currentMollweideFilteredStars);
 
   if (showConstellationBoundariesFlag) {
     if (constellationLinesMoll.length === 0) {
