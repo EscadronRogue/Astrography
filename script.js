@@ -366,6 +366,10 @@ async function buildAndApplyFilters() {
     updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
     updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
     updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
+  } else {
+    updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', []);
+    updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', []);
+    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
   }
 
   applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator);
@@ -884,6 +888,8 @@ function updateMollweideView() {
     const form = document.getElementById('filters-form');
     const cloudFiles = new FormData(form).getAll('dust-clouds');
     updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudFiles);
+  } else {
+    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
   }
   if (enableIsolationFilterFlag && isolationOverlay) {
     if (typeof isolationOverlay.refreshMollweide === 'function') {

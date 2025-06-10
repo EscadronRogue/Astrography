@@ -1,6 +1,6 @@
 // File: /filters/cloudsFilter.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, radToSphere, radToMollweide, degToRad, getMollweideLambda0 } from '../utils/geometryUtils.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -151,6 +151,71 @@ export async function updateCloudsOverlay(completeStarList, scene, mapType, clou
   } else {
     scene.userData.cloudOverlays.forEach(line => scene.remove(line));
     scene.userData.cloudOverlays = [];
+  }
+
+  // Ensure star positions are up to date for the requested map type.
+  if (mapType === 'Mollweide') {
+    const lambda0 = getMollweideLambda0();
+    completeStarList.forEach(star => {
+      let ra, dec;
+      if (star.raRad !== undefined && star.decRad !== undefined) {
+        ra = star.raRad;
+        dec = star.decRad;
+      } else if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
+        ra = star.RA_in_radian;
+        dec = star.DEC_in_radian;
+      } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
+        ra = degToRad(star.RA_in_degrees);
+        dec = degToRad(star.DEC_in_degrees);
+      } else {
+        ra = 0;
+        dec = 0;
+      }
+      star.raRad = ra;
+      star.decRad = dec;
+      star.mollweidePosition = radToMollweide(ra, dec, 100, lambda0);
+    });
+  } else if (mapType === 'Globe') {
+    completeStarList.forEach(star => {
+      let ra, dec;
+      if (star.raRad !== undefined && star.decRad !== undefined) {
+        ra = star.raRad;
+        dec = star.decRad;
+      } else if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
+        ra = star.RA_in_radian;
+        dec = star.DEC_in_radian;
+      } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
+        ra = degToRad(star.RA_in_degrees);
+        dec = degToRad(star.DEC_in_degrees);
+      } else {
+        ra = 0;
+        dec = 0;
+      }
+      star.raRad = ra;
+      star.decRad = dec;
+      star.spherePosition = radToSphere(ra, dec, 100);
+    });
+  } else if (mapType === 'TrueCoordinates') {
+    completeStarList.forEach(star => {
+      const R = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
+      let ra, dec;
+      if (star.raRad !== undefined && star.decRad !== undefined) {
+        ra = star.raRad;
+        dec = star.decRad;
+      } else if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
+        ra = star.RA_in_radian;
+        dec = star.DEC_in_radian;
+      } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
+        ra = degToRad(star.RA_in_degrees);
+        dec = degToRad(star.DEC_in_degrees);
+      } else {
+        ra = 0;
+        dec = 0;
+      }
+      star.raRad = ra;
+      star.decRad = dec;
+      star.truePosition = radToSphere(ra, dec, R);
+    });
   }
   for (const fileUrl of cloudDataFiles) {
     try {
