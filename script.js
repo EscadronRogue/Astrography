@@ -712,7 +712,9 @@ class MapManager {
       size: this.renderer.getSize(new THREE.Vector2()),
       ratio: this.renderer.getPixelRatio()
     };
+    const maxSize = this.renderer.capabilities.maxTextureSize || 8192;
     if (width) {
+      width = Math.min(width, maxSize);
       const aspect = original.size.y / original.size.x;
       const height = Math.round(width * aspect);
       this.renderer.setPixelRatio(1);
@@ -738,15 +740,9 @@ class MapManager {
     return exporter.parse(this.scene);
   }
 
-  exportOBJWithTexture(resolution = 4096) {
+  exportOBJWithTexture() {
     const exporter = new OBJExporter();
-    const segments = Math.max(8, Math.round(resolution / 512));
-    const sphere = new THREE.Mesh(new THREE.SphereGeometry(100, segments, segments), new THREE.MeshBasicMaterial());
-    const obj = 'mtllib globe.mtl\nusemtl map\n' + exporter.parse(sphere);
-    const mtl = 'newmtl map\nKa 1 1 1\nKd 1 1 1\nmap_Kd globe_texture.png\n';
-    const target = window.mollweideMap ? window.mollweideMap : this;
-    const texture = target.captureImage('png', resolution);
-    return { obj, mtl, texture };
+    return exporter.parse(this.scene);
   }
 
   animate() {
@@ -978,21 +974,10 @@ function setupPrintButtons() {
   const btnSphere = document.getElementById('print-sphereMap');
   if (btnSphere) {
     btnSphere.addEventListener('click', () => {
-      pickExport(btnSphere, ['obj'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
+      pickExport(btnSphere, ['obj'], [1024, 2048, 4096, 8192], async (fmt) => {
         if (fmt === 'obj') {
-          if (window.JSZip) {
-            const exp = globeMap.exportOBJWithTexture(res);
-            const zip = new JSZip();
-            zip.file('globe.obj', exp.obj);
-            zip.file('globe.mtl', exp.mtl);
-            const imgData = exp.texture.split(',')[1];
-            zip.file('globe_texture.png', imgData, { base64: true });
-            const blob = await zip.generateAsync({ type: 'blob' });
-            downloadBlob(blob, 'globe.zip');
-          } else {
-            const data = globeMap.exportOBJWithTexture(res).obj;
-            downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.obj');
-          }
+          const data = globeMap.exportOBJWithTexture();
+          downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.obj');
         }
       });
     });
@@ -1001,8 +986,9 @@ function setupPrintButtons() {
   const btnMoll = document.getElementById('print-mollweideMap');
   if (btnMoll) {
     btnMoll.addEventListener('click', () => {
-      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
-        res = Math.max(mollweideMap.canvas.width, Math.min(res, 32000));
+      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], [1024, 2048, 4096, 8192], async (fmt, res) => {
+        const maxSize = mollweideMap.renderer.capabilities.maxTextureSize || 8192;
+        res = Math.max(mollweideMap.canvas.width, Math.min(res, maxSize));
         if (fmt === 'png' || fmt === 'jpg') {
           const url = mollweideMap.captureImage(fmt, res);
           downloadBlob(await (await fetch(url)).blob(), `mollweide.${fmt}`);
