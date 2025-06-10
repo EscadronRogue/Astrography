@@ -1,5 +1,6 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { OBJExporter } from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/jsm/exporters/OBJExporter.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
@@ -205,7 +206,11 @@ function createMollweideBorder(R = 100) {
     points.push(new THREE.Vector3(x, y, 0));
   }
   const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xaaaaaa,
+    transparent: true,
+    opacity: 0.5
+  });
   return new THREE.LineLoop(geom, mat);
 }
 
@@ -902,4 +907,48 @@ async function main() {
   }
 }
 
-window.onload = main;
+function setupExportButtons() {
+  document.querySelectorAll('.export-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const label = btn.getAttribute('aria-label') || '';
+      if (label.includes('True Coordinates')) {
+        exportMap('TrueCoordinates');
+      } else if (label.includes('Globe')) {
+        exportMap('Globe');
+      } else if (label.includes('Mollweide')) {
+        exportMap('Mollweide');
+      }
+    });
+  });
+}
+
+function exportMap(type) {
+  let map;
+  if (type === 'TrueCoordinates') map = trueCoordinatesMap;
+  else if (type === 'Globe') map = globeMap;
+  else map = mollweideMap;
+  if (!map) return;
+
+  if (type === 'Mollweide') {
+    const dataURL = map.renderer.domElement.toDataURL('image/png');
+    const link = document.createElement('a');
+    link.href = dataURL;
+    link.download = `${type}.png`;
+    link.click();
+  } else {
+    const exporter = new OBJExporter();
+    const result = exporter.parse(map.scene);
+    const blob = new Blob([result], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${type}.obj`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+}
+
+window.onload = () => {
+  main();
+  setupExportButtons();
+};

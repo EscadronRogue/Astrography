@@ -168,7 +168,9 @@ class DensityGridOverlay {
             color: 0xff0000,
             transparent: true,
             opacity: 0.3,
-            linewidth: 2
+            linewidth: 2,
+            depthWrite: false,
+            depthTest: false
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
@@ -176,9 +178,12 @@ class DensityGridOverlay {
             color: 0xff0000,
             transparent: true,
             opacity: 0.9,
-            linewidth: 5
+            linewidth: 5,
+            depthWrite: false,
+            depthTest: false
           });
           const lineM = new THREE.LineSegments(geomM, mollMat);
+          lineM.renderOrder = 2;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
         }
       });
