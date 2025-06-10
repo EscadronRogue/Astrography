@@ -326,10 +326,14 @@ async function buildAndApplyFilters() {
     updateMollweidePosition(star);
   });
 
-  trueCoordinatesMap.updateMap(currentFilteredStars, currentConnections);
-  trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
-  globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
-  globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
+  if (trueCoordinatesMap) {
+    trueCoordinatesMap.updateMap(currentFilteredStars, currentConnections);
+    trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
+  }
+  if (globeMap) {
+    globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
+    globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
+  }
   mollweideMap.addStars(currentMollweideFilteredStars);
   mollweideMap.updateStarPositions(currentMollweideFilteredStars);
   mollweideMap.updateConnections(currentMollweideFilteredStars, currentMollweideConnections);
@@ -339,22 +343,28 @@ async function buildAndApplyFilters() {
   removeConstellationOverlayObjectsFromGlobe();
 
   if (showConstellationBoundaries) {
-    constellationLinesGlobe = createConstellationBoundariesForGlobe();
-    constellationLinesGlobe.forEach(ln => globeMap.scene.add(ln));
+    if (globeMap) {
+      constellationLinesGlobe = createConstellationBoundariesForGlobe();
+      constellationLinesGlobe.forEach(ln => globeMap.scene.add(ln));
+    }
     constellationLinesMoll = createConstellationBoundariesForMollweide();
     constellationLinesMoll.forEach(ln => mollweideMap.scene.add(ln));
   }
   if (showConstellationNames) {
-    constellationLabelsGlobe = createConstellationLabelsForGlobe();
-    constellationLabelsGlobe.forEach(lbl => globeMap.scene.add(lbl));
+    if (globeMap) {
+      constellationLabelsGlobe = createConstellationLabelsForGlobe();
+      constellationLabelsGlobe.forEach(lbl => globeMap.scene.add(lbl));
+    }
     constellationLabelsMoll = createConstellationLabelsForMollweide();
     constellationLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
   }
   if (showConstellationOverlay) {
-    const constellationOverlay = createConstellationOverlayForGlobe();
-    constellationOverlay.forEach(mesh => {
-      window.globeMap.scene.add(mesh);
-    });
+    if (globeMap) {
+      const constellationOverlay = createConstellationOverlayForGlobe();
+      constellationOverlay.forEach(mesh => {
+        window.globeMap.scene.add(mesh);
+      });
+    }
     constellationOverlayMoll = createConstellationOverlayForMollweide();
     constellationOverlayMoll.forEach(mesh => {
       mollweideMap.scene.add(mesh);
@@ -367,8 +377,12 @@ async function buildAndApplyFilters() {
     // Get the file paths from the checked dust cloud checkboxes.
     const cloudDataFiles = new FormData(form).getAll('dust-clouds');
     // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
-    updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
-    updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
+    if (trueCoordinatesMap) {
+      updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
+    }
+    if (globeMap) {
+      updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
+    }
     updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
   }
 
@@ -379,11 +393,11 @@ async function buildAndApplyFilters() {
 }
 
 function removeConstellationObjectsFromGlobe() {
-  if (constellationLinesGlobe && constellationLinesGlobe.length > 0) {
+  if (globeMap && constellationLinesGlobe && constellationLinesGlobe.length > 0) {
     constellationLinesGlobe.forEach(l => globeMap.scene.remove(l));
   }
   constellationLinesGlobe = [];
-  if (constellationLabelsGlobe && constellationLabelsGlobe.length > 0) {
+  if (globeMap && constellationLabelsGlobe && constellationLabelsGlobe.length > 0) {
     constellationLabelsGlobe.forEach(lbl => globeMap.scene.remove(lbl));
   }
   constellationLabelsGlobe = [];
@@ -398,7 +412,7 @@ function removeConstellationObjectsFromGlobe() {
 }
 
 function removeConstellationOverlayObjectsFromGlobe() {
-  if (constellationOverlayGlobe && constellationOverlayGlobe.length > 0) {
+  if (globeMap && constellationOverlayGlobe && constellationOverlayGlobe.length > 0) {
     constellationOverlayGlobe.forEach(mesh => globeMap.scene.remove(mesh));
   }
   constellationOverlayGlobe = [];
@@ -410,11 +424,11 @@ function removeConstellationOverlayObjectsFromGlobe() {
 
 function applyPlanes(showGal, showEcl, showEq) {
   if (showGal) {
-    if (!galacticPlaneTrue) {
+    if (trueCoordinatesMap && !galacticPlaneTrue) {
       galacticPlaneTrue = createGalacticPlaneMesh(200);
       trueCoordinatesMap.scene.add(galacticPlaneTrue);
     }
-    if (!galacticPlaneGlobe) {
+    if (globeMap && !galacticPlaneGlobe) {
       galacticPlaneGlobe = createGalacticPlaneGlobe(100);
       globeMap.scene.add(galacticPlaneGlobe);
     }
@@ -424,11 +438,11 @@ function applyPlanes(showGal, showEcl, showEq) {
     } else {
       updateGalacticPlaneMollweide(galacticPlaneMoll);
     }
-    if (galacticDirectionLabelsTrue.length === 0) {
+    if (trueCoordinatesMap && galacticDirectionLabelsTrue.length === 0) {
       galacticDirectionLabelsTrue = createGalacticDirectionLabelsTrue();
       galacticDirectionLabelsTrue.forEach(lbl => trueCoordinatesMap.scene.add(lbl));
     }
-    if (galacticDirectionLabelsGlobe.length === 0) {
+    if (globeMap && galacticDirectionLabelsGlobe.length === 0) {
       galacticDirectionLabelsGlobe = createGalacticDirectionLabelsGlobe();
       galacticDirectionLabelsGlobe.forEach(lbl => globeMap.scene.add(lbl));
     }
@@ -439,23 +453,27 @@ function applyPlanes(showGal, showEcl, showEq) {
       updateGalacticDirectionLabelsMollweide(galacticDirectionLabelsMoll);
     }
   } else {
-    if (galacticPlaneTrue) { trueCoordinatesMap.scene.remove(galacticPlaneTrue); galacticPlaneTrue.geometry.dispose(); galacticPlaneTrue.material.dispose(); galacticPlaneTrue = null; }
-    if (galacticPlaneGlobe) { globeMap.scene.remove(galacticPlaneGlobe); galacticPlaneGlobe.geometry.dispose(); galacticPlaneGlobe.material.dispose(); galacticPlaneGlobe = null; }
+    if (galacticPlaneTrue && trueCoordinatesMap) { trueCoordinatesMap.scene.remove(galacticPlaneTrue); galacticPlaneTrue.geometry.dispose(); galacticPlaneTrue.material.dispose(); galacticPlaneTrue = null; }
+    if (galacticPlaneGlobe && globeMap) { globeMap.scene.remove(galacticPlaneGlobe); galacticPlaneGlobe.geometry.dispose(); galacticPlaneGlobe.material.dispose(); galacticPlaneGlobe = null; }
     if (galacticPlaneMoll) { mollweideMap.scene.remove(galacticPlaneMoll); galacticPlaneMoll.geometry.dispose(); galacticPlaneMoll.material.dispose(); galacticPlaneMoll = null; }
-    galacticDirectionLabelsTrue.forEach(lbl => trueCoordinatesMap.scene.remove(lbl));
+    if (trueCoordinatesMap) {
+      galacticDirectionLabelsTrue.forEach(lbl => trueCoordinatesMap.scene.remove(lbl));
+    }
     galacticDirectionLabelsTrue = [];
-    galacticDirectionLabelsGlobe.forEach(lbl => globeMap.scene.remove(lbl));
+    if (globeMap) {
+      galacticDirectionLabelsGlobe.forEach(lbl => globeMap.scene.remove(lbl));
+    }
     galacticDirectionLabelsGlobe = [];
     galacticDirectionLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
     galacticDirectionLabelsMoll = [];
   }
 
   if (showEcl) {
-    if (!eclipticPlaneTrue) {
+    if (trueCoordinatesMap && !eclipticPlaneTrue) {
       eclipticPlaneTrue = createEclipticPlaneMesh(200);
       trueCoordinatesMap.scene.add(eclipticPlaneTrue);
     }
-    if (!eclipticPlaneGlobe) {
+    if (globeMap && !eclipticPlaneGlobe) {
       eclipticPlaneGlobe = createEclipticPlaneGlobe(100);
       globeMap.scene.add(eclipticPlaneGlobe);
     }
@@ -466,17 +484,17 @@ function applyPlanes(showGal, showEcl, showEq) {
       updateEclipticPlaneMollweide(eclipticPlaneMoll);
     }
   } else {
-    if (eclipticPlaneTrue) { trueCoordinatesMap.scene.remove(eclipticPlaneTrue); eclipticPlaneTrue.geometry.dispose(); eclipticPlaneTrue.material.dispose(); eclipticPlaneTrue = null; }
-    if (eclipticPlaneGlobe) { globeMap.scene.remove(eclipticPlaneGlobe); eclipticPlaneGlobe.geometry.dispose(); eclipticPlaneGlobe.material.dispose(); eclipticPlaneGlobe = null; }
+    if (eclipticPlaneTrue && trueCoordinatesMap) { trueCoordinatesMap.scene.remove(eclipticPlaneTrue); eclipticPlaneTrue.geometry.dispose(); eclipticPlaneTrue.material.dispose(); eclipticPlaneTrue = null; }
+    if (eclipticPlaneGlobe && globeMap) { globeMap.scene.remove(eclipticPlaneGlobe); eclipticPlaneGlobe.geometry.dispose(); eclipticPlaneGlobe.material.dispose(); eclipticPlaneGlobe = null; }
     if (eclipticPlaneMoll) { mollweideMap.scene.remove(eclipticPlaneMoll); eclipticPlaneMoll.geometry.dispose(); eclipticPlaneMoll.material.dispose(); eclipticPlaneMoll = null; }
   }
 
   if (showEq) {
-    if (!celestialEquatorTrue) {
+    if (trueCoordinatesMap && !celestialEquatorTrue) {
       celestialEquatorTrue = createCelestialEquatorMesh(200);
       trueCoordinatesMap.scene.add(celestialEquatorTrue);
     }
-    if (!celestialEquatorGlobe) {
+    if (globeMap && !celestialEquatorGlobe) {
       celestialEquatorGlobe = createCelestialEquatorGlobe(100);
       globeMap.scene.add(celestialEquatorGlobe);
     }
@@ -487,18 +505,18 @@ function applyPlanes(showGal, showEcl, showEq) {
       updateCelestialEquatorMollweide(celestialEquatorMoll);
     }
   } else {
-    if (celestialEquatorTrue) { trueCoordinatesMap.scene.remove(celestialEquatorTrue); celestialEquatorTrue.geometry.dispose(); celestialEquatorTrue.material.dispose(); celestialEquatorTrue = null; }
-    if (celestialEquatorGlobe) { globeMap.scene.remove(celestialEquatorGlobe); celestialEquatorGlobe.geometry.dispose(); celestialEquatorGlobe.material.dispose(); celestialEquatorGlobe = null; }
+    if (celestialEquatorTrue && trueCoordinatesMap) { trueCoordinatesMap.scene.remove(celestialEquatorTrue); celestialEquatorTrue.geometry.dispose(); celestialEquatorTrue.material.dispose(); celestialEquatorTrue = null; }
+    if (celestialEquatorGlobe && globeMap) { globeMap.scene.remove(celestialEquatorGlobe); celestialEquatorGlobe.geometry.dispose(); celestialEquatorGlobe.material.dispose(); celestialEquatorGlobe = null; }
     if (celestialEquatorMoll) { mollweideMap.scene.remove(celestialEquatorMoll); celestialEquatorMoll.geometry.dispose(); celestialEquatorMoll.material.dispose(); celestialEquatorMoll = null; }
   }
 }
 
 function applyGlobeSurface(isOpaque) {
-  if (globeSurfaceSphere) {
+  if (globeSurfaceSphere && globeMap) {
     globeMap.scene.remove(globeSurfaceSphere);
     globeSurfaceSphere = null;
   }
-  if (isOpaque) {
+  if (isOpaque && globeMap) {
     const geom = new THREE.SphereGeometry(99, 32, 32);
     const mat = new THREE.MeshBasicMaterial({
       color: 0x000000,
@@ -772,16 +790,39 @@ function toggleMapVisibility(mapType, visible) {
       connections = currentMollweideConnections;
       break;
   }
-  if (!manager || !container) return;
+  if (!container) return;
   if (visible) {
     container.style.display = '';
-    ensureMapResized(manager);
-    addMapManager(manager);
-    manager.updateMap(stars, connections);
-    manager.labelManager.refreshLabels(stars);
+    if (!manager) {
+      if (mapType === 'TrueCoordinates') {
+        trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
+        manager = trueCoordinatesMap;
+        window.trueCoordinatesMap = trueCoordinatesMap;
+        initStarInteractions(manager);
+      } else if (mapType === 'Globe') {
+        globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
+        manager = globeMap;
+        window.globeMap = globeMap;
+        const globeGrid = createGlobeGrid(100, { color: 0x444444, opacity: 0.2, lineWidth: 1 });
+        globeMap.scene.add(globeGrid);
+        initStarInteractions(manager);
+      } else {
+        mollweideMap = mollweideMap || new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
+        manager = mollweideMap;
+        initStarInteractions(manager);
+      }
+      addMapManager(manager);
+      ensureMapResized(manager);
+      buildAndApplyFilters();
+    } else {
+      ensureMapResized(manager);
+      addMapManager(manager);
+      manager.updateMap(stars, connections);
+      manager.labelManager.refreshLabels(stars);
+    }
   } else {
     container.style.display = 'none';
-    removeMapManager(manager);
+    if (manager) removeMapManager(manager);
     requestRender();
   }
 }
@@ -853,11 +894,11 @@ function initStarInteractions(map) {
 }
 
 function updateSelectedStarHighlight() {
-  if (selectedHighlightTrue) {
+  if (selectedHighlightTrue && trueCoordinatesMap) {
     trueCoordinatesMap.scene.remove(selectedHighlightTrue);
     selectedHighlightTrue = null;
   }
-  if (selectedHighlightGlobe) {
+  if (selectedHighlightGlobe && globeMap) {
     globeMap.scene.remove(selectedHighlightGlobe);
     selectedHighlightGlobe = null;
   }
@@ -868,19 +909,23 @@ function updateSelectedStarHighlight() {
   if (!selectedStarData) return;
   let posTrue = selectedStarData.truePosition ? selectedStarData.truePosition : new THREE.Vector3(selectedStarData.x_coordinate, selectedStarData.y_coordinate, selectedStarData.z_coordinate);
   let radius = (selectedStarData.displaySize || 2) * 0.2 * 1.2;
-  const highlightGeom = new THREE.SphereGeometry(radius, 16, 16);
-  const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
-  selectedHighlightTrue = new THREE.Mesh(highlightGeom, highlightMat);
-  selectedHighlightTrue.position.copy(posTrue);
-  trueCoordinatesMap.scene.add(selectedHighlightTrue);
+  if (trueCoordinatesMap) {
+    const highlightGeom = new THREE.SphereGeometry(radius, 16, 16);
+    const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+    selectedHighlightTrue = new THREE.Mesh(highlightGeom, highlightMat);
+    selectedHighlightTrue.position.copy(posTrue);
+    trueCoordinatesMap.scene.add(selectedHighlightTrue);
+  }
 
   let posGlobe = selectedStarData.spherePosition ? selectedStarData.spherePosition : projectStarGlobe(selectedStarData);
   let radiusGlobe = (selectedStarData.displaySize || 2) * 0.2 * 1.2;
-  const highlightGeomGlobe = new THREE.SphereGeometry(radiusGlobe, 16, 16);
-  const highlightMatGlobe = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
-  selectedHighlightGlobe = new THREE.Mesh(highlightGeomGlobe, highlightMatGlobe);
-  selectedHighlightGlobe.position.copy(posGlobe);
-  globeMap.scene.add(selectedHighlightGlobe);
+  if (globeMap) {
+    const highlightGeomGlobe = new THREE.SphereGeometry(radiusGlobe, 16, 16);
+    const highlightMatGlobe = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+    selectedHighlightGlobe = new THREE.Mesh(highlightGeomGlobe, highlightMatGlobe);
+    selectedHighlightGlobe.position.copy(posGlobe);
+    globeMap.scene.add(selectedHighlightGlobe);
+  }
 
   let posMoll = selectedStarData.mollweidePosition ? selectedStarData.mollweidePosition : projectStarMollweide(selectedStarData);
   let radiusMoll = (selectedStarData.displaySize || 2) * 0.4 * 1.2;
@@ -964,14 +1009,8 @@ async function main() {
     if (form) {
       form.addEventListener('change', debouncedApplyFilters);
     }
-    trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
-    globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
     mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
-    addMapManager(trueCoordinatesMap);
-    addMapManager(globeMap);
     addMapManager(mollweideMap);
-    window.trueCoordinatesMap = trueCoordinatesMap;
-    window.globeMap = globeMap;
     window.mollweideMap = mollweideMap;
     cachedStars.forEach(star => {
       star.spherePosition = projectStarGlobe(star);
@@ -979,11 +1018,7 @@ async function main() {
       precalcMollweideData(star);
       updateMollweidePosition(star);
     });
-    const globeGrid = createGlobeGrid(100, { color: 0x444444, opacity: 0.2, lineWidth: 1 });
-    globeMap.scene.add(globeGrid);
     buildAndApplyFilters();
-    initStarInteractions(trueCoordinatesMap);
-    initStarInteractions(globeMap);
     initStarInteractions(mollweideMap);
     toggleMapVisibility('TrueCoordinates', document.getElementById('show-map-true').checked);
     toggleMapVisibility('Globe', document.getElementById('show-map-globe').checked);
