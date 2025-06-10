@@ -172,6 +172,8 @@ class DensityGridOverlay {
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
+          line.material.depthWrite = false;
+          line.material.depthTest = false;
           const mollMat = new THREE.LineBasicMaterial({
             color: 0xff0000,
             transparent: true,
@@ -179,6 +181,9 @@ class DensityGridOverlay {
             linewidth: 5
           });
           const lineM = new THREE.LineSegments(geomM, mollMat);
+          lineM.renderOrder = 1;
+          lineM.material.depthWrite = false;
+          lineM.material.depthTest = false;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
         }
       });

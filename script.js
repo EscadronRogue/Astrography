@@ -1,5 +1,6 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { OBJExporter } from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/jsm/exporters/OBJExporter.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
@@ -205,7 +206,7 @@ function createMollweideBorder(R = 100) {
     points.push(new THREE.Vector3(x, y, 0));
   }
   const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.5 });
   return new THREE.LineLoop(geom, mat);
 }
 
@@ -695,6 +696,15 @@ class MapManager {
     this.renderer.setSize(w, h);
   }
 
+  captureImage() {
+    return this.renderer.domElement.toDataURL('image/png');
+  }
+
+  exportOBJ() {
+    const exporter = new OBJExporter();
+    return exporter.parse(this.scene);
+  }
+
   animate() {
     requestAnimationFrame(() => this.animate());
     this.renderer.render(this.scene, this.camera);
@@ -864,6 +874,45 @@ function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
+function setupPrintButtons() {
+  const btn3D = document.getElementById('print-map3D');
+  if (btn3D) {
+    btn3D.addEventListener('click', () => {
+      const data = trueCoordinatesMap.exportOBJ();
+      const blob = new Blob([data], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'true_coordinates.obj';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+  const btnSphere = document.getElementById('print-sphereMap');
+  if (btnSphere) {
+    btnSphere.addEventListener('click', () => {
+      const data = globeMap.exportOBJ();
+      const blob = new Blob([data], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'globe.obj';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  }
+  const btnMoll = document.getElementById('print-mollweideMap');
+  if (btnMoll) {
+    btnMoll.addEventListener('click', () => {
+      const url = mollweideMap.captureImage();
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'mollweide.png';
+      a.click();
+    });
+  }
+}
+
 async function main() {
   const loader = document.getElementById('loader');
   loader.classList.remove('hidden');
@@ -882,6 +931,7 @@ async function main() {
     window.trueCoordinatesMap = trueCoordinatesMap;
     window.globeMap = globeMap;
     window.mollweideMap = mollweideMap;
+    setupPrintButtons();
     cachedStars.forEach(star => {
       star.spherePosition = projectStarGlobe(star);
       star.truePosition = getStarTruePosition(star);
