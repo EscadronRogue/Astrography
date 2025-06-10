@@ -951,7 +951,43 @@ function exportMollweideMap(format, resolution) {
   }
   exportRenderer.dispose();
 
-  if (format === 'png') {
+  const splitNeeded = resolution > 8192 && format === 'png';
+  if (splitNeeded) {
+    const zip = new JSZip();
+    const partWidth = 8192;
+    const partHeight = 4096;
+    const cols = Math.ceil(width / partWidth);
+    const rows = Math.ceil(height / partHeight);
+    const promises = [];
+
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const w = Math.min(partWidth, width - col * partWidth);
+        const h = Math.min(partHeight, height - row * partHeight);
+        const partCanvas = document.createElement('canvas');
+        partCanvas.width = w;
+        partCanvas.height = h;
+        const partCtx = partCanvas.getContext('2d');
+        partCtx.drawImage(finalCanvas, col * partWidth, row * partHeight, w, h, 0, 0, w, h);
+        promises.push(new Promise(resolve => {
+          partCanvas.toBlob(blob => {
+            zip.file(`mollweide_part_${row + 1}_${col + 1}.png`, blob);
+            resolve();
+          }, 'image/png');
+        }));
+      }
+    }
+
+    Promise.all(promises).then(() => {
+      zip.generateAsync({ type: 'blob' }).then(content => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(content);
+        link.download = 'mollweide_map_parts.zip';
+        link.click();
+        URL.revokeObjectURL(link.href);
+      });
+    });
+  } else if (format === 'png') {
     finalCanvas.toBlob(b => {
       const link = document.createElement('a');
       link.href = URL.createObjectURL(b);
