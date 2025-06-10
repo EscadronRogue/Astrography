@@ -851,6 +851,14 @@ function toggleMapVisibility(mapType, visible) {
           selectedHighlightGlobe.material.dispose();
           selectedHighlightGlobe = null;
         }
+      } else {
+        mollweideMap = null;
+        window.mollweideMap = null;
+        if (selectedHighlightMollweide) {
+          selectedHighlightMollweide.geometry.dispose();
+          selectedHighlightMollweide.material.dispose();
+          selectedHighlightMollweide = null;
+        }
       }
     }
     requestRender();
