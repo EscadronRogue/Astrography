@@ -734,6 +734,7 @@ class MapManager {
   }
 
   exportOBJ() {
+    this.scene.updateMatrixWorld(true);
     const exporter = new OBJExporter();
     const objData = exporter.parse(this.scene, 'true_coordinates.mtl');
     const mtlData = 'newmtl material0\nKd 1 1 1\n';
@@ -741,15 +742,16 @@ class MapManager {
   }
 
   exportSTL() {
+    this.scene.updateMatrixWorld(true);
     const exporter = new STLExporter();
     return exporter.parse(this.scene);
   }
 
   async exportOBJWithTexture(textureData) {
     if (!textureData) textureData = this.captureImage('png');
-    const sphere = new THREE.Mesh(new THREE.SphereGeometry(100, 64, 32));
+    this.scene.updateMatrixWorld(true);
     const exporter = new OBJExporter();
-    const objData = exporter.parse(sphere, 'globe.mtl');
+    const objData = exporter.parse(this.scene, 'globe.mtl');
     const mtlData = 'newmtl material0\nKd 1 1 1\nmap_Kd texture.png\n';
     if (window.JSZip) {
       const zip = new window.JSZip();
