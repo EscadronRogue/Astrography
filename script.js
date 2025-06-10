@@ -578,7 +578,6 @@ class MapManager {
     this.scene.add(this.starGroup);
     this.debouncedResize = debounce(() => this.onResize(), 200);
     window.addEventListener('resize', this.debouncedResize, false);
-    this.animate();
   }
 
   addStars(stars) {
@@ -695,10 +694,18 @@ class MapManager {
     this.renderer.setSize(w, h);
   }
 
-  animate() {
-    requestAnimationFrame(() => this.animate());
+  render() {
     this.renderer.render(this.scene, this.camera);
   }
+}
+
+const mapManagers = [];
+function startRenderLoop() {
+  function renderLoop() {
+    requestAnimationFrame(renderLoop);
+    mapManagers.forEach(m => m.render());
+  }
+  renderLoop();
 }
 
 function initStarInteractions(map) {
@@ -879,6 +886,7 @@ async function main() {
     trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
     globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
     mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
+    mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap);
     window.trueCoordinatesMap = trueCoordinatesMap;
     window.globeMap = globeMap;
     window.mollweideMap = mollweideMap;
@@ -894,6 +902,7 @@ async function main() {
     initStarInteractions(trueCoordinatesMap);
     initStarInteractions(globeMap);
     initStarInteractions(mollweideMap);
+    startRenderLoop();
     loader.classList.add('hidden');
   } catch (err) {
     console.error('Error initializing starmap:', err);
