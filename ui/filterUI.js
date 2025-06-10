@@ -159,6 +159,17 @@ export function initFilterUI() {
     }
   });
 
+  const dlBtn = document.getElementById('download-mollweide-btn');
+  const dlSelect = document.getElementById('download-mollweide-format');
+  if (dlBtn && dlSelect) {
+    dlBtn.addEventListener('click', () => {
+      const fmt = dlSelect.value;
+      if (window.downloadMollweideMap) {
+        window.downloadMollweideMap(fmt);
+      }
+    });
+  }
+
   console.log("[filterUI] Filter UI initialized.");
 }
 

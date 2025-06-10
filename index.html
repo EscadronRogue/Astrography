@@ -215,6 +215,13 @@
       <div class="map-container">
         <h2>Mollweide Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen Mollweide Map">⤢</button>
+        <select id="download-mollweide-format" class="download-select">
+          <option value="png">PNG</option>
+          <option value="jpg">JPG</option>
+          <option value="svg">SVG</option>
+          <option value="pdf">PDF</option>
+        </select>
+        <button class="download-btn" id="download-mollweide-btn" aria-label="Download Mollweide Map">⬇</button>
         <canvas id="mollweideMap"></canvas>
       </div>
     </section>

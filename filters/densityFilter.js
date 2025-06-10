@@ -176,9 +176,12 @@ class DensityGridOverlay {
             color: 0xff0000,
             transparent: true,
             opacity: 0.9,
-            linewidth: 5
+            linewidth: 5,
+            depthTest: false,
+            depthWrite: false
           });
           const lineM = new THREE.LineSegments(geomM, mollMat);
+          lineM.renderOrder = 2;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
         }
       });

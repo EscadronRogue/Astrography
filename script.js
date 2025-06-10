@@ -205,7 +205,11 @@ function createMollweideBorder(R = 100) {
     points.push(new THREE.Vector3(x, y, 0));
   }
   const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xaaaaaa,
+    transparent: true,
+    opacity: 0.5
+  });
   return new THREE.LineLoop(geom, mat);
 }
 
@@ -863,6 +867,44 @@ function updateMollweideView() {
   }
 }
 window.updateMollweideView = updateMollweideView;
+
+function downloadMollweideMap(format = 'png') {
+  if (!window.mollweideMap) return;
+  const canvas = window.mollweideMap.renderer.domElement;
+  if (format === 'png' || format === 'jpg') {
+    const mime = format === 'jpg' ? 'image/jpeg' : 'image/png';
+    const dataUrl = canvas.toDataURL(mime);
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = `mollweide_map.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } else if (format === 'svg') {
+    const imgUrl = canvas.toDataURL('image/png');
+    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}"><image href="${imgUrl}" width="${canvas.width}" height="${canvas.height}"/></svg>`;
+    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'mollweide_map.svg';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } else if (format === 'pdf') {
+    const imgUrl = canvas.toDataURL('image/png');
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write('<html><head><title>Print Map</title></head><body style="margin:0">');
+    w.document.write(`<img src="${imgUrl}" style="width:100%"/>`);
+    w.document.write('</body></html>');
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+}
+window.downloadMollweideMap = downloadMollweideMap;
 
 async function main() {
   const loader = document.getElementById('loader');
