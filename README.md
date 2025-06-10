@@ -70,6 +70,10 @@ Astrography is a 3D visualization tool focused on performing astrography—the m
 
 ---
 
+## Exporting High-Resolution Maps 🖨️
+
+The Mollweide projection can be exported as PNG or PDF at resolutions up to **32K**. The exporter renders the map in tiles to bypass GPU texture limits and uses `pdf-lib` for creating large PDFs. Select your desired format and resolution using the controls below the Mollweide map.
+
 
 ## License & Attribution ⚖️
 

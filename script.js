@@ -920,12 +920,14 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap(format, resolution) {
+async function exportMollweideMap(format, resolution) {
   const width = resolution;
   const height = Math.floor(resolution / 2);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
   exportRenderer.setPixelRatio(1);
-  const finalCanvas = document.createElement('canvas');
+  const finalCanvas = (typeof OffscreenCanvas !== 'undefined')
+    ? new OffscreenCanvas(width, height)
+    : document.createElement('canvas');
   finalCanvas.width = width;
   finalCanvas.height = height;
   const ctx = finalCanvas.getContext('2d');
@@ -935,7 +937,7 @@ function exportMollweideMap(format, resolution) {
     for (let x = 0; x < width; x += tile) {
       const tileW = Math.min(tile, width - x);
       const tileH = Math.min(tile, height - y);
-      exportRenderer.setSize(tileW, tileH);
+      exportRenderer.setSize(tileW, tileH, false);
       const cam = mollweideMap.camera.clone();
       const aspect = width / height;
       cam.left = (-mollweideMap.frustumSize * aspect) / 2;
@@ -950,30 +952,44 @@ function exportMollweideMap(format, resolution) {
     }
   }
   exportRenderer.dispose();
+  const createBlob = () => {
+    if (finalCanvas.convertToBlob) {
+      return finalCanvas.convertToBlob({ type: 'image/png' });
+    }
+    return new Promise(resolve => finalCanvas.toBlob(resolve, 'image/png'));
+  };
 
   if (format === 'png') {
-    finalCanvas.toBlob(b => {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(b);
-      link.download = 'mollweide_map.png';
-      link.click();
-      URL.revokeObjectURL(link.href);
-    }, 'image/png');
+    const blob = await createBlob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'mollweide_map.png';
+    link.click();
+    URL.revokeObjectURL(link.href);
   } else {
-    const dataUrl = finalCanvas.toDataURL('image/png');
-    const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [width, height] });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
-    pdf.save('mollweide_map.pdf');
+    const blob = await createBlob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const pdfDoc = await PDFLib.PDFDocument.create();
+    const pngImage = await pdfDoc.embedPng(arrayBuffer);
+    const page = pdfDoc.addPage([width, height]);
+    page.drawImage(pngImage, { x: 0, y: 0, width, height });
+    const pdfBytes = await pdfDoc.save();
+    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(pdfBlob);
+    link.download = 'mollweide_map.pdf';
+    link.click();
+    URL.revokeObjectURL(link.href);
   }
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
   if (!btn) return;
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     const format = document.getElementById('export-format').value;
     const res = parseInt(document.getElementById('export-resolution').value, 10);
-    exportMollweideMap(format, res);
+    await exportMollweideMap(format, res);
   });
 }
 
