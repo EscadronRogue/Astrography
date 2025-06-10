@@ -78,8 +78,14 @@ let showGalacticPlaneFlag = false;
 let showEclipticPlaneFlag = false;
 let showCelestialEquatorFlag = false;
 
+function parseDistance(value) {
+  const num = parseFloat(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
 function getStarTruePosition(star) {
-  const R = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
+  const dist = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
+  const R = parseDistance(dist);
   let ra, dec;
   if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
     ra = star.RA_in_radian;
@@ -230,7 +236,10 @@ async function loadStarData() {
     );
     const filesData = await Promise.all(dataPromises);
     const combinedData = filesData.flat();
-    return combinedData;
+    return combinedData.filter(star => {
+      const dist = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
+      return Number.isFinite(parseFloat(dist));
+    });
   } catch (e) {
     console.warn("Error loading star data:", e);
     return [];
@@ -516,7 +525,8 @@ class MapManager {
     this.scene = new THREE.Scene();
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: true
+      antialias: true,
+      preserveDrawingBuffer: true
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
@@ -697,6 +707,7 @@ class MapManager {
   }
 
   captureImage() {
+    this.renderer.render(this.scene, this.camera);
     return this.renderer.domElement.toDataURL('image/png');
   }
 

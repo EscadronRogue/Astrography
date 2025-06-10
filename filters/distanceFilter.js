@@ -19,9 +19,9 @@ export function applyDistanceFilter(stars, filters) {
     ? parseFloat(filters.maxDistance)
     : 20;
   return stars.filter(star => {
-    // Use the new 'distance' property if available, otherwise fall back to legacy 'Distance_from_the_Sun'
-    const distance = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
-    if (distance === undefined) return false;
+    const dVal = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
+    const distance = parseFloat(dVal);
+    if (!Number.isFinite(distance)) return false;
     return distance >= minDist && distance <= maxDist;
   });
 }
