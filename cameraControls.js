@@ -108,6 +108,7 @@ export class ThreeDControls {
             x: event.clientX,
             y: event.clientY
         };
+        if (window.requestRender) window.requestRender();
     }
 
     /**
@@ -143,6 +144,7 @@ export class ThreeDControls {
         );
 
         this.camera.updateProjectionMatrix();
+        if (window.requestRender) window.requestRender();
     }
 
     /**
@@ -197,6 +199,7 @@ export class ThreeDControls {
             this.camera.updateProjectionMatrix();
             // Update starting distance for smooth pinch zoom
             this.touchStartDistance = currentDistance;
+            if (window.requestRender) window.requestRender();
         } else if (this.isTouchRotating && event.touches.length === 1) {
             const touch = event.touches[0];
             const deltaMove = {
@@ -225,6 +228,7 @@ export class ThreeDControls {
             this.camera.lookAt(new THREE.Vector3(0, 0, 0));
 
             this.lastTouch = { x: touch.clientX, y: touch.clientY };
+            if (window.requestRender) window.requestRender();
         }
     }
 
@@ -328,6 +332,7 @@ export class TwoDControls {
             }
             if (this.leftCallback) this.leftCallback(dx, dy);
         }
+        if (window.requestRender) window.requestRender();
     }
 
     onMouseDown(event) {
@@ -343,6 +348,7 @@ export class TwoDControls {
         const dy = event.clientY - this.lastPos.y;
         this.pan(dx, dy, this.button);
         this.lastPos = { x: event.clientX, y: event.clientY };
+        if (window.requestRender) window.requestRender();
     }
 
     onMouseUp() {
@@ -355,6 +361,7 @@ export class TwoDControls {
         const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
         this.camera.zoom *= zoomFactor;
         this.camera.updateProjectionMatrix();
+        if (window.requestRender) window.requestRender();
     }
 
     getTouchDistance(t1, t2) {
@@ -382,12 +389,14 @@ export class TwoDControls {
             this.camera.zoom *= zoomFactor;
             this.camera.updateProjectionMatrix();
             this.touchStartDistance = currentDistance;
+            if (window.requestRender) window.requestRender();
         } else if (this.isPanning && event.touches.length === 1) {
             const touch = event.touches[0];
             const dx = touch.clientX - this.lastPos.x;
             const dy = touch.clientY - this.lastPos.y;
             this.pan(dx, dy, 0);
             this.lastPos = { x: touch.clientX, y: touch.clientY };
+            if (window.requestRender) window.requestRender();
         }
     }
 
