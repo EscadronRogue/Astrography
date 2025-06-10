@@ -363,13 +363,13 @@ async function buildAndApplyFilters() {
     // Get the file paths from the checked dust cloud checkboxes.
     const cloudDataFiles = new FormData(form).getAll('dust-clouds');
     // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
-    updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
-    updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
-    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
+    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
+    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
+    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
   } else {
-    updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', []);
-    updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', []);
-    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
+    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', []);
+    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', []);
+    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
   }
 
   applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator);
@@ -855,7 +855,7 @@ function updateSelectedStarHighlight() {
   if (window.requestRender) window.requestRender();
 }
 
-function updateMollweideView() {
+async function updateMollweideView() {
   if (!currentMollweideFilteredStars || currentMollweideFilteredStars.length === 0) return;
   currentMollweideFilteredStars.forEach(star => {
     updateMollweidePosition(star);
@@ -887,9 +887,9 @@ function updateMollweideView() {
   if (showCloudsFlag) {
     const form = document.getElementById('filters-form');
     const cloudFiles = new FormData(form).getAll('dust-clouds');
-    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudFiles);
+    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudFiles);
   } else {
-    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
+    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
   }
   if (enableIsolationFilterFlag && isolationOverlay) {
     if (typeof isolationOverlay.refreshMollweide === 'function') {
