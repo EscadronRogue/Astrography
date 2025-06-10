@@ -715,6 +715,23 @@ function addMapManager(mgr) {
   }
 }
 
+function ensureMapResized(manager) {
+  let tries = 0;
+  function attempt() {
+    const w = manager.canvas.clientWidth;
+    const h = manager.canvas.clientHeight;
+    if ((w > 0 && h > 0) || tries > 10) {
+      manager.onResize();
+      window.dispatchEvent(new Event('resize'));
+      if (window.requestRender) window.requestRender();
+    } else {
+      tries += 1;
+      requestAnimationFrame(attempt);
+    }
+  }
+  attempt();
+}
+
 function removeMapManager(mgr) {
   const idx = mapManagers.indexOf(mgr);
   if (idx !== -1) {
@@ -758,23 +775,13 @@ function toggleMapVisibility(mapType, visible) {
   if (!manager || !container) return;
   if (visible) {
     container.style.display = '';
-    // Wait two frames so layout fully updates before resizing
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        manager.onResize();
-        // Trigger global resize listeners for good measure
-        window.dispatchEvent(new Event('resize'));
-        if (window.requestRender) window.requestRender();
-      });
-    });
+    ensureMapResized(manager);
     addMapManager(manager);
     manager.updateMap(stars, connections);
     manager.labelManager.refreshLabels(stars);
   } else {
     container.style.display = 'none';
     removeMapManager(manager);
-  }
-  if (!visible) {
     requestRender();
   }
 }
