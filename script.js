@@ -371,6 +371,7 @@ async function buildAndApplyFilters() {
   applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator);
 
   applyGlobeSurface(globeOpaqueSurface);
+  if (window.requestRender) window.requestRender();
 }
 
 function removeConstellationObjectsFromGlobe() {
@@ -578,7 +579,6 @@ class MapManager {
     this.scene.add(this.starGroup);
     this.debouncedResize = debounce(() => this.onResize(), 200);
     window.addEventListener('resize', this.debouncedResize, false);
-    this.animate();
   }
 
   addStars(stars) {
@@ -642,6 +642,7 @@ class MapManager {
     this.instancedMesh.instanceMatrix.needsUpdate = true;
     this.instancedMesh.instanceColor.needsUpdate = true;
     this.starObjects = stars;
+    if (window.requestRender) window.requestRender();
   }
 
   updateConnections(stars, connectionObjs) {
@@ -662,6 +663,7 @@ class MapManager {
       this.connectionGroup.add(merged);
     }
     this.scene.add(this.connectionGroup);
+    if (window.requestRender) window.requestRender();
   }
 
   updateConnectionPositions(stars, connectionObjs) {
@@ -672,6 +674,7 @@ class MapManager {
     } else {
       this.updateConnections(stars, connectionObjs);
     }
+    if (window.requestRender) window.requestRender();
   }
 
   updateMap(stars, connectionObjs) {
@@ -693,13 +696,26 @@ class MapManager {
     }
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    if (window.requestRender) window.requestRender();
   }
 
-  animate() {
-    requestAnimationFrame(() => this.animate());
+  render() {
     this.renderer.render(this.scene, this.camera);
   }
 }
+
+const mapManagers = [];
+let renderRequested = false;
+function requestRender() {
+  if (!renderRequested) {
+    renderRequested = true;
+    requestAnimationFrame(() => {
+      renderRequested = false;
+      mapManagers.forEach(m => m.render());
+    });
+  }
+}
+window.requestRender = requestRender;
 
 function initStarInteractions(map) {
   const raycaster = new THREE.Raycaster();
@@ -803,6 +819,7 @@ function updateSelectedStarHighlight() {
   selectedHighlightMollweide = new THREE.Mesh(highlightGeomMoll, highlightMatMoll);
   selectedHighlightMollweide.position.copy(posMoll);
   mollweideMap.scene.add(selectedHighlightMollweide);
+  if (window.requestRender) window.requestRender();
 }
 
 function updateMollweideView() {
@@ -861,6 +878,7 @@ function updateMollweideView() {
   if (showCelestialEquatorFlag && celestialEquatorMoll) {
     updateCelestialEquatorMollweide(celestialEquatorMoll);
   }
+  if (window.requestRender) window.requestRender();
 }
 window.updateMollweideView = updateMollweideView;
 
@@ -879,6 +897,7 @@ async function main() {
     trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
     globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
     mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
+    mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap);
     window.trueCoordinatesMap = trueCoordinatesMap;
     window.globeMap = globeMap;
     window.mollweideMap = mollweideMap;
@@ -894,6 +913,7 @@ async function main() {
     initStarInteractions(trueCoordinatesMap);
     initStarInteractions(globeMap);
     initStarInteractions(mollweideMap);
+    requestRender();
     loader.classList.add('hidden');
   } catch (err) {
     console.error('Error initializing starmap:', err);
