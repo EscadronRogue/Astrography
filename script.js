@@ -1,6 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { OBJExporter } from './utils/OBJExporter.js';
+import { STLExporter } from './utils/STLExporter.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
@@ -706,9 +707,46 @@ class MapManager {
     this.renderer.setSize(w, h);
   }
 
-  captureImage() {
+  captureImage(type = 'png') {
     this.renderer.render(this.scene, this.camera);
-    return this.renderer.domElement.toDataURL('image/png');
+    const mime = type === 'jpg' || type === 'jpeg'
+      ? 'image/jpeg'
+      : 'image/png';
+    return this.renderer.domElement.toDataURL(mime);
+  }
+
+  exportSTL() {
+    const exporter = new STLExporter();
+    return exporter.parse(this.scene);
+  }
+
+  async exportGIF() {
+    if (typeof GIF === 'undefined') {
+      console.warn('GIF library not loaded');
+      return null;
+    }
+    const originalPos = this.camera.position.clone();
+    const radius = originalPos.length();
+    const target = new THREE.Vector3(0, 0, 0);
+    const frames = 36;
+    const gif = new GIF({ workers: 2, quality: 10 });
+    for (let i = 0; i < frames; i++) {
+      const angle = (i / frames) * Math.PI * 2;
+      this.camera.position.set(
+        radius * Math.sin(angle),
+        originalPos.y,
+        radius * Math.cos(angle)
+      );
+      this.camera.lookAt(target);
+      this.renderer.render(this.scene, this.camera);
+      gif.addFrame(this.renderer.domElement, { copy: true, delay: 100 });
+    }
+    this.camera.position.copy(originalPos);
+    this.camera.lookAt(target);
+    return new Promise(resolve => {
+      gif.on('finished', resolve);
+      gif.render();
+    });
   }
 
   exportOBJ() {
@@ -885,41 +923,97 @@ function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
+function showExportMenu(button, options, callback) {
+  const menu = document.createElement('div');
+  menu.className = 'export-menu';
+  options.forEach(opt => {
+    const b = document.createElement('button');
+    b.className = 'export-option';
+    b.textContent = opt.toUpperCase();
+    b.addEventListener('click', () => {
+      callback(opt);
+      document.body.removeChild(menu);
+    });
+    menu.appendChild(b);
+  });
+  const rect = button.getBoundingClientRect();
+  menu.style.top = rect.bottom + 'px';
+  menu.style.left = rect.left + 'px';
+  document.body.appendChild(menu);
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function setupPrintButtons() {
   const btn3D = document.getElementById('print-map3D');
   if (btn3D) {
     btn3D.addEventListener('click', () => {
-      const data = trueCoordinatesMap.exportOBJ();
-      const blob = new Blob([data], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'true_coordinates.obj';
-      a.click();
-      URL.revokeObjectURL(url);
+      showExportMenu(btn3D, ['obj', 'stl', 'gif'], async (fmt) => {
+        if (fmt === 'obj') {
+          const data = trueCoordinatesMap.exportOBJ();
+          downloadBlob(new Blob([data], { type: 'text/plain' }), 'true_coordinates.obj');
+        } else if (fmt === 'stl') {
+          const data = trueCoordinatesMap.exportSTL();
+          downloadBlob(new Blob([data], { type: 'text/plain' }), 'true_coordinates.stl');
+        } else if (fmt === 'gif') {
+          const blob = await trueCoordinatesMap.exportGIF();
+          if (blob) downloadBlob(blob, 'true_coordinates.gif');
+        }
+      });
     });
   }
+
   const btnSphere = document.getElementById('print-sphereMap');
   if (btnSphere) {
     btnSphere.addEventListener('click', () => {
-      const data = globeMap.exportOBJ();
-      const blob = new Blob([data], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'globe.obj';
-      a.click();
-      URL.revokeObjectURL(url);
+      showExportMenu(btnSphere, ['obj', 'stl', 'gif'], async (fmt) => {
+        if (fmt === 'obj') {
+          const data = globeMap.exportOBJ();
+          downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.obj');
+        } else if (fmt === 'stl') {
+          const data = globeMap.exportSTL();
+          downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.stl');
+        } else if (fmt === 'gif') {
+          const blob = await globeMap.exportGIF();
+          if (blob) downloadBlob(blob, 'globe.gif');
+        }
+      });
     });
   }
+
   const btnMoll = document.getElementById('print-mollweideMap');
   if (btnMoll) {
     btnMoll.addEventListener('click', () => {
-      const url = mollweideMap.captureImage();
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'mollweide.png';
-      a.click();
+      showExportMenu(btnMoll, ['png', 'jpg', 'svg', 'pdf'], async (fmt) => {
+        if (fmt === 'png' || fmt === 'jpg') {
+          const url = mollweideMap.captureImage(fmt);
+          downloadBlob(await (await fetch(url)).blob(), `mollweide.${fmt}`);
+        } else if (fmt === 'svg') {
+          const url = mollweideMap.captureImage('png');
+          const w = mollweideMap.canvas.width;
+          const h = mollweideMap.canvas.height;
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><image href="${url}" width="100%" height="100%"/></svg>`;
+          downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), 'mollweide.svg');
+        } else if (fmt === 'pdf') {
+          const url = mollweideMap.captureImage('png');
+          if (window.jspdf && window.jspdf.jsPDF) {
+            const w = mollweideMap.canvas.width;
+            const h = mollweideMap.canvas.height;
+            const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [w, h] });
+            doc.addImage(url, 'PNG', 0, 0, w, h);
+            doc.save('mollweide.pdf');
+          } else {
+            console.warn('jsPDF not loaded');
+          }
+        }
+      });
     });
   }
 }

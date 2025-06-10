@@ -321,6 +321,29 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   z-index: 10;
 }
 
+/* Export menu */
+.export-menu {
+  position: absolute;
+  background: rgba(20, 20, 20, 0.9);
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  gap: 4px;
+  z-index: 20;
+}
+.export-option {
+  background: none;
+  border: 1px solid #ff6f61;
+  color: #ff6f61;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.export-option:hover {
+  background: #ff6f61;
+  color: #1a1a1a;
+}
+
 /* Tooltip */
 #tooltip {
   position: absolute;
