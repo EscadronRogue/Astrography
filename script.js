@@ -924,8 +924,11 @@ function showExportMenu(button, options, callback) {
   options.forEach(opt => {
     const val = typeof opt === 'object' ? opt.value : opt;
     let label = typeof opt === 'object' ? opt.label : opt;
-    if (typeof val === 'number' && !label.includes('k')) {
-      label = (val / 1024) + 'k';
+    if (typeof val === 'number') {
+      const lblStr = String(label);
+      label = lblStr.includes('k') ? lblStr : (val / 1024) + 'k';
+    } else {
+      label = String(label);
     }
     const b = document.createElement('button');
     b.className = 'export-option';
