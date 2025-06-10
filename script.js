@@ -978,11 +978,41 @@ function exportMollweideMap(resolution) {
     }
   }
 
+  function addMesh(obj) {
+    const geom = obj.geometry;
+    if (!geom || !geom.getAttribute) return;
+    const posAttr = geom.getAttribute('position');
+    if (!posAttr) return;
+    const idx = geom.index ? geom.index.array : null;
+    const posArr = posAttr.array;
+    const mat = obj.material || {};
+    const fillOpacity = mat.opacity !== undefined ? mat.opacity : 0.2;
+    const fillColor = mat.color ? `#${mat.color.getHexString()}` : '#ffffff';
+    const loop = idx ? idx.length / 3 : posArr.length / 9;
+    for (let i = 0; i < loop; i++) {
+      const i1 = idx ? idx[i * 3] : i * 3;
+      const i2 = idx ? idx[i * 3 + 1] : i * 3 + 1;
+      const i3 = idx ? idx[i * 3 + 2] : i * 3 + 2;
+      const p1 = toScreen(posArr[i1 * 3], posArr[i1 * 3 + 1]);
+      const p2 = toScreen(posArr[i2 * 3], posArr[i2 * 3 + 1]);
+      const p3 = toScreen(posArr[i3 * 3], posArr[i3 * 3 + 1]);
+      parts.push(
+        `<polygon points="${p1.x.toFixed(2)},${p1.y.toFixed(2)} ` +
+        `${p2.x.toFixed(2)},${p2.y.toFixed(2)} ` +
+        `${p3.x.toFixed(2)},${p3.y.toFixed(2)}" ` +
+        `fill="${fillColor}" fill-opacity="${fillOpacity}" stroke="none" />`
+      );
+    }
+  }
+
   function traverse(obj) {
     if (obj === mollweideMap.starGroup) return; // stars handled separately
     if (obj.type === 'LineSegments' || obj.type === 'Line') {
       addLineSegments(obj);
-    } else if (obj.type === 'Group' || obj.type === 'Object3D') {
+    } else if (obj.type === 'Mesh') {
+      addMesh(obj);
+    }
+    if (obj.children && obj.children.length) {
       obj.children.forEach(c => traverse(c));
     }
   }
@@ -999,6 +1029,22 @@ function exportMollweideMap(resolution) {
     const color = star.displayColor || '#ffffff';
     parts.push(`<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${color}" />`);
   });
+
+  // Labels
+  if (mollweideMap.labelManager && mollweideMap.labelManager.sprites) {
+    mollweideMap.labelManager.sprites.forEach((sprite, star) => {
+      const text = star.displayName || '';
+      if (!text) return;
+      const pos = toScreen(sprite.position.x, sprite.position.y);
+      const color = star.displayColor || '#ffffff';
+      const fontSize = 12 * Math.max(star.displaySize || 1, 1);
+      parts.push(
+        `<text x="${pos.x.toFixed(2)}" y="${pos.y.toFixed(2)}" ` +
+        `fill="${color}" font-size="${fontSize}" ` +
+        `dominant-baseline="middle">${text}</text>`
+      );
+    });
+  }
 
   parts.push('</svg>');
   const blob = new Blob(parts, { type: 'image/svg+xml;charset=utf-8' });
