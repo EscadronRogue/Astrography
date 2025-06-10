@@ -920,7 +920,7 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap(format, resolution) {
+function exportMollweideMap(resolution) {
   const width = resolution;
   const height = Math.floor(resolution / 2);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
@@ -950,30 +950,23 @@ function exportMollweideMap(format, resolution) {
     }
   }
   exportRenderer.dispose();
-
-  if (format === 'png') {
-    finalCanvas.toBlob(b => {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(b);
-      link.download = 'mollweide_map.png';
-      link.click();
-      URL.revokeObjectURL(link.href);
-    }, 'image/png');
-  } else {
-    const dataUrl = finalCanvas.toDataURL('image/png');
-    const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [width, height] });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
-    pdf.save('mollweide_map.pdf');
-  }
+  const dataUrl = finalCanvas.toDataURL('image/png');
+  const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
+    `<image href="${dataUrl}" width="${width}" height="${height}"/></svg>`;
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'mollweide_map.svg';
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    const format = document.getElementById('export-format').value;
     const res = parseInt(document.getElementById('export-resolution').value, 10);
-    exportMollweideMap(format, res);
+    exportMollweideMap(res);
   });
 }
 
