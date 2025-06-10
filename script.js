@@ -954,8 +954,8 @@ function exportMollweideMap(format, resolution) {
   const splitNeeded = resolution > 8192;
   if (splitNeeded) {
     const zip = new JSZip();
-    const partWidth = 4096;
-    const partHeight = 2048;
+    const partWidth = 8192;
+    const partHeight = 4096;
     const cols = Math.ceil(width / partWidth);
     const rows = Math.ceil(height / partHeight);
     const promises = [];
@@ -968,7 +968,8 @@ function exportMollweideMap(format, resolution) {
         partCanvas.width = w;
         partCanvas.height = h;
         const partCtx = partCanvas.getContext('2d');
-        partCtx.drawImage(finalCanvas, col * partWidth, row * partHeight, w, h, 0, 0, w, h);
+        const srcY = height - row * partHeight - h;
+        partCtx.drawImage(finalCanvas, col * partWidth, srcY, w, h, 0, 0, w, h);
 
         const dataUrl = partCanvas.toDataURL('image/png');
         if (format === 'png') {
