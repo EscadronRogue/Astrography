@@ -7,7 +7,10 @@ import { createConstellationOverlayForGlobe, createConstellationOverlayForMollwe
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
-import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct import
+import {
+  updateCloudsOverlay,
+  updateMollweideCloudSegments
+} from './filters/cloudsFilter.js';
 import {
   createGalacticPlaneMesh,
   createEclipticPlaneMesh,
@@ -363,9 +366,13 @@ async function buildAndApplyFilters() {
     // Get the file paths from the checked dust cloud checkboxes.
     const cloudDataFiles = new FormData(form).getAll('dust-clouds');
     // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
-    updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
-    updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
-    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
+    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
+    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
+    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
+  } else {
+    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', []);
+    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', []);
+    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
   }
 
   applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator);
@@ -851,7 +858,7 @@ function updateSelectedStarHighlight() {
   if (window.requestRender) window.requestRender();
 }
 
-function updateMollweideView() {
+async function updateMollweideView() {
   if (!currentMollweideFilteredStars || currentMollweideFilteredStars.length === 0) return;
   currentMollweideFilteredStars.forEach(star => {
     updateMollweidePosition(star);
@@ -880,10 +887,12 @@ function updateMollweideView() {
     constellationOverlayMoll = createConstellationOverlayForMollweide();
     constellationOverlayMoll.forEach(mesh => mollweideMap.scene.add(mesh));
   }
-  if (showCloudsFlag) {
-    const form = document.getElementById('filters-form');
-    const cloudFiles = new FormData(form).getAll('dust-clouds');
-    updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudFiles);
+  if (showCloudsFlag && mollweideMap.scene.userData.cloudOverlays) {
+    mollweideMap.scene.userData.cloudOverlays.forEach(line => {
+      if (line.userData && line.userData.isMollweideCloud) {
+        updateMollweideCloudSegments(line);
+      }
+    });
   }
   if (enableIsolationFilterFlag && isolationOverlay) {
     if (typeof isolationOverlay.refreshMollweide === 'function') {

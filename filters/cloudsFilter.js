@@ -1,6 +1,14 @@
 // File: /filters/cloudsFilter.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints } from '../utils/geometryUtils.js';
+import {
+  getGreatCirclePoints,
+  radToSphere,
+  radToMollweide,
+  degToRad,
+  getMollweideLambda0,
+  greatCircleToMollweide,
+  splitMollweideWrap
+} from '../utils/geometryUtils.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -25,37 +33,33 @@ async function loadCloudData(cloudFileUrl) {
  * @param {THREE.Color} cloudColor - Unique color for the cloud overlay.
  * @returns {THREE.LineSegments|null} - A THREE.LineSegments object representing the cloud overlay, or null if too few points.
  */
-export async function createCloudOverlay(cloudData, completeStarList, mapType, cloudColor = new THREE.Color(0xff6600)) {
-  // Get the set of star names listed in the cloud data.
+export async function createCloudOverlay(
+  cloudData,
+  completeStarList,
+  mapType,
+  cloudColor = new THREE.Color(0xff6600)
+) {
   const cloudNames = new Set(cloudData.map(d => d['Star Name']));
   const cloudStars = [];
-  
-  // From the complete list, filter stars that belong to this cloud and are within 100 LY.
+
   completeStarList.forEach(star => {
     const distance = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
     if (distance > 100) return;
     if (cloudNames.has(star.Common_name_of_the_star)) {
-      let pos = null;
-      if (mapType === 'TrueCoordinates') {
-        if (star.truePosition) pos = star.truePosition;
-      } else if (mapType === 'Globe') {
-        if (star.spherePosition) pos = star.spherePosition;
-      } else {
-        if (star.mollweidePosition) pos = star.mollweidePosition;
-      }
-      if (pos) {
-        cloudStars.push({ star, pos });
+      if (mapType === 'TrueCoordinates' && star.truePosition) {
+        cloudStars.push({ star, pos: star.truePosition });
+      } else if (mapType === 'Globe' && star.spherePosition) {
+        cloudStars.push({ star, pos: star.spherePosition });
+      } else if (mapType === 'Mollweide' && star.spherePosition) {
+        // store sphere position; projection handled later
+        cloudStars.push({ star, pos: star.spherePosition });
       }
     }
   });
-  
-  if (cloudStars.length < 2) return null; // Not enough points
-  
-  const vertices = [];
-  const segmentsPerConnection = (mapType === 'Globe') ? 32 : 1;
-  const globeRadius = 100; // Globe radius constant
 
-  // For each star, find its three closest neighbors and build a connecting line.
+  if (cloudStars.length < 2) return null;
+
+  const pairs = [];
   for (let i = 0; i < cloudStars.length; i++) {
     const current = cloudStars[i];
     const neighbors = [];
@@ -68,42 +72,43 @@ export async function createCloudOverlay(cloudData, completeStarList, mapType, c
     neighbors.sort((a, b) => a.distance - b.distance);
     const k = Math.min(4, neighbors.length);
     for (let n = 0; n < k; n++) {
-      const p1 = current.pos;
-      const p2 = neighbors[n].other.pos;
-      if (mapType === 'Globe') {
-        // Generate points along the great circle arc between p1 and p2.
-        const curvedPoints = getGreatCirclePoints(p1, p2, globeRadius, segmentsPerConnection);
-        // For each consecutive pair, add a line segment.
-        for (let s = 0; s < curvedPoints.length - 1; s++) {
-          vertices.push(curvedPoints[s].x, curvedPoints[s].y, curvedPoints[s].z);
-          vertices.push(curvedPoints[s + 1].x, curvedPoints[s + 1].y, curvedPoints[s + 1].z);
-        }
-      } else {
-        // For non-globe maps, simply connect p1 and p2.
-        const v1 = p1.clone();
-        const v2 = p2.clone();
-        if (mapType === 'Mollweide' && Math.abs(v1.x - v2.x) > 200) {
-          if (v1.x > v2.x) v1.x -= 400; else v2.x -= 400;
-        }
-        vertices.push(v1.x, v1.y, v1.z);
-        vertices.push(v2.x, v2.y, v2.z);
-      }
+      pairs.push({ starA: current.star, starB: neighbors[n].other.star });
     }
   }
-  
-  // Build the geometry from the vertices.
+
+  if (mapType === 'Mollweide') {
+    const segs = createMollweideCloudSegments(pairs, cloudColor);
+    return segs;
+  }
+
+  const vertices = [];
+  const globeRadius = 100;
+  const segmentsPerConnection = mapType === 'Globe' ? 32 : 1;
+
+  pairs.forEach(pair => {
+    const p1 = mapType === 'Globe' ? pair.starA.spherePosition : pair.starA.truePosition;
+    const p2 = mapType === 'Globe' ? pair.starB.spherePosition : pair.starB.truePosition;
+    if (!p1 || !p2) return;
+    if (mapType === 'Globe') {
+      const pts = getGreatCirclePoints(p1, p2, globeRadius, segmentsPerConnection);
+      for (let s = 0; s < pts.length - 1; s++) {
+        vertices.push(pts[s].x, pts[s].y, pts[s].z);
+        vertices.push(pts[s + 1].x, pts[s + 1].y, pts[s + 1].z);
+      }
+    } else {
+      vertices.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
+    }
+  });
+
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  
-  // Create a thick line material.
   const material = new THREE.LineBasicMaterial({
     color: cloudColor,
-    linewidth: 10, // Note: WebGL often ignores linewidth > 1; consider using fat line techniques if needed.
+    linewidth: 1,
     transparent: true,
     opacity: 0.8,
     depthWrite: false
   });
-  
   const lineSegments = new THREE.LineSegments(geometry, material);
   lineSegments.renderOrder = 1;
   return lineSegments;
@@ -133,6 +138,63 @@ function getCloudNameFromFileUrl(fileUrl) {
   const parts = fileUrl.split('/');
   const filename = parts[parts.length - 1];
   return filename.replace('_cloud_data.json', '').replace('_', ' ');
+}
+
+const GC_SEGMENTS = 32;
+
+export function createMollweideCloudSegments(pairs, color) {
+  const segCount = pairs.length * GC_SEGMENTS * 2;
+  const positions = new Float32Array(segCount * 2 * 3);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.LineBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0.8,
+    linewidth: 1,
+    depthWrite: false
+  });
+  const segs = new THREE.LineSegments(geometry, material);
+  segs.renderOrder = 1;
+  segs.userData = { pairs, segments: GC_SEGMENTS, isMollweideCloud: true };
+  updateMollweideCloudSegments(segs);
+  return segs;
+}
+
+export function updateMollweideCloudSegments(lineSegs) {
+  const pairs = lineSegs.userData.pairs || [];
+  const segsCount = lineSegs.userData.segments || GC_SEGMENTS;
+  const posAttr = lineSegs.geometry.getAttribute('position');
+  let idx = 0;
+  pairs.forEach(pair => {
+    const p1 = pair.starA.spherePosition;
+    const p2 = pair.starB.spherePosition;
+    if (!p1 || !p2) return;
+    const pts = greatCircleToMollweide(
+      p1,
+      p2,
+      100,
+      segsCount,
+      getMollweideLambda0()
+    );
+    for (let j = 0; j < pts.length - 1; j++) {
+      const segs = splitMollweideWrap(pts[j], pts[j + 1]);
+      segs.forEach(([s, e]) => {
+        if (idx + 6 > posAttr.array.length) return;
+        posAttr.array[idx++] = s.x;
+        posAttr.array[idx++] = s.y;
+        posAttr.array[idx++] = s.z;
+        posAttr.array[idx++] = e.x;
+        posAttr.array[idx++] = e.y;
+        posAttr.array[idx++] = e.z;
+      });
+    }
+  });
+  for (; idx < posAttr.array.length; idx++) {
+    posAttr.array[idx] = 0;
+  }
+  posAttr.needsUpdate = true;
+  lineSegs.computeLineDistances();
 }
 
 /**
