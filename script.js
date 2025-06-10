@@ -923,37 +923,72 @@ window.updateMollweideView = updateMollweideView;
 function exportMollweideMap(resolution) {
   const width = resolution;
   const height = Math.floor(resolution / 2);
-  const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
-  exportRenderer.setPixelRatio(1);
-  const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = width;
-  finalCanvas.height = height;
-  const ctx = finalCanvas.getContext('2d');
-  const maxSize = exportRenderer.capabilities.maxTextureSize;
-  const tile = Math.min(maxSize, 8192);
-  for (let y = 0; y < height; y += tile) {
-    for (let x = 0; x < width; x += tile) {
-      const tileW = Math.min(tile, width - x);
-      const tileH = Math.min(tile, height - y);
-      exportRenderer.setSize(tileW, tileH);
-      const cam = mollweideMap.camera.clone();
-      const aspect = width / height;
-      cam.left = (-mollweideMap.frustumSize * aspect) / 2;
-      cam.right = (mollweideMap.frustumSize * aspect) / 2;
-      cam.top = mollweideMap.frustumSize / 2;
-      cam.bottom = -mollweideMap.frustumSize / 2;
-      cam.updateProjectionMatrix();
-      cam.setViewOffset(width, height, x, y, tileW, tileH);
-      exportRenderer.render(mollweideMap.scene, cam);
-      cam.clearViewOffset();
-      ctx.drawImage(exportRenderer.domElement, x, height - y - tileH, tileW, tileH);
+  const aspect = width / height;
+  const fs = mollweideMap.frustumSize;
+  const left = (-fs * aspect) / 2;
+  const top = fs / 2;
+  const scaleX = width / (fs * aspect);
+  const scaleY = height / fs;
+  const unitToPx = height / fs;
+
+  const parts = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="background:#000">`
+  ];
+
+  // Border
+  const border = [];
+  for (let i = 0; i <= 64; i++) {
+    const theta = (i / 64) * Math.PI * 2;
+    const x = 2 * 100 * Math.cos(theta);
+    const y = 100 * Math.sin(theta);
+    const sx = (x - left) * scaleX;
+    const sy = (top - y) * scaleY;
+    border.push(`${i === 0 ? 'M' : 'L'}${sx.toFixed(2)} ${sy.toFixed(2)}`);
+  }
+  parts.push(`<path d="${border.join(' ')} Z" fill="none" stroke="#aaaaaa" stroke-opacity="0.5" stroke-width="1"/>`);
+
+  // Connection lines
+  if (mollweideMap.connectionGroup && mollweideMap.connectionGroup.children[0]) {
+    const segs = mollweideMap.connectionGroup.children[0];
+    const posAttr = segs.geometry.getAttribute('position');
+    const colAttr = segs.geometry.getAttribute('color');
+    const posArr = posAttr.array;
+    const colArr = colAttr.array;
+    for (let i = 0; i < posArr.length; i += 6) {
+      if (
+        posArr[i] === 0 && posArr[i + 1] === 0 &&
+        posArr[i + 3] === 0 && posArr[i + 4] === 0
+      ) {
+        continue;
+      }
+      const x1 = (posArr[i] - left) * scaleX;
+      const y1 = (top - posArr[i + 1]) * scaleY;
+      const x2 = (posArr[i + 3] - left) * scaleX;
+      const y2 = (top - posArr[i + 4]) * scaleY;
+      const r = Math.round(((colArr[i] + colArr[i + 3]) / 2) * 255);
+      const g = Math.round(((colArr[i + 1] + colArr[i + 4]) / 2) * 255);
+      const b = Math.round(((colArr[i + 2] + colArr[i + 5]) / 2) * 255);
+      parts.push(
+        `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" ` +
+        `stroke="rgb(${r},${g},${b})" stroke-opacity="0.5" stroke-width="1" />`
+      );
     }
   }
-  exportRenderer.dispose();
-  const dataUrl = finalCanvas.toDataURL('image/png');
-  const svgString = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">` +
-    `<image href="${dataUrl}" width="${width}" height="${height}"/></svg>`;
-  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+
+  // Stars
+  currentMollweideFilteredStars.forEach(star => {
+    const pos = star.mollweidePosition;
+    if (!pos) return;
+    const x = (pos.x - left) * scaleX;
+    const y = (top - pos.y) * scaleY;
+    const size = star.displaySize !== undefined ? star.displaySize : 1;
+    const r = size * 0.4 * unitToPx;
+    const color = star.displayColor || '#ffffff';
+    parts.push(`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r.toFixed(2)}" fill="${color}" />`);
+  });
+
+  parts.push('</svg>');
+  const blob = new Blob(parts, { type: 'image/svg+xml;charset=utf-8' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = 'mollweide_map.svg';
