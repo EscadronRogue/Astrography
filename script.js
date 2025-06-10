@@ -758,10 +758,14 @@ function toggleMapVisibility(mapType, visible) {
   if (!manager || !container) return;
   if (visible) {
     container.style.display = '';
-    // Delay resize to ensure layout updated after showing container
+    // Wait two frames so layout fully updates before resizing
     requestAnimationFrame(() => {
-      manager.onResize();
-      if (window.requestRender) window.requestRender();
+      requestAnimationFrame(() => {
+        manager.onResize();
+        // Trigger global resize listeners for good measure
+        window.dispatchEvent(new Event('resize'));
+        if (window.requestRender) window.requestRender();
+      });
     });
     addMapManager(manager);
     manager.updateMap(stars, connections);
