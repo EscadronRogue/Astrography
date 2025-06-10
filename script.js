@@ -1,6 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { OBJExporter } from './utils/OBJExporter.js';
+import { STLExporter } from './utils/STLExporter.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
@@ -10,6 +11,7 @@ import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
 import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct import
 const EXPORT_SIZE = 4096;
+const EXPORT_SIZES = [1024, 2048, 4096, 8192, 16384, 32768];
 
 import {
   createGalacticPlaneMesh,
@@ -738,33 +740,13 @@ class MapManager {
     return { obj: objData, mtl: mtlData };
   }
 
-  generateGlobeTexture(resolution = EXPORT_SIZE) {
-    const width = resolution;
-    const height = Math.round(resolution / 2);
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-    if (this.starObjects) {
-      this.starObjects.forEach(star => {
-        let ra = star.RA_in_radian !== undefined ? star.RA_in_radian : (star.RA_in_degrees !== undefined ? degToRad(star.RA_in_degrees) : 0);
-        let dec = star.DEC_in_radian !== undefined ? star.DEC_in_radian : (star.DEC_in_degrees !== undefined ? degToRad(star.DEC_in_degrees) : 0);
-        const x = (ra % (Math.PI * 2)) / (Math.PI * 2) * width;
-        const y = (0.5 - dec / Math.PI) * height;
-        const size = (star.displaySize !== undefined ? star.displaySize : 1) * 0.4;
-        ctx.fillStyle = star.displayColor || '#ffffff';
-        ctx.beginPath();
-        ctx.arc(x, y, size, 0, Math.PI * 2);
-        ctx.fill();
-      });
-    }
-    return canvas.toDataURL('image/png');
+  exportSTL() {
+    const exporter = new STLExporter();
+    return exporter.parse(this.scene);
   }
 
-  async exportOBJWithTexture(resolution = EXPORT_SIZE) {
-    const textureData = this.generateGlobeTexture(resolution);
+  async exportOBJWithTexture(textureData) {
+    if (!textureData) textureData = this.captureImage('png');
     const sphere = new THREE.Mesh(new THREE.SphereGeometry(100, 64, 32));
     const exporter = new OBJExporter();
     const objData = exporter.parse(sphere, 'globe.mtl');
@@ -780,6 +762,37 @@ class MapManager {
       return zip.generateAsync({ type: 'blob' });
     }
     return { obj: objData, mtl: mtlData, texture: textureData };
+  }
+
+  async exportGIF(width = 512, frames = 36) {
+    if (!window.GIF) {
+      console.warn('gif.js not loaded');
+      return null;
+    }
+    const origSize = this.renderer.getSize(new THREE.Vector2());
+    const origRatio = this.renderer.getPixelRatio();
+    const aspect = origSize.y / origSize.x;
+    width = Math.min(width, this.renderer.capabilities.maxTextureSize || width);
+    const height = Math.round(width * aspect);
+    this.renderer.setPixelRatio(1);
+    this.renderer.setSize(width, height, false);
+    const radius = this.camera.position.length();
+    const gif = new window.GIF({ workers: 2, quality: 10, width, height });
+    const startPos = this.camera.position.clone();
+    for (let i = 0; i < frames; i++) {
+      const angle = (i / frames) * Math.PI * 2;
+      this.camera.position.set(Math.sin(angle) * radius, startPos.y, Math.cos(angle) * radius);
+      this.camera.lookAt(0, 0, 0);
+      this.renderer.render(this.scene, this.camera);
+      gif.addFrame(this.renderer.domElement, { copy: true, delay: 100 });
+    }
+    this.camera.position.copy(startPos);
+    this.renderer.setPixelRatio(origRatio);
+    this.renderer.setSize(origSize.x, origSize.y, false);
+    return new Promise(resolve => {
+      gif.on('finished', blob => resolve(blob));
+      gif.render();
+    });
   }
 
   animate() {
@@ -980,7 +993,9 @@ function showExportMenu(button, options, callback) {
 
 function pickExport(button, formats, callback) {
   showExportMenu(button, formats, fmt => {
-    callback(fmt);
+    showExportMenu(button, EXPORT_SIZES, res => {
+      callback(fmt, res);
+    });
   });
 }
 
@@ -1004,11 +1019,32 @@ function setupPrintButtons() {
   const btn3D = document.getElementById('print-map3D');
   if (btn3D) {
     btn3D.addEventListener('click', () => {
-      pickExport(btn3D, ['obj'], async (fmt) => {
+      pickExport(btn3D, ['obj', 'stl', 'gif'], async (fmt, res) => {
         if (fmt === 'obj') {
           const data = trueCoordinatesMap.exportOBJ();
-          downloadBlob(new Blob([data.obj], { type: 'text/plain' }), 'true_coordinates.obj');
-          downloadBlob(new Blob([data.mtl], { type: 'text/plain' }), 'true_coordinates.mtl');
+          if (window.JSZip) {
+            const zip = new window.JSZip();
+            zip.file('true_coordinates.obj', data.obj);
+            zip.file('true_coordinates.mtl', data.mtl);
+            const blob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(blob, 'true_coordinates.zip');
+          } else {
+            downloadBlob(new Blob([data.obj], { type: 'text/plain' }), 'true_coordinates.obj');
+            downloadBlob(new Blob([data.mtl], { type: 'text/plain' }), 'true_coordinates.mtl');
+          }
+        } else if (fmt === 'stl') {
+          const stl = trueCoordinatesMap.exportSTL();
+          if (window.JSZip) {
+            const zip = new window.JSZip();
+            zip.file('true_coordinates.stl', stl);
+            const blob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(blob, 'true_coordinates.zip');
+          } else {
+            downloadBlob(new Blob([stl], { type: 'text/plain' }), 'true_coordinates.stl');
+          }
+        } else if (fmt === 'gif') {
+          const blob = await trueCoordinatesMap.exportGIF(res);
+          if (blob) downloadBlob(blob, 'true_coordinates.gif');
         }
       });
     });
@@ -1017,9 +1053,11 @@ function setupPrintButtons() {
   const btnSphere = document.getElementById('print-sphereMap');
   if (btnSphere) {
     btnSphere.addEventListener('click', () => {
-      pickExport(btnSphere, ['obj'], async (fmt) => {
+      pickExport(btnSphere, ['obj', 'gif'], async (fmt, res) => {
         if (fmt === 'obj') {
-          const blob = await globeMap.exportOBJWithTexture(EXPORT_SIZE);
+          updateMollweideView();
+          const tex = mollweideMap.captureImage('png', res || EXPORT_SIZE);
+          const blob = await globeMap.exportOBJWithTexture(tex);
           if (blob instanceof Blob) {
             downloadBlob(blob, 'globe.zip');
           } else {
@@ -1027,6 +1065,9 @@ function setupPrintButtons() {
             downloadBlob(new Blob([blob.mtl], { type: 'text/plain' }), 'globe.mtl');
             downloadBlob(dataURLToBlob(blob.texture), 'texture.png');
           }
+        } else if (fmt === 'gif') {
+          const gifBlob = await globeMap.exportGIF(res);
+          if (gifBlob) downloadBlob(gifBlob, 'globe.gif');
         }
       });
     });
@@ -1035,19 +1076,19 @@ function setupPrintButtons() {
   const btnMoll = document.getElementById('print-mollweideMap');
   if (btnMoll) {
     btnMoll.addEventListener('click', () => {
-      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], async (fmt) => {
-        const res = EXPORT_SIZE;
+      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], async (fmt, res) => {
+        const width = res || EXPORT_SIZE;
         if (fmt === 'png' || fmt === 'jpg') {
-          const url = mollweideMap.captureImage(fmt, res);
+          const url = mollweideMap.captureImage(fmt, width);
           downloadBlob(await (await fetch(url)).blob(), `mollweide.${fmt}`);
         } else if (fmt === 'svg') {
-          const url = mollweideMap.captureImage('png', res);
+          const url = mollweideMap.captureImage('png', width);
           const w = mollweideMap.canvas.width;
           const h = mollweideMap.canvas.height;
           const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><image href="${url}" width="100%" height="100%"/></svg>`;
           downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), 'mollweide.svg');
         } else if (fmt === 'pdf') {
-          const url = mollweideMap.captureImage('png', res);
+          const url = mollweideMap.captureImage('png', width);
           if (window.jspdf && window.jspdf.jsPDF) {
             const w = mollweideMap.canvas.width;
             const h = mollweideMap.canvas.height;
