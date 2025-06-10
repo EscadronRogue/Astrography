@@ -920,6 +920,63 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
+function exportMollweideMap(format, resolution) {
+  const width = resolution;
+  const height = Math.floor(resolution / 2);
+  const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
+  exportRenderer.setPixelRatio(1);
+  const finalCanvas = document.createElement('canvas');
+  finalCanvas.width = width;
+  finalCanvas.height = height;
+  const ctx = finalCanvas.getContext('2d');
+  const maxSize = exportRenderer.capabilities.maxTextureSize;
+  const tile = Math.min(maxSize, 8192);
+  for (let y = 0; y < height; y += tile) {
+    for (let x = 0; x < width; x += tile) {
+      const tileW = Math.min(tile, width - x);
+      const tileH = Math.min(tile, height - y);
+      exportRenderer.setSize(tileW, tileH);
+      const cam = mollweideMap.camera.clone();
+      const aspect = width / height;
+      cam.left = (-mollweideMap.frustumSize * aspect) / 2;
+      cam.right = (mollweideMap.frustumSize * aspect) / 2;
+      cam.top = mollweideMap.frustumSize / 2;
+      cam.bottom = -mollweideMap.frustumSize / 2;
+      cam.updateProjectionMatrix();
+      cam.setViewOffset(width, height, x, y, tileW, tileH);
+      exportRenderer.render(mollweideMap.scene, cam);
+      cam.clearViewOffset();
+      ctx.drawImage(exportRenderer.domElement, x, height - y - tileH, tileW, tileH);
+    }
+  }
+  exportRenderer.dispose();
+
+  if (format === 'png') {
+    finalCanvas.toBlob(b => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(b);
+      link.download = 'mollweide_map.png';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }, 'image/png');
+  } else {
+    const dataUrl = finalCanvas.toDataURL('image/png');
+    const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [width, height] });
+    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
+    pdf.save('mollweide_map.pdf');
+  }
+}
+
+function setupExportControls() {
+  const btn = document.getElementById('export-mollweide');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const format = document.getElementById('export-format').value;
+    const res = parseInt(document.getElementById('export-resolution').value, 10);
+    exportMollweideMap(format, res);
+  });
+}
+
 async function main() {
   const loader = document.getElementById('loader');
   loader.classList.remove('hidden');
@@ -952,6 +1009,7 @@ async function main() {
     initStarInteractions(globeMap);
     initStarInteractions(mollweideMap);
     setupMapProjectionToggles();
+    setupExportControls();
     requestRender();
     loader.classList.add('hidden');
   } catch (err) {
