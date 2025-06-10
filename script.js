@@ -935,56 +935,69 @@ function exportMollweideMap(resolution) {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="background:#000">`
   ];
 
+  function toScreen(x, y) {
+    return { x: (x - left) * scaleX, y: (top - y) * scaleY };
+  }
+
   // Border
   const border = [];
   for (let i = 0; i <= 64; i++) {
     const theta = (i / 64) * Math.PI * 2;
     const x = 2 * 100 * Math.cos(theta);
     const y = 100 * Math.sin(theta);
-    const sx = (x - left) * scaleX;
-    const sy = (top - y) * scaleY;
-    border.push(`${i === 0 ? 'M' : 'L'}${sx.toFixed(2)} ${sy.toFixed(2)}`);
+    const p = toScreen(x, y);
+    border.push(`${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)} ${p.y.toFixed(2)}`);
   }
   parts.push(`<path d="${border.join(' ')} Z" fill="none" stroke="#aaaaaa" stroke-opacity="0.5" stroke-width="1"/>`);
 
-  // Connection lines
-  if (mollweideMap.connectionGroup && mollweideMap.connectionGroup.children[0]) {
-    const segs = mollweideMap.connectionGroup.children[0];
-    const posAttr = segs.geometry.getAttribute('position');
-    const colAttr = segs.geometry.getAttribute('color');
+  function addLineSegments(obj, defaultColor = '#aaaaaa', defaultOpacity = 0.5, defaultWidth = 1) {
+    const posAttr = obj.geometry.getAttribute('position');
+    const colAttr = obj.geometry.getAttribute('color');
     const posArr = posAttr.array;
-    const colArr = colAttr.array;
+    const colArr = colAttr ? colAttr.array : null;
+    const mat = obj.material || {};
+    const strokeOpacity = mat.opacity !== undefined ? mat.opacity : defaultOpacity;
+    const strokeWidth = mat.linewidth !== undefined ? mat.linewidth : defaultWidth;
     for (let i = 0; i < posArr.length; i += 6) {
       if (
         posArr[i] === 0 && posArr[i + 1] === 0 &&
         posArr[i + 3] === 0 && posArr[i + 4] === 0
-      ) {
-        continue;
+      ) continue;
+      const p1 = toScreen(posArr[i], posArr[i + 1]);
+      const p2 = toScreen(posArr[i + 3], posArr[i + 4]);
+      let color = defaultColor;
+      if (colArr) {
+        const r = Math.round(((colArr[i] + colArr[i + 3]) / 2) * 255);
+        const g = Math.round(((colArr[i + 1] + colArr[i + 4]) / 2) * 255);
+        const b = Math.round(((colArr[i + 2] + colArr[i + 5]) / 2) * 255);
+        color = `rgb(${r},${g},${b})`;
+      } else if (mat.color) {
+        color = `#${mat.color.getHexString()}`;
       }
-      const x1 = (posArr[i] - left) * scaleX;
-      const y1 = (top - posArr[i + 1]) * scaleY;
-      const x2 = (posArr[i + 3] - left) * scaleX;
-      const y2 = (top - posArr[i + 4]) * scaleY;
-      const r = Math.round(((colArr[i] + colArr[i + 3]) / 2) * 255);
-      const g = Math.round(((colArr[i + 1] + colArr[i + 4]) / 2) * 255);
-      const b = Math.round(((colArr[i + 2] + colArr[i + 5]) / 2) * 255);
-      parts.push(
-        `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" ` +
-        `stroke="rgb(${r},${g},${b})" stroke-opacity="0.5" stroke-width="1" />`
-      );
+      parts.push(`<line x1="${p1.x.toFixed(2)}" y1="${p1.y.toFixed(2)}" x2="${p2.x.toFixed(2)}" y2="${p2.y.toFixed(2)}" stroke="${color}" stroke-opacity="${strokeOpacity}" stroke-width="${strokeWidth}" />`);
     }
   }
+
+  function traverse(obj) {
+    if (obj === mollweideMap.starGroup) return; // stars handled separately
+    if (obj.type === 'LineSegments' || obj.type === 'Line') {
+      addLineSegments(obj);
+    } else if (obj.type === 'Group' || obj.type === 'Object3D') {
+      obj.children.forEach(c => traverse(c));
+    }
+  }
+
+  traverse(mollweideMap.scene);
 
   // Stars
   currentMollweideFilteredStars.forEach(star => {
     const pos = star.mollweidePosition;
     if (!pos) return;
-    const x = (pos.x - left) * scaleX;
-    const y = (top - pos.y) * scaleY;
+    const p = toScreen(pos.x, pos.y);
     const size = star.displaySize !== undefined ? star.displaySize : 1;
     const r = size * 0.4 * unitToPx;
     const color = star.displayColor || '#ffffff';
-    parts.push(`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r.toFixed(2)}" fill="${color}" />`);
+    parts.push(`<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${r.toFixed(2)}" fill="${color}" />`);
   });
 
   parts.push('</svg>');
