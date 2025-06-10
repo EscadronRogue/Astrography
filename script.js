@@ -828,7 +828,31 @@ function toggleMapVisibility(mapType, visible) {
     }
   } else {
     container.style.display = 'none';
-    if (manager) removeMapManager(manager);
+    if (manager) {
+      removeMapManager(manager);
+      window.removeEventListener('resize', manager.debouncedResize, false);
+      if (manager.controls && typeof manager.controls.dispose === 'function') {
+        manager.controls.dispose();
+      }
+      manager.renderer.dispose();
+      if (mapType === 'TrueCoordinates') {
+        trueCoordinatesMap = null;
+        window.trueCoordinatesMap = null;
+        if (selectedHighlightTrue) {
+          selectedHighlightTrue.geometry.dispose();
+          selectedHighlightTrue.material.dispose();
+          selectedHighlightTrue = null;
+        }
+      } else if (mapType === 'Globe') {
+        globeMap = null;
+        window.globeMap = null;
+        if (selectedHighlightGlobe) {
+          selectedHighlightGlobe.geometry.dispose();
+          selectedHighlightGlobe.material.dispose();
+          selectedHighlightGlobe = null;
+        }
+      }
+    }
     requestRender();
   }
 }
