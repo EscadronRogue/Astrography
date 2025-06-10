@@ -738,12 +738,14 @@ class MapManager {
     return exporter.parse(this.scene);
   }
 
-  exportOBJWithTexture() {
+  exportOBJWithTexture(resolution = 4096) {
     const exporter = new OBJExporter();
-    const sphere = new THREE.Mesh(new THREE.SphereGeometry(100, 64, 64), new THREE.MeshBasicMaterial());
+    const segments = Math.max(8, Math.round(resolution / 512));
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(100, segments, segments), new THREE.MeshBasicMaterial());
     const obj = 'mtllib globe.mtl\nusemtl map\n' + exporter.parse(sphere);
     const mtl = 'newmtl map\nKa 1 1 1\nKd 1 1 1\nmap_Kd globe_texture.png\n';
-    const texture = this.captureImage('png');
+    const target = window.mollweideMap ? window.mollweideMap : this;
+    const texture = target.captureImage('png', resolution);
     return { obj, mtl, texture };
   }
 
@@ -920,11 +922,16 @@ function showExportMenu(button, options, callback) {
   const menu = document.createElement('div');
   menu.className = 'export-menu';
   options.forEach(opt => {
+    const val = typeof opt === 'object' ? opt.value : opt;
+    let label = typeof opt === 'object' ? opt.label : opt;
+    if (typeof val === 'number' && !label.includes('k')) {
+      label = (val / 1024) + 'k';
+    }
     const b = document.createElement('button');
     b.className = 'export-option';
-    b.textContent = opt.toUpperCase();
+    b.textContent = label.toUpperCase();
     b.addEventListener('click', () => {
-      callback(opt);
+      callback(val);
       document.body.removeChild(menu);
     });
     menu.appendChild(b);
@@ -933,6 +940,14 @@ function showExportMenu(button, options, callback) {
   menu.style.top = rect.bottom + 'px';
   menu.style.left = rect.left + 'px';
   document.body.appendChild(menu);
+}
+
+function pickExport(button, formats, resolutions, callback) {
+  showExportMenu(button, formats, fmt => {
+    showExportMenu(button, resolutions, res => {
+      callback(fmt, res);
+    });
+  });
 }
 
 function downloadBlob(blob, filename) {
@@ -948,7 +963,7 @@ function setupPrintButtons() {
   const btn3D = document.getElementById('print-map3D');
   if (btn3D) {
     btn3D.addEventListener('click', () => {
-      showExportMenu(btn3D, ['stl'], async (fmt) => {
+      pickExport(btn3D, ['stl'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
         if (fmt === 'stl') {
           const data = trueCoordinatesMap.exportSTL();
           downloadBlob(new Blob([data], { type: 'text/plain' }), 'true_coordinates.stl');
@@ -960,10 +975,10 @@ function setupPrintButtons() {
   const btnSphere = document.getElementById('print-sphereMap');
   if (btnSphere) {
     btnSphere.addEventListener('click', () => {
-      showExportMenu(btnSphere, ['obj'], async (fmt) => {
+      pickExport(btnSphere, ['obj'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
         if (fmt === 'obj') {
           if (window.JSZip) {
-            const exp = globeMap.exportOBJWithTexture();
+            const exp = globeMap.exportOBJWithTexture(res);
             const zip = new JSZip();
             zip.file('globe.obj', exp.obj);
             zip.file('globe.mtl', exp.mtl);
@@ -972,7 +987,7 @@ function setupPrintButtons() {
             const blob = await zip.generateAsync({ type: 'blob' });
             downloadBlob(blob, 'globe.zip');
           } else {
-            const data = globeMap.exportOBJWithTexture().obj;
+            const data = globeMap.exportOBJWithTexture(res).obj;
             downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.obj');
           }
         }
@@ -983,10 +998,7 @@ function setupPrintButtons() {
   const btnMoll = document.getElementById('print-mollweideMap');
   if (btnMoll) {
     btnMoll.addEventListener('click', () => {
-      showExportMenu(btnMoll, ['png', 'jpg', 'svg', 'pdf'], async (fmt) => {
-        const defaultRes = 4096;
-        let res = parseInt(prompt('Export resolution (px, width)', defaultRes.toString()), 10);
-        if (!Number.isFinite(res)) res = defaultRes;
+      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
         res = Math.max(mollweideMap.canvas.width, Math.min(res, 32000));
         if (fmt === 'png' || fmt === 'jpg') {
           const url = mollweideMap.captureImage(fmt, res);
