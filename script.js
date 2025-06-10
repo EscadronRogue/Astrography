@@ -205,7 +205,11 @@ function createMollweideBorder(R = 100) {
     points.push(new THREE.Vector3(x, y, 0));
   }
   const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xaaaaaa,
+    transparent: true,
+    opacity: 0.5
+  });
   return new THREE.LineLoop(geom, mat);
 }
 
@@ -711,7 +715,12 @@ function requestRender() {
     renderRequested = true;
     requestAnimationFrame(() => {
       renderRequested = false;
-      mapManagers.forEach(m => m.render());
+      mapManagers.forEach(m => {
+        const container = m.canvas.parentElement;
+        if (!container || container.style.display !== 'none') {
+          m.render();
+        }
+      });
     });
   }
 }

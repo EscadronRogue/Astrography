@@ -23,6 +23,37 @@ export function initFilterUI() {
     connectionSlider.value = this.value;
   });
 
+  // Map Projection controls
+  const mapsSection = document.querySelector('.maps-section');
+  const mapContainers = {
+    mollweide: document.getElementById('mollweideMap').parentElement,
+    true: document.getElementById('map3D').parentElement,
+    globe: document.getElementById('sphereMap').parentElement
+  };
+  const projectionChecks = {
+    mollweide: document.getElementById('proj-mollweide'),
+    true: document.getElementById('proj-true'),
+    globe: document.getElementById('proj-globe')
+  };
+  // Hide non-default projections
+  mapContainers.true.style.display = 'none';
+  mapContainers.globe.style.display = 'none';
+
+  Object.keys(projectionChecks).forEach(key => {
+    projectionChecks[key].addEventListener('change', function () {
+      const container = mapContainers[key];
+      if (this.checked) {
+        container.style.display = '';
+        mapsSection.appendChild(container);
+        container.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        container.style.display = 'none';
+      }
+      window.dispatchEvent(new Event('resize'));
+      if (window.requestRender) window.requestRender();
+    });
+  });
+
   // Isolation Filter UI controls.
   const enableIsolationChk = document.getElementById('enable-isolation-filter');
   const isolationSlider = document.getElementById('isolation-slider');
