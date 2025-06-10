@@ -1,7 +1,6 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { OBJExporter } from './utils/OBJExporter.js';
-import { STLExporter } from './utils/STLExporter.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
@@ -730,19 +729,53 @@ class MapManager {
     return data;
   }
 
-  exportSTL() {
-    const exporter = new STLExporter();
-    return exporter.parse(this.scene);
-  }
-
   exportOBJ() {
     const exporter = new OBJExporter();
     return exporter.parse(this.scene);
   }
 
-  exportOBJWithTexture() {
+  generateGlobeTexture(resolution = 4096) {
+    const width = resolution;
+    const height = Math.round(resolution / 2);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+    if (this.starObjects) {
+      this.starObjects.forEach(star => {
+        let ra = star.RA_in_radian !== undefined ? star.RA_in_radian : (star.RA_in_degrees !== undefined ? degToRad(star.RA_in_degrees) : 0);
+        let dec = star.DEC_in_radian !== undefined ? star.DEC_in_radian : (star.DEC_in_degrees !== undefined ? degToRad(star.DEC_in_degrees) : 0);
+        const x = (ra % (Math.PI * 2)) / (Math.PI * 2) * width;
+        const y = (0.5 - dec / Math.PI) * height;
+        const size = (star.displaySize !== undefined ? star.displaySize : 1) * 0.4;
+        ctx.fillStyle = star.displayColor || '#ffffff';
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    return canvas.toDataURL('image/png');
+  }
+
+  async exportOBJWithTexture(resolution = 4096) {
+    const textureData = this.generateGlobeTexture(resolution);
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(100, 64, 32));
     const exporter = new OBJExporter();
-    return exporter.parse(this.scene);
+    const objData = exporter.parse(sphere);
+    const mtlData = 'newmtl material0\nKd 1 1 1\nmap_Kd texture.png\n';
+    if (window.JSZip) {
+      const zip = new window.JSZip();
+      zip.file('globe.obj', objData);
+      zip.file('globe.mtl', mtlData);
+      const binary = atob(textureData.split(',')[1]);
+      const array = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+      zip.file('texture.png', array);
+      return zip.generateAsync({ type: 'blob' });
+    }
+    return { obj: objData, mtl: mtlData, texture: textureData };
   }
 
   animate() {
@@ -958,14 +991,21 @@ function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+function dataURLToBlob(dataURL) {
+  const binary = atob(dataURL.split(',')[1]);
+  const array = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+  return new Blob([array], { type: 'image/png' });
+}
+
 function setupPrintButtons() {
   const btn3D = document.getElementById('print-map3D');
   if (btn3D) {
     btn3D.addEventListener('click', () => {
-      pickExport(btn3D, ['stl'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
-        if (fmt === 'stl') {
-          const data = trueCoordinatesMap.exportSTL();
-          downloadBlob(new Blob([data], { type: 'text/plain' }), 'true_coordinates.stl');
+      pickExport(btn3D, ['obj'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
+        if (fmt === 'obj') {
+          const data = trueCoordinatesMap.exportOBJ();
+          downloadBlob(new Blob([data], { type: 'text/plain' }), 'true_coordinates.obj');
         }
       });
     });
@@ -974,10 +1014,16 @@ function setupPrintButtons() {
   const btnSphere = document.getElementById('print-sphereMap');
   if (btnSphere) {
     btnSphere.addEventListener('click', () => {
-      pickExport(btnSphere, ['obj'], [1024, 2048, 4096, 8192], async (fmt) => {
+      pickExport(btnSphere, ['obj'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
         if (fmt === 'obj') {
-          const data = globeMap.exportOBJWithTexture();
-          downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.obj');
+          const blob = await globeMap.exportOBJWithTexture(res);
+          if (blob instanceof Blob) {
+            downloadBlob(blob, 'globe.zip');
+          } else {
+            downloadBlob(new Blob([blob.obj], { type: 'text/plain' }), 'globe.obj');
+            downloadBlob(new Blob([blob.mtl], { type: 'text/plain' }), 'globe.mtl');
+            downloadBlob(dataURLToBlob(blob.texture), 'texture.png');
+          }
         }
       });
     });
@@ -986,7 +1032,7 @@ function setupPrintButtons() {
   const btnMoll = document.getElementById('print-mollweideMap');
   if (btnMoll) {
     btnMoll.addEventListener('click', () => {
-      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], [1024, 2048, 4096, 8192], async (fmt, res) => {
+      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
         const maxSize = mollweideMap.renderer.capabilities.maxTextureSize || 8192;
         res = Math.max(mollweideMap.canvas.width, Math.min(res, maxSize));
         if (fmt === 'png' || fmt === 'jpg') {
@@ -1004,7 +1050,7 @@ function setupPrintButtons() {
             const w = mollweideMap.canvas.width;
             const h = mollweideMap.canvas.height;
             const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [w, h] });
-            doc.addImage(url, 'PNG', 0, 0, w, h);
+            doc.addImage(url, 'PNG', 0, 0, w, h, undefined, 'FAST');
             doc.save('mollweide.pdf');
           } else {
             console.warn('jsPDF not loaded');
