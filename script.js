@@ -205,7 +205,7 @@ function createMollweideBorder(R = 100) {
     points.push(new THREE.Vector3(x, y, 0));
   }
   const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa, opacity: 0.5, transparent: true });
   return new THREE.LineLoop(geom, mat);
 }
 
@@ -700,6 +700,7 @@ class MapManager {
   }
 
   render() {
+    if (!this.canvas.isConnected) return;
     this.renderer.render(this.scene, this.camera);
   }
 }
@@ -716,6 +717,34 @@ function requestRender() {
   }
 }
 window.requestRender = requestRender;
+
+function setupMapProjectionToggles() {
+  const mapsSection = document.querySelector('.maps-section');
+  const trueContainer = document.getElementById('map3D').parentElement;
+  const globeContainer = document.getElementById('sphereMap').parentElement;
+  const mollContainer = document.getElementById('mollweideMap').parentElement;
+  [trueContainer, globeContainer, mollContainer].forEach(c => c.remove());
+  mapsSection.appendChild(mollContainer);
+
+  function handle(id, container, manager) {
+    const cb = document.getElementById(id);
+    if (!cb) return;
+    cb.addEventListener('change', () => {
+      if (cb.checked) {
+        mapsSection.appendChild(container);
+        manager.onResize();
+        container.scrollIntoView({ behavior: 'smooth' });
+      } else if (container.isConnected) {
+        container.remove();
+      }
+      requestRender();
+    });
+  }
+
+  handle('map-true', trueContainer, trueCoordinatesMap);
+  handle('map-globe', globeContainer, globeMap);
+  handle('map-mollweide', mollContainer, mollweideMap);
+}
 
 function initStarInteractions(map) {
   const raycaster = new THREE.Raycaster();
@@ -913,6 +942,7 @@ async function main() {
     initStarInteractions(trueCoordinatesMap);
     initStarInteractions(globeMap);
     initStarInteractions(mollweideMap);
+    setupMapProjectionToggles();
     requestRender();
     loader.classList.add('hidden');
   } catch (err) {

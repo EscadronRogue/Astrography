@@ -22,6 +22,24 @@
     <aside class="sidebar">
       <h2>Filters</h2>
       <form id="filters-form">
+        <!-- Map Projection Filter Fieldset -->
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Map Projections</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="map-mollweide" name="map-projection" value="mollweide" checked />
+              <label for="map-mollweide">Mollweide</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="map-true" name="map-projection" value="true" />
+              <label for="map-true">True Coordinates</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="map-globe" name="map-projection" value="globe" />
+              <label for="map-globe">Globe</label>
+            </div>
+          </div>
+        </fieldset>
         <!-- Stellar Class Filter Fieldset -->
         <fieldset>
           <legend class="collapsible" aria-expanded="false">Stellar Class</legend>
