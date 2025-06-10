@@ -1,5 +1,6 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { SVGRenderer } from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/jsm/renderers/SVGRenderer.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
@@ -923,6 +924,29 @@ window.updateMollweideView = updateMollweideView;
 function exportMollweideMap(format, resolution) {
   const width = resolution;
   const height = Math.floor(resolution / 2);
+
+  if (format === 'svg') {
+    const svgRenderer = new SVGRenderer();
+    svgRenderer.setSize(width, height);
+    const cam = mollweideMap.camera.clone();
+    const aspect = width / height;
+    cam.left = (-mollweideMap.frustumSize * aspect) / 2;
+    cam.right = (mollweideMap.frustumSize * aspect) / 2;
+    cam.top = mollweideMap.frustumSize / 2;
+    cam.bottom = -mollweideMap.frustumSize / 2;
+    cam.updateProjectionMatrix();
+    svgRenderer.render(mollweideMap.scene, cam);
+    const serializer = new XMLSerializer();
+    const svgData = serializer.serializeToString(svgRenderer.domElement);
+    const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'mollweide_map.svg';
+    link.click();
+    URL.revokeObjectURL(link.href);
+    return;
+  }
+
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
   exportRenderer.setPixelRatio(1);
   const finalCanvas = document.createElement('canvas');
@@ -951,20 +975,13 @@ function exportMollweideMap(format, resolution) {
   }
   exportRenderer.dispose();
 
-  if (format === 'png') {
-    finalCanvas.toBlob(b => {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(b);
-      link.download = 'mollweide_map.png';
-      link.click();
-      URL.revokeObjectURL(link.href);
-    }, 'image/png');
-  } else {
-    const dataUrl = finalCanvas.toDataURL('image/png');
-    const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [width, height] });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
-    pdf.save('mollweide_map.pdf');
-  }
+  finalCanvas.toBlob(b => {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(b);
+    link.download = 'mollweide_map.png';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, 'image/png');
 }
 
 function setupExportControls() {
