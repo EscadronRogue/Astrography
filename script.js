@@ -736,15 +736,18 @@ function addMapManager(mgr) {
 function ensureMapResized(manager) {
   let tries = 0;
   function attempt() {
-    const w = manager.canvas.clientWidth;
-    const h = manager.canvas.clientHeight;
-    if ((w > 0 && h > 0) || tries > 10) {
+    const w = manager.canvas.offsetWidth;
+    const h = manager.canvas.offsetHeight;
+    if (w > 0 && h > 0) {
       manager.onResize();
       window.dispatchEvent(new Event('resize'));
       if (window.requestRender) window.requestRender();
-    } else {
+    } else if (tries < 30) {
       tries += 1;
       requestAnimationFrame(attempt);
+    } else {
+      manager.onResize();
+      if (window.requestRender) window.requestRender();
     }
   }
   attempt();
@@ -793,6 +796,9 @@ function toggleMapVisibility(mapType, visible) {
   if (!container) return;
   if (visible) {
     container.style.display = '';
+    if (container.parentElement) {
+      container.parentElement.appendChild(container);
+    }
     if (!manager) {
       if (mapType === 'TrueCoordinates') {
         trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
