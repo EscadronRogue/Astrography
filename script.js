@@ -758,6 +758,7 @@ function toggleMapVisibility(mapType, visible) {
   if (!manager || !container) return;
   if (visible) {
     container.style.display = '';
+    manager.onResize();
     addMapManager(manager);
     manager.updateMap(stars, connections);
     manager.labelManager.refreshLabels(stars);
