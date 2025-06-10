@@ -967,6 +967,8 @@ async function main() {
     trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
     globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
     mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
+    addMapManager(trueCoordinatesMap);
+    addMapManager(globeMap);
     addMapManager(mollweideMap);
     window.trueCoordinatesMap = trueCoordinatesMap;
     window.globeMap = globeMap;

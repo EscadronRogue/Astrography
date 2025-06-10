@@ -31,11 +31,11 @@
               <label for="show-map-mollweide">Mollweide</label>
             </div>
             <div class="filter-item">
-              <input type="checkbox" id="show-map-true" name="show-map-true" />
+              <input type="checkbox" id="show-map-true" name="show-map-true" checked />
               <label for="show-map-true">True Coordinates</label>
             </div>
             <div class="filter-item">
-              <input type="checkbox" id="show-map-globe" name="show-map-globe" />
+              <input type="checkbox" id="show-map-globe" name="show-map-globe" checked />
               <label for="show-map-globe">Globe</label>
             </div>
           </div>
@@ -220,12 +220,12 @@
 
     <!-- Maps Section -->
     <section class="maps-section">
-      <div class="map-container" id="trueMapContainer" style="display:none;">
+      <div class="map-container" id="trueMapContainer">
         <h2>True Coordinates Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">⤢</button>
         <canvas id="map3D"></canvas>
       </div>
-      <div class="map-container" id="globeMapContainer" style="display:none;">
+      <div class="map-container" id="globeMapContainer">
         <h2>Globe Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">⤢</button>
         <canvas id="sphereMap"></canvas>
