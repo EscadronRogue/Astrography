@@ -951,11 +951,11 @@ function exportMollweideMap(format, resolution) {
   }
   exportRenderer.dispose();
 
-  const splitNeeded = resolution > 8192 && format === 'png';
+  const splitNeeded = resolution > 8192;
   if (splitNeeded) {
     const zip = new JSZip();
-    const partWidth = 8192;
-    const partHeight = 4096;
+    const partWidth = 4096;
+    const partHeight = 2048;
     const cols = Math.ceil(width / partWidth);
     const rows = Math.ceil(height / partHeight);
     const promises = [];
@@ -969,24 +969,31 @@ function exportMollweideMap(format, resolution) {
         partCanvas.height = h;
         const partCtx = partCanvas.getContext('2d');
         partCtx.drawImage(finalCanvas, col * partWidth, row * partHeight, w, h, 0, 0, w, h);
-        promises.push(new Promise(resolve => {
-          partCanvas.toBlob(blob => {
-            zip.file(`mollweide_part_${row + 1}_${col + 1}.png`, blob);
-            resolve();
-          }, 'image/png');
-        }));
+
+        const dataUrl = partCanvas.toDataURL('image/png');
+        if (format === 'png') {
+          const base64 = dataUrl.split(',')[1];
+          zip.file(`mollweide_part_${row + 1}_${col + 1}.png`, base64, { base64: true });
+        } else {
+          const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [w, h] });
+          pdf.addImage(dataUrl, 'PNG', 0, 0, w, h);
+          const blob = pdf.output('blob');
+          promises.push(blob.arrayBuffer().then(buf => {
+            zip.file(`mollweide_part_${row + 1}_${col + 1}.pdf`, buf);
+          }));
+        }
       }
     }
 
-    Promise.all(promises).then(() => {
-      zip.generateAsync({ type: 'blob' }).then(content => {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(content);
-        link.download = 'mollweide_map_parts.zip';
-        link.click();
-        URL.revokeObjectURL(link.href);
-      });
+  Promise.all(promises).then(() => {
+    zip.generateAsync({ type: 'blob' }).then(content => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = 'mollweide_map_parts.zip';
+      link.click();
+      URL.revokeObjectURL(link.href);
     });
+  });
   } else if (format === 'png') {
     finalCanvas.toBlob(b => {
       const link = document.createElement('a');
