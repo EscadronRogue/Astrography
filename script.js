@@ -758,7 +758,11 @@ function toggleMapVisibility(mapType, visible) {
   if (!manager || !container) return;
   if (visible) {
     container.style.display = '';
-    manager.onResize();
+    // Delay resize to ensure layout updated after showing container
+    requestAnimationFrame(() => {
+      manager.onResize();
+      if (window.requestRender) window.requestRender();
+    });
     addMapManager(manager);
     manager.updateMap(stars, connections);
     manager.labelManager.refreshLabels(stars);
@@ -766,7 +770,9 @@ function toggleMapVisibility(mapType, visible) {
     container.style.display = 'none';
     removeMapManager(manager);
   }
-  requestRender();
+  if (!visible) {
+    requestRender();
+  }
 }
 window.toggleMapVisibility = toggleMapVisibility;
 
