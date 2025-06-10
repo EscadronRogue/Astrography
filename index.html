@@ -22,6 +22,25 @@
     <aside class="sidebar">
       <h2>Filters</h2>
       <form id="filters-form">
+        <!-- Map Projection Category -->
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Map Projections</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="projection-mollweide" name="projection-mollweide" checked />
+              <label for="projection-mollweide">Mollweide</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="projection-true" name="projection-true" />
+              <label for="projection-true">True Coordinates</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="projection-globe" name="projection-globe" />
+              <label for="projection-globe">Globe</label>
+            </div>
+          </div>
+        </fieldset>
+
         <!-- Stellar Class Filter Fieldset -->
         <fieldset>
           <legend class="collapsible" aria-expanded="false">Stellar Class</legend>
@@ -202,17 +221,17 @@
 
     <!-- Maps Section -->
     <section class="maps-section">
-      <div class="map-container">
+      <div id="true-map-container" class="map-container" style="display:none;">
         <h2>True Coordinates Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">⤢</button>
         <canvas id="map3D"></canvas>
       </div>
-      <div class="map-container">
+      <div id="globe-map-container" class="map-container" style="display:none;">
         <h2>Globe Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">⤢</button>
         <canvas id="sphereMap"></canvas>
       </div>
-      <div class="map-container">
+      <div id="mollweide-map-container" class="map-container">
         <h2>Mollweide Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen Mollweide Map">⤢</button>
         <canvas id="mollweideMap"></canvas>

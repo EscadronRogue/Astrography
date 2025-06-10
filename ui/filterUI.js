@@ -7,6 +7,36 @@ export function initFilterUI() {
     document.querySelector('.sidebar').classList.toggle('open');
   });
 
+  // Map Projection toggles
+  const projMoll = document.getElementById('projection-mollweide');
+  const projTrue = document.getElementById('projection-true');
+  const projGlobe = document.getElementById('projection-globe');
+  const trueContainer = document.getElementById('true-map-container');
+  const globeContainer = document.getElementById('globe-map-container');
+  const mollContainer = document.getElementById('mollweide-map-container');
+  function updateMapVisibility() {
+    const mm = window.mapManagers || [];
+    const manage = (mgr, visible) => {
+      const idx = mm.indexOf(mgr);
+      if (visible && idx === -1) mm.push(mgr);
+      if (!visible && idx !== -1) mm.splice(idx, 1);
+    };
+    const showTrue = projTrue.checked;
+    const showGlobe = projGlobe.checked;
+    const showMoll = projMoll.checked;
+    trueContainer.style.display = showTrue ? '' : 'none';
+    globeContainer.style.display = showGlobe ? '' : 'none';
+    mollContainer.style.display = showMoll ? '' : 'none';
+    if (window.trueCoordinatesMap) manage(window.trueCoordinatesMap, showTrue);
+    if (window.globeMap) manage(window.globeMap, showGlobe);
+    if (window.mollweideMap) manage(window.mollweideMap, showMoll);
+    window.dispatchEvent(new Event('resize'));
+  }
+  projMoll.addEventListener('change', updateMapVisibility);
+  projTrue.addEventListener('change', updateMapVisibility);
+  projGlobe.addEventListener('change', updateMapVisibility);
+  updateMapVisibility();
+
   // Enable/disable connection slider.
   const enableConnectionsChk = document.getElementById('enable-connections');
   const connectionSlider = document.getElementById('connection-slider');
