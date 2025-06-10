@@ -7,6 +7,32 @@ export function initFilterUI() {
     document.querySelector('.sidebar').classList.toggle('open');
   });
 
+  // Map projection visibility toggles
+  const mollChk = document.getElementById('show-map-mollweide');
+  const trueChk = document.getElementById('show-map-true');
+  const globeChk = document.getElementById('show-map-globe');
+  if (mollChk) {
+    mollChk.addEventListener('change', function () {
+      if (window.toggleMapVisibility) {
+        window.toggleMapVisibility('Mollweide', this.checked);
+      }
+    });
+  }
+  if (trueChk) {
+    trueChk.addEventListener('change', function () {
+      if (window.toggleMapVisibility) {
+        window.toggleMapVisibility('TrueCoordinates', this.checked);
+      }
+    });
+  }
+  if (globeChk) {
+    globeChk.addEventListener('change', function () {
+      if (window.toggleMapVisibility) {
+        window.toggleMapVisibility('Globe', this.checked);
+      }
+    });
+  }
+
   // Enable/disable connection slider.
   const enableConnectionsChk = document.getElementById('enable-connections');
   const connectionSlider = document.getElementById('connection-slider');

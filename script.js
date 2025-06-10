@@ -205,7 +205,11 @@ function createMollweideBorder(R = 100) {
     points.push(new THREE.Vector3(x, y, 0));
   }
   const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xaaaaaa,
+    transparent: true,
+    opacity: 0.5
+  });
   return new THREE.LineLoop(geom, mat);
 }
 
@@ -705,6 +709,18 @@ class MapManager {
 }
 
 const mapManagers = [];
+function addMapManager(mgr) {
+  if (!mapManagers.includes(mgr)) {
+    mapManagers.push(mgr);
+  }
+}
+
+function removeMapManager(mgr) {
+  const idx = mapManagers.indexOf(mgr);
+  if (idx !== -1) {
+    mapManagers.splice(idx, 1);
+  }
+}
 let renderRequested = false;
 function requestRender() {
   if (!renderRequested) {
@@ -716,6 +732,42 @@ function requestRender() {
   }
 }
 window.requestRender = requestRender;
+
+function toggleMapVisibility(mapType, visible) {
+  let manager, container, stars, connections;
+  switch (mapType) {
+    case 'TrueCoordinates':
+      manager = trueCoordinatesMap;
+      container = document.getElementById('trueMapContainer');
+      stars = currentFilteredStars;
+      connections = currentConnections;
+      break;
+    case 'Globe':
+      manager = globeMap;
+      container = document.getElementById('globeMapContainer');
+      stars = currentGlobeFilteredStars;
+      connections = currentGlobeConnections;
+      break;
+    default:
+      manager = mollweideMap;
+      container = document.getElementById('mollweideMapContainer');
+      stars = currentMollweideFilteredStars;
+      connections = currentMollweideConnections;
+      break;
+  }
+  if (!manager || !container) return;
+  if (visible) {
+    container.style.display = '';
+    addMapManager(manager);
+    manager.updateMap(stars, connections);
+    manager.labelManager.refreshLabels(stars);
+  } else {
+    container.style.display = 'none';
+    removeMapManager(manager);
+  }
+  requestRender();
+}
+window.toggleMapVisibility = toggleMapVisibility;
 
 function initStarInteractions(map) {
   const raycaster = new THREE.Raycaster();
@@ -897,7 +949,7 @@ async function main() {
     trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
     globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
     mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
-    mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap);
+    addMapManager(mollweideMap);
     window.trueCoordinatesMap = trueCoordinatesMap;
     window.globeMap = globeMap;
     window.mollweideMap = mollweideMap;
@@ -913,6 +965,9 @@ async function main() {
     initStarInteractions(trueCoordinatesMap);
     initStarInteractions(globeMap);
     initStarInteractions(mollweideMap);
+    toggleMapVisibility('TrueCoordinates', document.getElementById('show-map-true').checked);
+    toggleMapVisibility('Globe', document.getElementById('show-map-globe').checked);
+    toggleMapVisibility('Mollweide', document.getElementById('show-map-mollweide').checked);
     requestRender();
     loader.classList.add('hidden');
   } catch (err) {

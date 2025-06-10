@@ -22,6 +22,24 @@
     <aside class="sidebar">
       <h2>Filters</h2>
       <form id="filters-form">
+        <!-- Map Projection Category -->
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Map Projection</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="show-map-mollweide" name="show-map-mollweide" checked />
+              <label for="show-map-mollweide">Mollweide</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="show-map-true" name="show-map-true" />
+              <label for="show-map-true">True Coordinates</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="show-map-globe" name="show-map-globe" />
+              <label for="show-map-globe">Globe</label>
+            </div>
+          </div>
+        </fieldset>
         <!-- Stellar Class Filter Fieldset -->
         <fieldset>
           <legend class="collapsible" aria-expanded="false">Stellar Class</legend>
@@ -202,17 +220,17 @@
 
     <!-- Maps Section -->
     <section class="maps-section">
-      <div class="map-container">
+      <div class="map-container" id="trueMapContainer" style="display:none;">
         <h2>True Coordinates Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">⤢</button>
         <canvas id="map3D"></canvas>
       </div>
-      <div class="map-container">
+      <div class="map-container" id="globeMapContainer" style="display:none;">
         <h2>Globe Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">⤢</button>
         <canvas id="sphereMap"></canvas>
       </div>
-      <div class="map-container">
+      <div class="map-container" id="mollweideMapContainer">
         <h2>Mollweide Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen Mollweide Map">⤢</button>
         <canvas id="mollweideMap"></canvas>
