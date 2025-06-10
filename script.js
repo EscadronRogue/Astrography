@@ -32,7 +32,7 @@ import {
 import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
-import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
+import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0, splitMollweideWrap } from './utils/geometryUtils.js';
 import { minimalRADifference } from './utils.js';
 
 let cachedStars = null;
@@ -920,60 +920,90 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap(format, resolution) {
+function exportMollweideMapSVG(resolution) {
   const width = resolution;
   const height = Math.floor(resolution / 2);
-  const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
-  exportRenderer.setPixelRatio(1);
-  const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = width;
-  finalCanvas.height = height;
-  const ctx = finalCanvas.getContext('2d');
-  const maxSize = exportRenderer.capabilities.maxTextureSize;
-  const tile = Math.min(maxSize, 8192);
-  for (let y = 0; y < height; y += tile) {
-    for (let x = 0; x < width; x += tile) {
-      const tileW = Math.min(tile, width - x);
-      const tileH = Math.min(tile, height - y);
-      exportRenderer.setSize(tileW, tileH);
-      const cam = mollweideMap.camera.clone();
-      const aspect = width / height;
-      cam.left = (-mollweideMap.frustumSize * aspect) / 2;
-      cam.right = (mollweideMap.frustumSize * aspect) / 2;
-      cam.top = mollweideMap.frustumSize / 2;
-      cam.bottom = -mollweideMap.frustumSize / 2;
-      cam.updateProjectionMatrix();
-      cam.setViewOffset(width, height, x, y, tileW, tileH);
-      exportRenderer.render(mollweideMap.scene, cam);
-      cam.clearViewOffset();
-      ctx.drawImage(exportRenderer.domElement, x, height - y - tileH, tileW, tileH);
-    }
-  }
-  exportRenderer.dispose();
+  const scaleX = width / 400;
+  const scaleY = height / 200;
+  const toScreen = v => [ (v.x + 200) * scaleX, height - (v.y + 100) * scaleY ];
 
-  if (format === 'png') {
-    finalCanvas.toBlob(b => {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(b);
-      link.download = 'mollweide_map.png';
-      link.click();
-      URL.revokeObjectURL(link.href);
-    }, 'image/png');
-  } else {
-    const dataUrl = finalCanvas.toDataURL('image/png');
-    const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [width, height] });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
-    pdf.save('mollweide_map.pdf');
+  const parts = [];
+  parts.push('<?xml version="1.0" encoding="UTF-8"?>');
+  parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`);
+  parts.push('<rect width="100%" height="100%" fill="black"/>');
+  parts.push(`<ellipse cx="${width/2}" cy="${height/2}" rx="${width/2}" ry="${height/2}" fill="none" stroke="#aaaaaa" stroke-opacity="0.5"/>`);
+
+  currentMollweideFilteredStars.forEach(star => {
+    if (!star.displayVisible) return;
+    const [x, y] = toScreen(star.mollweidePosition);
+    const r = (star.displaySize || 1) * 0.4 * scaleX;
+    const color = star.displayColor || '#ffffff';
+    parts.push(`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${r.toFixed(2)}" fill="${color}"/>`);
+    if (star.displayName) {
+      const fs = 12 * scaleX;
+      parts.push(`<text x="${(x + r + 2).toFixed(2)}" y="${(y - r).toFixed(2)}" font-size="${fs}" fill="#ffffff">${star.displayName}</text>`);
+    }
+  });
+
+  currentMollweideConnections.forEach(con => {
+    const segs = splitMollweideWrap(con.starA.mollweidePosition, con.starB.mollweidePosition);
+    segs.forEach(([s1, s2]) => {
+      const [x1, y1] = toScreen(s1);
+      const [x2, y2] = toScreen(s2);
+      const c1 = new THREE.Color(con.starA.displayColor || '#ffffff');
+      const c2 = new THREE.Color(con.starB.displayColor || '#ffffff');
+      const color = c1.clone().lerp(c2, 0.5).getStyle();
+      parts.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${color}" stroke-width="1" stroke-opacity="0.5"/>`);
+    });
+  });
+
+  if (constellationLinesMoll && constellationLinesMoll.length) {
+    constellationLinesMoll.forEach(lineSegs => {
+      const pos = lineSegs.geometry.getAttribute('position');
+      for (let i = 0; i < pos.count; i += 2) {
+        const v1 = new THREE.Vector3().fromBufferAttribute(pos, i);
+        const v2 = new THREE.Vector3().fromBufferAttribute(pos, i + 1);
+        if (v1.lengthSq() === 0 && v2.lengthSq() === 0) continue;
+        const [x1, y1] = toScreen(v1);
+        const [x2, y2] = toScreen(v2);
+        parts.push(`<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="#888888" stroke-dasharray="4 2" stroke-opacity="0.4" stroke-width="1"/>`);
+      }
+    });
   }
+
+  if (constellationOverlayMoll && constellationOverlayMoll.length) {
+    constellationOverlayMoll.forEach(mesh => {
+      const pos = mesh.geometry.getAttribute('position');
+      if (!pos) return;
+      let d = '';
+      for (let i = 0; i < pos.count; i++) {
+        const v = new THREE.Vector3().fromBufferAttribute(pos, i);
+        const [x, y] = toScreen(v);
+        d += (i === 0 ? 'M' : 'L') + x.toFixed(2) + ' ' + y.toFixed(2) + ' ';
+      }
+      if (d) {
+        const color = mesh.material.color.getStyle();
+        const op = mesh.material.opacity;
+        parts.push(`<path d="${d}Z" fill="${color}" fill-opacity="${op}" stroke="none"/>`);
+      }
+    });
+  }
+
+  parts.push('</svg>');
+  const blob = new Blob(parts, { type: 'image/svg+xml' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'mollweide_map.svg';
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    const format = document.getElementById('export-format').value;
     const res = parseInt(document.getElementById('export-resolution').value, 10);
-    exportMollweideMap(format, res);
+    exportMollweideMapSVG(res);
   });
 }
 

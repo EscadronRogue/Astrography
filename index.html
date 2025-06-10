@@ -235,17 +235,12 @@
         <button class="fullscreen-btn" aria-label="Fullscreen Mollweide Map">⤢</button>
         <canvas id="mollweideMap"></canvas>
         <div class="export-controls">
-          <select id="export-format">
-            <option value="png">PNG</option>
-            <option value="pdf">PDF</option>
-          </select>
           <select id="export-resolution">
+            <option value="1920">2K</option>
             <option value="3840">4K</option>
             <option value="7680">8K</option>
-            <option value="15360">16K</option>
-            <option value="30720">32K</option>
           </select>
-          <button id="export-mollweide" class="export-btn">Export</button>
+          <button id="export-mollweide" class="export-btn">Export SVG</button>
         </div>
       </div>
     </section>
@@ -266,7 +261,6 @@
   <div class="label-container"></div>
 
   <!-- Scripts -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script type="module" src="script.js"></script>
   <script type="module">
     import { initFilterUI } from './ui/filterUI.js';
