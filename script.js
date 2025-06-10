@@ -707,12 +707,25 @@ class MapManager {
     this.renderer.setSize(w, h);
   }
 
-  captureImage(type = 'png') {
+  captureImage(type = 'png', width = null) {
+    const original = {
+      size: this.renderer.getSize(new THREE.Vector2()),
+      ratio: this.renderer.getPixelRatio()
+    };
+    if (width) {
+      const aspect = original.size.y / original.size.x;
+      const height = Math.round(width * aspect);
+      this.renderer.setPixelRatio(1);
+      this.renderer.setSize(width, height, false);
+    }
     this.renderer.render(this.scene, this.camera);
-    const mime = type === 'jpg' || type === 'jpeg'
-      ? 'image/jpeg'
-      : 'image/png';
-    return this.renderer.domElement.toDataURL(mime);
+    const mime = type === 'jpg' || type === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const data = this.renderer.domElement.toDataURL(mime);
+    if (width) {
+      this.renderer.setPixelRatio(original.ratio);
+      this.renderer.setSize(original.size.x, original.size.y, false);
+    }
+    return data;
   }
 
   exportSTL() {
@@ -720,38 +733,18 @@ class MapManager {
     return exporter.parse(this.scene);
   }
 
-  async exportGIF() {
-    if (typeof GIF === 'undefined') {
-      console.warn('GIF library not loaded');
-      return null;
-    }
-    const originalPos = this.camera.position.clone();
-    const radius = originalPos.length();
-    const target = new THREE.Vector3(0, 0, 0);
-    const frames = 36;
-    const gif = new GIF({ workers: 2, quality: 10 });
-    for (let i = 0; i < frames; i++) {
-      const angle = (i / frames) * Math.PI * 2;
-      this.camera.position.set(
-        radius * Math.sin(angle),
-        originalPos.y,
-        radius * Math.cos(angle)
-      );
-      this.camera.lookAt(target);
-      this.renderer.render(this.scene, this.camera);
-      gif.addFrame(this.renderer.domElement, { copy: true, delay: 100 });
-    }
-    this.camera.position.copy(originalPos);
-    this.camera.lookAt(target);
-    return new Promise(resolve => {
-      gif.on('finished', resolve);
-      gif.render();
-    });
-  }
-
   exportOBJ() {
     const exporter = new OBJExporter();
     return exporter.parse(this.scene);
+  }
+
+  exportOBJWithTexture() {
+    const exporter = new OBJExporter();
+    const sphere = new THREE.Mesh(new THREE.SphereGeometry(100, 64, 64), new THREE.MeshBasicMaterial());
+    const obj = 'mtllib globe.mtl\nusemtl map\n' + exporter.parse(sphere);
+    const mtl = 'newmtl map\nKa 1 1 1\nKd 1 1 1\nmap_Kd globe_texture.png\n';
+    const texture = this.captureImage('png');
+    return { obj, mtl, texture };
   }
 
   animate() {
@@ -955,16 +948,10 @@ function setupPrintButtons() {
   const btn3D = document.getElementById('print-map3D');
   if (btn3D) {
     btn3D.addEventListener('click', () => {
-      showExportMenu(btn3D, ['obj', 'stl', 'gif'], async (fmt) => {
-        if (fmt === 'obj') {
-          const data = trueCoordinatesMap.exportOBJ();
-          downloadBlob(new Blob([data], { type: 'text/plain' }), 'true_coordinates.obj');
-        } else if (fmt === 'stl') {
+      showExportMenu(btn3D, ['stl'], async (fmt) => {
+        if (fmt === 'stl') {
           const data = trueCoordinatesMap.exportSTL();
           downloadBlob(new Blob([data], { type: 'text/plain' }), 'true_coordinates.stl');
-        } else if (fmt === 'gif') {
-          const blob = await trueCoordinatesMap.exportGIF();
-          if (blob) downloadBlob(blob, 'true_coordinates.gif');
         }
       });
     });
@@ -973,16 +960,21 @@ function setupPrintButtons() {
   const btnSphere = document.getElementById('print-sphereMap');
   if (btnSphere) {
     btnSphere.addEventListener('click', () => {
-      showExportMenu(btnSphere, ['obj', 'stl', 'gif'], async (fmt) => {
+      showExportMenu(btnSphere, ['obj'], async (fmt) => {
         if (fmt === 'obj') {
-          const data = globeMap.exportOBJ();
-          downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.obj');
-        } else if (fmt === 'stl') {
-          const data = globeMap.exportSTL();
-          downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.stl');
-        } else if (fmt === 'gif') {
-          const blob = await globeMap.exportGIF();
-          if (blob) downloadBlob(blob, 'globe.gif');
+          if (window.JSZip) {
+            const exp = globeMap.exportOBJWithTexture();
+            const zip = new JSZip();
+            zip.file('globe.obj', exp.obj);
+            zip.file('globe.mtl', exp.mtl);
+            const imgData = exp.texture.split(',')[1];
+            zip.file('globe_texture.png', imgData, { base64: true });
+            const blob = await zip.generateAsync({ type: 'blob' });
+            downloadBlob(blob, 'globe.zip');
+          } else {
+            const data = globeMap.exportOBJWithTexture().obj;
+            downloadBlob(new Blob([data], { type: 'text/plain' }), 'globe.obj');
+          }
         }
       });
     });
@@ -992,17 +984,21 @@ function setupPrintButtons() {
   if (btnMoll) {
     btnMoll.addEventListener('click', () => {
       showExportMenu(btnMoll, ['png', 'jpg', 'svg', 'pdf'], async (fmt) => {
+        const defaultRes = 4096;
+        let res = parseInt(prompt('Export resolution (px, width)', defaultRes.toString()), 10);
+        if (!Number.isFinite(res)) res = defaultRes;
+        res = Math.max(mollweideMap.canvas.width, Math.min(res, 32000));
         if (fmt === 'png' || fmt === 'jpg') {
-          const url = mollweideMap.captureImage(fmt);
+          const url = mollweideMap.captureImage(fmt, res);
           downloadBlob(await (await fetch(url)).blob(), `mollweide.${fmt}`);
         } else if (fmt === 'svg') {
-          const url = mollweideMap.captureImage('png');
+          const url = mollweideMap.captureImage('png', res);
           const w = mollweideMap.canvas.width;
           const h = mollweideMap.canvas.height;
           const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><image href="${url}" width="100%" height="100%"/></svg>`;
           downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), 'mollweide.svg');
         } else if (fmt === 'pdf') {
-          const url = mollweideMap.captureImage('png');
+          const url = mollweideMap.captureImage('png', res);
           if (window.jspdf && window.jspdf.jsPDF) {
             const w = mollweideMap.canvas.width;
             const h = mollweideMap.canvas.height;
