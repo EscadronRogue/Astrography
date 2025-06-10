@@ -9,6 +9,8 @@ import { initIsolationFilter, updateIsolationFilter } from './filters/isolationF
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
 import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct import
+const EXPORT_SIZE = 4096;
+
 import {
   createGalacticPlaneMesh,
   createEclipticPlaneMesh,
@@ -731,10 +733,12 @@ class MapManager {
 
   exportOBJ() {
     const exporter = new OBJExporter();
-    return exporter.parse(this.scene);
+    const objData = exporter.parse(this.scene, 'true_coordinates.mtl');
+    const mtlData = 'newmtl material0\nKd 1 1 1\n';
+    return { obj: objData, mtl: mtlData };
   }
 
-  generateGlobeTexture(resolution = 4096) {
+  generateGlobeTexture(resolution = EXPORT_SIZE) {
     const width = resolution;
     const height = Math.round(resolution / 2);
     const canvas = document.createElement('canvas');
@@ -759,11 +763,11 @@ class MapManager {
     return canvas.toDataURL('image/png');
   }
 
-  async exportOBJWithTexture(resolution = 4096) {
+  async exportOBJWithTexture(resolution = EXPORT_SIZE) {
     const textureData = this.generateGlobeTexture(resolution);
     const sphere = new THREE.Mesh(new THREE.SphereGeometry(100, 64, 32));
     const exporter = new OBJExporter();
-    const objData = exporter.parse(sphere);
+    const objData = exporter.parse(sphere, 'globe.mtl');
     const mtlData = 'newmtl material0\nKd 1 1 1\nmap_Kd texture.png\n';
     if (window.JSZip) {
       const zip = new window.JSZip();
@@ -974,11 +978,9 @@ function showExportMenu(button, options, callback) {
   document.body.appendChild(menu);
 }
 
-function pickExport(button, formats, resolutions, callback) {
+function pickExport(button, formats, callback) {
   showExportMenu(button, formats, fmt => {
-    showExportMenu(button, resolutions, res => {
-      callback(fmt, res);
-    });
+    callback(fmt);
   });
 }
 
@@ -1002,10 +1004,11 @@ function setupPrintButtons() {
   const btn3D = document.getElementById('print-map3D');
   if (btn3D) {
     btn3D.addEventListener('click', () => {
-      pickExport(btn3D, ['obj'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
+      pickExport(btn3D, ['obj'], async (fmt) => {
         if (fmt === 'obj') {
           const data = trueCoordinatesMap.exportOBJ();
-          downloadBlob(new Blob([data], { type: 'text/plain' }), 'true_coordinates.obj');
+          downloadBlob(new Blob([data.obj], { type: 'text/plain' }), 'true_coordinates.obj');
+          downloadBlob(new Blob([data.mtl], { type: 'text/plain' }), 'true_coordinates.mtl');
         }
       });
     });
@@ -1014,9 +1017,9 @@ function setupPrintButtons() {
   const btnSphere = document.getElementById('print-sphereMap');
   if (btnSphere) {
     btnSphere.addEventListener('click', () => {
-      pickExport(btnSphere, ['obj'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
+      pickExport(btnSphere, ['obj'], async (fmt) => {
         if (fmt === 'obj') {
-          const blob = await globeMap.exportOBJWithTexture(res);
+          const blob = await globeMap.exportOBJWithTexture(EXPORT_SIZE);
           if (blob instanceof Blob) {
             downloadBlob(blob, 'globe.zip');
           } else {
@@ -1032,9 +1035,8 @@ function setupPrintButtons() {
   const btnMoll = document.getElementById('print-mollweideMap');
   if (btnMoll) {
     btnMoll.addEventListener('click', () => {
-      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], [1024, 2048, 4096, 8192, 16384, 32768], async (fmt, res) => {
-        const maxSize = mollweideMap.renderer.capabilities.maxTextureSize || 8192;
-        res = Math.max(mollweideMap.canvas.width, Math.min(res, maxSize));
+      pickExport(btnMoll, ['png', 'jpg', 'svg', 'pdf'], async (fmt) => {
+        const res = EXPORT_SIZE;
         if (fmt === 'png' || fmt === 'jpg') {
           const url = mollweideMap.captureImage(fmt, res);
           downloadBlob(await (await fetch(url)).blob(), `mollweide.${fmt}`);
