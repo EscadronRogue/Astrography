@@ -35,6 +35,7 @@ export function initFilterUI() {
   projMoll.addEventListener('change', updateMapVisibility);
   projTrue.addEventListener('change', updateMapVisibility);
   projGlobe.addEventListener('change', updateMapVisibility);
+  window.updateMapVisibility = updateMapVisibility;
   updateMapVisibility();
 
   // Enable/disable connection slider.

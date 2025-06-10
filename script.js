@@ -902,6 +902,7 @@ async function main() {
     window.trueCoordinatesMap = trueCoordinatesMap;
     window.globeMap = globeMap;
     window.mollweideMap = mollweideMap;
+    if (window.updateMapVisibility) window.updateMapVisibility();
     cachedStars.forEach(star => {
       star.spherePosition = projectStarGlobe(star);
       star.truePosition = getStarTruePosition(star);
