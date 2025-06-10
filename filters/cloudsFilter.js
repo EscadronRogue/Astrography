@@ -1,6 +1,7 @@
 // File: /filters/cloudsFilter.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, radToSphere, radToMollweide, degToRad, getMollweideLambda0 } from '../utils/geometryUtils.js';
+import { getGreatCirclePoints, radToSphere, radToMollweide, degToRad,
+         getMollweideLambda0, greatCircleToMollweide, splitMollweideWrap } from '../utils/geometryUtils.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -52,8 +53,8 @@ export async function createCloudOverlay(cloudData, completeStarList, mapType, c
   if (cloudStars.length < 2) return null; // Not enough points
   
   const vertices = [];
-  const segmentsPerConnection = (mapType === 'Globe') ? 32 : 1;
   const globeRadius = 100; // Globe radius constant
+  const segmentsPerConnection = mapType === 'Globe' || mapType === 'Mollweide' ? 32 : 1;
 
   // For each star, find its three closest neighbors and build a connecting line.
   for (let i = 0; i < cloudStars.length; i++) {
@@ -71,20 +72,26 @@ export async function createCloudOverlay(cloudData, completeStarList, mapType, c
       const p1 = current.pos;
       const p2 = neighbors[n].other.pos;
       if (mapType === 'Globe') {
-        // Generate points along the great circle arc between p1 and p2.
         const curvedPoints = getGreatCirclePoints(p1, p2, globeRadius, segmentsPerConnection);
-        // For each consecutive pair, add a line segment.
         for (let s = 0; s < curvedPoints.length - 1; s++) {
           vertices.push(curvedPoints[s].x, curvedPoints[s].y, curvedPoints[s].z);
           vertices.push(curvedPoints[s + 1].x, curvedPoints[s + 1].y, curvedPoints[s + 1].z);
         }
+      } else if (mapType === 'Mollweide') {
+        const lambda0 = getMollweideLambda0();
+        const p1Sphere = radToSphere(current.star.raRad, current.star.decRad, globeRadius);
+        const p2Sphere = radToSphere(neighbors[n].other.star.raRad, neighbors[n].other.star.decRad, globeRadius);
+        const arcPts = greatCircleToMollweide(p1Sphere, p2Sphere, globeRadius, segmentsPerConnection, lambda0);
+        for (let s = 0; s < arcPts.length - 1; s++) {
+          const segs = splitMollweideWrap(arcPts[s], arcPts[s + 1]);
+          segs.forEach(([a,b]) => {
+            vertices.push(a.x, a.y, 0);
+            vertices.push(b.x, b.y, 0);
+          });
+        }
       } else {
-        // For non-globe maps, simply connect p1 and p2.
         const v1 = p1.clone();
         const v2 = p2.clone();
-        if (mapType === 'Mollweide' && Math.abs(v1.x - v2.x) > 200) {
-          if (v1.x > v2.x) v1.x -= 400; else v2.x -= 400;
-        }
         vertices.push(v1.x, v1.y, v1.z);
         vertices.push(v2.x, v2.y, v2.z);
       }
@@ -173,6 +180,7 @@ export async function updateCloudsOverlay(completeStarList, scene, mapType, clou
       }
       star.raRad = ra;
       star.decRad = dec;
+      star.spherePosition = radToSphere(ra, dec, 100);
       star.mollweidePosition = radToMollweide(ra, dec, 100, lambda0);
     });
   } else if (mapType === 'Globe') {
