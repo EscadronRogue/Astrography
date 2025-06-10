@@ -7,7 +7,10 @@ import { createConstellationOverlayForGlobe, createConstellationOverlayForMollwe
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
-import { updateCloudsOverlay } from './filters/cloudsFilter.js'; // Correct import
+import {
+  updateCloudsOverlay,
+  updateMollweideCloudSegments
+} from './filters/cloudsFilter.js';
 import {
   createGalacticPlaneMesh,
   createEclipticPlaneMesh,
@@ -884,12 +887,12 @@ async function updateMollweideView() {
     constellationOverlayMoll = createConstellationOverlayForMollweide();
     constellationOverlayMoll.forEach(mesh => mollweideMap.scene.add(mesh));
   }
-  if (showCloudsFlag) {
-    const form = document.getElementById('filters-form');
-    const cloudFiles = new FormData(form).getAll('dust-clouds');
-    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudFiles);
-  } else {
-    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
+  if (showCloudsFlag && mollweideMap.scene.userData.cloudOverlays) {
+    mollweideMap.scene.userData.cloudOverlays.forEach(line => {
+      if (line.userData && line.userData.isMollweideCloud) {
+        updateMollweideCloudSegments(line);
+      }
+    });
   }
   if (enableIsolationFilterFlag && isolationOverlay) {
     if (typeof isolationOverlay.refreshMollweide === 'function') {
