@@ -311,9 +311,12 @@ export class TwoDControls {
     }
 
     getScale() {
+        const zoom = this.camera.zoom || 1;
+        const baseX = (this.camera.right - this.camera.left) / this.domElement.clientWidth;
+        const baseY = (this.camera.top - this.camera.bottom) / this.domElement.clientHeight;
         return {
-            x: (this.camera.right - this.camera.left) / this.domElement.clientWidth,
-            y: (this.camera.top - this.camera.bottom) / this.domElement.clientHeight
+            x: baseX / (zoom * zoom),
+            y: baseY / (zoom * zoom)
         };
     }
 

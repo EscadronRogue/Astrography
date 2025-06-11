@@ -190,7 +190,7 @@ export function createConstellationLabelsForGlobe() {
     const material = new THREE.ShaderMaterial({
       uniforms: {
         map: { value: texture },
-        opacity: { value: 0.5 }
+        opacity: { value: 0.8 }
       },
       vertexShader: `
         varying vec2 vUv;
@@ -248,7 +248,7 @@ export function createConstellationLabelsForMollweide() {
     ctx.fillStyle = '#888888';
     ctx.fillText(c.name, 10, baseFontSize);
     const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.5 });
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.8 });
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
     sprite.position.copy(p);

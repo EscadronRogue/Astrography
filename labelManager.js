@@ -44,6 +44,9 @@ export class LabelManager {
     this.sprites = new Map();
     this.lines = new Map();
 
+    // Track used angles for each star system so labels are well separated
+    this.systemAngles = new Map();
+
     // Used to cache each star's last displayed label text, color, and size
     // so we only rebuild the label texture if something has changed.
     this.labelCache = new Map(); 
@@ -194,13 +197,43 @@ export class LabelManager {
    */
   computeLabelOffset(star, starPos) {
     if (this.mapType === 'TrueCoordinates' || this.mapType === 'Mollweide') {
-      // Offset labels in screen space proportional to the star size so that
-      // larger stars get more separation from their text. Use a slightly
-      // larger base distance for the Mollweide map since stars are scaled up
-      // there.
       const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
       const baseDist = this.mapType === 'Mollweide' ? 1 : 0.5;
       const dist = baseDist * scaleFactor;
+
+      if (this.mapType === 'Mollweide') {
+        // Choose a random angle for the label but ensure stars within the same
+        // system are separated by at least 90 degrees and less than 270 degrees.
+        const systemName = star.Common_name_of_the_star_system || star.displayName || 'default';
+        let angles = this.systemAngles.get(systemName);
+        if (!angles) {
+          angles = [];
+          this.systemAngles.set(systemName, angles);
+        }
+        if (star.labelAngle === undefined) {
+          let angle = Math.random() * Math.PI * 2;
+          let attempts = 0;
+          const valid = candidate => {
+            for (const a of angles) {
+              let diff = Math.atan2(Math.sin(candidate - a), Math.cos(candidate - a));
+              diff = Math.abs(diff);
+              if (diff <= Math.PI / 2 || diff >= 3 * Math.PI / 2) {
+                return false;
+              }
+            }
+            return true;
+          };
+          while (!valid(angle) && attempts < 20) {
+            angle = Math.random() * Math.PI * 2;
+            attempts++;
+          }
+          angles.push(angle);
+          star.labelAngle = angle;
+        }
+        const angle = star.labelAngle;
+        return new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(dist);
+      }
+
       return new THREE.Vector3(1, 1, 0).multiplyScalar(dist);
     } else {
       // For the Globe, offset tangentially around the star on the sphere
@@ -246,6 +279,16 @@ export class LabelManager {
           this.lines.delete(star);
         }
         this.labelCache.delete(star);
+        if (star.labelAngle !== undefined) {
+          const systemName = star.Common_name_of_the_star_system || star.displayName || 'default';
+          const angles = this.systemAngles.get(systemName);
+          if (angles) {
+            const idx = angles.indexOf(star.labelAngle);
+            if (idx !== -1) angles.splice(idx, 1);
+            if (angles.length === 0) this.systemAngles.delete(systemName);
+          }
+          delete star.labelAngle;
+        }
       }
     });
   }
@@ -259,5 +302,6 @@ export class LabelManager {
     this.sprites.clear();
     this.lines.clear();
     this.labelCache.clear();
+    this.systemAngles.clear();
   }
 }
