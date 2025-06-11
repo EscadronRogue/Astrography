@@ -76,9 +76,10 @@ export class LabelManager {
       const baseFontSize = (this.mapType === 'Globe'
         ? 64
         : (this.mapType === 'Mollweide' ? 72 : 24));
-      let scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 7.5);
+      let scaleFactor = THREE.MathUtils.clamp(star.displaySize, 1, 7.5);
       if (this.mapType === 'Mollweide') {
-        // Ensure a larger minimum label size for the Mollweide map
+        // Ensure a larger minimum label size for the Mollweide map while
+        // keeping the label size proportional to the star
         scaleFactor = Math.max(scaleFactor, 2);
       }
       const fontSize = baseFontSize * scaleFactor;
@@ -202,7 +203,7 @@ export class LabelManager {
       // larger stars get more separation from their text. Use a slightly
       // larger base distance for the Mollweide map since stars are scaled up
       // there.
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 7.5);
+      const scaleFactor = THREE.MathUtils.clamp(star.displaySize, 1, 7.5);
       const baseDist = this.mapType === 'Mollweide' ? 3 : 0.5;
       const dist = baseDist * scaleFactor;
       if (this.mapType === 'Mollweide') {
@@ -223,7 +224,7 @@ export class LabelManager {
       // Random angle around the star
       const angle = Math.random() * Math.PI * 2;
       const baseDistance = 2;
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 7.5);
+      const scaleFactor = THREE.MathUtils.clamp(star.displaySize, 1, 7.5);
       return tangent.clone().multiplyScalar(Math.cos(angle))
         .add(bitangent.clone().multiplyScalar(Math.sin(angle)))
         .multiplyScalar(baseDistance * scaleFactor);
