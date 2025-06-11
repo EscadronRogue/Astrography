@@ -297,6 +297,35 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   cursor: grabbing;
 }
 
+#label-edit-overlay {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  display: none;
+  transform: translate(-50%, -50%);
+  z-index: 1500;
+}
+#label-edit-overlay .handle {
+  width: 12px;
+  height: 12px;
+  background: #ff6f61;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  position: absolute;
+  pointer-events: auto;
+}
+#label-edit-overlay .rotate-handle {
+  top: -20px;
+  left: 0;
+  cursor: grab;
+}
+#label-edit-overlay .scale-handle {
+  right: -20px;
+  bottom: -20px;
+  cursor: nwse-resize;
+}
+
 /* Fullscreen Button for Maps */
 .fullscreen-btn {
   position: absolute;
