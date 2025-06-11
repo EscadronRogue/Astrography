@@ -67,6 +67,8 @@ export function initFilterUI() {
   const densityTopNumber = document.getElementById('density-top-number');
   const densityGridSlider = document.getElementById('density-grid-slider');
   const densityGridNumber = document.getElementById('density-grid-number');
+  const densityOpacitySlider = document.getElementById('density-opacity-slider');
+  const densityOpacityNumber = document.getElementById('density-opacity-number');
   enableDensityChk.addEventListener('change', function () {
     const enabled = this.checked;
     densitySlider.disabled = !enabled;
@@ -78,6 +80,8 @@ export function initFilterUI() {
     densityTopNumber.disabled = !enabled;
     densityGridSlider.disabled = !enabled;
     densityGridNumber.disabled = !enabled;
+    densityOpacitySlider.disabled = !enabled;
+    densityOpacityNumber.disabled = !enabled;
   });
   densitySlider.addEventListener('input', function () {
     densityNumber.value = this.value;
@@ -111,6 +115,14 @@ export function initFilterUI() {
   });
   densityGridNumber.addEventListener('input', function () {
     densityGridSlider.value = this.value;
+  });
+  densityOpacitySlider.addEventListener('input', function () {
+    densityOpacityNumber.value = this.value;
+    document.getElementById('density-opacity-value').textContent = this.value;
+  });
+  densityOpacityNumber.addEventListener('input', function () {
+    densityOpacitySlider.value = this.value;
+    document.getElementById('density-opacity-value').textContent = this.value;
   });
 
   // Distance slider sync.

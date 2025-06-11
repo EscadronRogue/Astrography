@@ -74,6 +74,7 @@ class DensityGridOverlay {
     this.adjacentLines = [];
     this.maxDensity = 0;
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
+    this.opacityFactor = 1.0;
   }
 
   createGrid(stars) {
@@ -249,10 +250,12 @@ class DensityGridOverlay {
     const tolSlider = document.getElementById('density-tolerance-slider');
     const bottomSlider = document.getElementById('density-bottom-slider');
     const topSlider = document.getElementById('density-top-slider');
+    const opacitySlider = document.getElementById('density-opacity-slider');
     const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
     const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
     const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
     const topPct = topSlider ? parseFloat(topSlider.value) : 10;
+    this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
 
     const extendedStars = stars.filter(star => {
       const d = star.Distance_from_the_Sun;
@@ -293,9 +296,10 @@ class DensityGridOverlay {
         cell.active = false;
       }
 
-      cell.tcMesh.material.opacity = alpha;
-      cell.globeMesh.material.opacity = alpha;
-      cell.mollweideMesh.material.opacity = alpha;
+      const finalAlpha = alpha * this.opacityFactor;
+      cell.tcMesh.material.opacity = finalAlpha;
+      cell.globeMesh.material.opacity = finalAlpha;
+      cell.mollweideMesh.material.opacity = finalAlpha;
       cell.tcMesh.material.color.copy(color);
       cell.globeMesh.material.color.copy(color);
       cell.mollweideMesh.material.color.copy(color);
