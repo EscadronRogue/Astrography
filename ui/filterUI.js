@@ -241,6 +241,46 @@ function addCloudsFieldset() {
     cloudDiv.appendChild(cloudLbl);
     contentDiv.appendChild(cloudDiv);
   });
+
+  const opDiv = document.createElement('div');
+  opDiv.classList.add('filter-item');
+  const opLabel = document.createElement('label');
+  opLabel.htmlFor = 'cloud-opacity-slider';
+  opLabel.textContent = 'Overlay Opacity:';
+  const opSlider = document.createElement('input');
+  opSlider.type = 'range';
+  opSlider.id = 'cloud-opacity-slider';
+  opSlider.name = 'cloud-opacity';
+  opSlider.min = '0';
+  opSlider.max = '100';
+  opSlider.value = '100';
+  opSlider.step = '1';
+  const opNumber = document.createElement('input');
+  opNumber.type = 'number';
+  opNumber.id = 'cloud-opacity-number';
+  opNumber.name = 'cloud-opacity';
+  opNumber.min = '0';
+  opNumber.max = '100';
+  opNumber.value = '100';
+  opNumber.step = '1';
+  const opSpan = document.createElement('span');
+  opSpan.id = 'cloud-opacity-value';
+  opSpan.textContent = '100';
+  opDiv.appendChild(opLabel);
+  opDiv.appendChild(opSlider);
+  opDiv.appendChild(opNumber);
+  opDiv.appendChild(opSpan);
+  opDiv.appendChild(document.createTextNode('%'));
+  contentDiv.appendChild(opDiv);
+
+  opSlider.addEventListener('input', () => {
+    opNumber.value = opSlider.value;
+    opSpan.textContent = opSlider.value;
+  });
+  opNumber.addEventListener('input', () => {
+    opSlider.value = opNumber.value;
+    opSpan.textContent = opNumber.value;
+  });
   
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);

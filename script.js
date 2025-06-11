@@ -417,6 +417,7 @@ async function buildAndApplyFilters() {
     isolationGridSize,
     densityGridSize,
     showClouds,
+    cloudOpacity,
     showGalacticPlane,
     showEclipticPlane,
     showCelestialEquator,
@@ -499,13 +500,13 @@ async function buildAndApplyFilters() {
     // Get the file paths from the checked dust cloud checkboxes.
     const cloudDataFiles = new FormData(form).getAll('dust-clouds');
     // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
-    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles);
-    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles);
-    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles);
+    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, cloudOpacity / 100);
+    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles, cloudOpacity / 100);
+    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, cloudOpacity / 100);
   } else {
-    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', []);
-    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', []);
-    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', []);
+    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], cloudOpacity / 100);
+    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', [], cloudOpacity / 100);
+    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', [], cloudOpacity / 100);
   }
 
   applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator);
