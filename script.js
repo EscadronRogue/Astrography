@@ -561,7 +561,8 @@ class MapManager {
     if (mapType === 'Mollweide') {
       this.controls = new TwoDControls(this.camera, this.renderer.domElement, {
         rightCallback: (dx) => {
-          let lambda0 = getMollweideLambda0() - dx * 0.002;
+          const zoomScale = this.camera.zoom || 1;
+          let lambda0 = getMollweideLambda0() - dx * (0.002 / zoomScale);
           const twoPi = Math.PI * 2;
           lambda0 = ((lambda0 % twoPi) + twoPi) % twoPi;
           setMollweideLambda0(lambda0);

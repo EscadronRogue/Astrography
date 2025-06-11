@@ -76,7 +76,12 @@ export class LabelManager {
       const baseFontSize = (this.mapType === 'Globe'
         ? 64
         : (this.mapType === 'Mollweide' ? 72 : 24));
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
+      let scaleFactor = star.displaySize / 2;
+      if (this.mapType === 'Mollweide') {
+        scaleFactor = THREE.MathUtils.clamp(scaleFactor, 4, 7.5);
+      } else {
+        scaleFactor = THREE.MathUtils.clamp(scaleFactor, 1, 5);
+      }
       const fontSize = baseFontSize * scaleFactor;
 
       const canvas = document.createElement('canvas');
@@ -198,7 +203,12 @@ export class LabelManager {
       // larger stars get more separation from their text. Use a slightly
       // larger base distance for the Mollweide map since stars are scaled up
       // there.
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
+      let scaleFactor = star.displaySize / 2;
+      if (this.mapType === 'Mollweide') {
+        scaleFactor = THREE.MathUtils.clamp(scaleFactor, 4, 7.5);
+      } else {
+        scaleFactor = THREE.MathUtils.clamp(scaleFactor, 1, 5);
+      }
       const baseDist = this.mapType === 'Mollweide' ? 1 : 0.5;
       const dist = baseDist * scaleFactor;
       return new THREE.Vector3(1, 1, 0).multiplyScalar(dist);

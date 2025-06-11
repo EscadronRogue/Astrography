@@ -101,7 +101,7 @@ export function createConstellationBoundariesForGlobe() {
       gapSize: 1,
       linewidth: 1,
       transparent: true,
-      opacity: 0.4
+      opacity: 0.6
     });
     const line = new THREE.Line(geometry, material);
     line.computeLineDistances();
@@ -118,7 +118,7 @@ export function createConstellationBoundariesForMollweide() {
     gapSize: 1,
     linewidth: 1,
     transparent: true,
-    opacity: 0.4
+    opacity: 0.6
   });
   const maxSegments = boundaryData.length * 32; // 16 segments per boundary, each may wrap
   const positions = new Float32Array(maxSegments * 2 * 3); // 2 vertices per segment
@@ -190,7 +190,7 @@ export function createConstellationLabelsForGlobe() {
     const material = new THREE.ShaderMaterial({
       uniforms: {
         map: { value: texture },
-        opacity: { value: 0.5 }
+        opacity: { value: 0.7 }
       },
       vertexShader: `
         varying vec2 vUv;
@@ -248,7 +248,7 @@ export function createConstellationLabelsForMollweide() {
     ctx.fillStyle = '#888888';
     ctx.fillText(c.name, 10, baseFontSize);
     const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.5 });
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.7 });
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
     sprite.position.copy(p);
