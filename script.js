@@ -865,21 +865,24 @@ function setupMapProjectionToggles() {
   const globeContainer = document.getElementById('sphereMap').parentElement;
   const mollContainer = document.getElementById('mollweideMap').parentElement;
   [trueContainer, globeContainer, mollContainer].forEach(c => c.remove());
-  mapsSection.appendChild(mollContainer);
 
   function handle(id, container, manager) {
     const cb = document.getElementById(id);
     if (!cb) return;
-    cb.addEventListener('change', () => {
+    function update() {
       if (cb.checked) {
         mapsSection.appendChild(container);
         manager.onResize();
-        container.scrollIntoView({ behavior: 'smooth' });
       } else if (container.isConnected) {
         container.remove();
       }
       requestRender();
+    }
+    cb.addEventListener('change', () => {
+      update();
+      maybeSavePresets();
     });
+    update();
   }
 
   handle('map-true', trueContainer, trueCoordinatesMap);
@@ -1616,10 +1619,14 @@ async function main() {
   try {
     cachedStars = await loadStarData();
     if (!cachedStars.length) throw new Error('No star data available');
-    loadPresets();
     await setupFilterUI(cachedStars);
-    const debouncedApplyFilters = debounce(buildAndApplyFilters, 150);
     const form = document.getElementById('filters-form');
+    if (form) {
+      const presetsFs = document.getElementById('save-presets-fieldset');
+      if (presetsFs) form.appendChild(presetsFs);
+    }
+    loadPresets();
+    const debouncedApplyFilters = debounce(buildAndApplyFilters, 150);
     if (form) {
       form.addEventListener('change', () => {
         debouncedApplyFilters();
