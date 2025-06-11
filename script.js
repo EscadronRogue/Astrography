@@ -1032,6 +1032,23 @@ function updateEditOverlay() {
   editOverlay.style.display = 'block';
   editOverlay.style.left = `${x}px`;
   editOverlay.style.top = `${y}px`;
+
+  const center = selectedLabel.position.clone();
+  const halfW = selectedLabel.scale.x / 2;
+  const rightVec = new THREE.Vector3(1, 0, 0)
+    .applyQuaternion(mollweideMap.camera.quaternion)
+    .multiplyScalar(halfW);
+  const leftWorld = center.clone().sub(rightVec);
+  const rightWorld = center.clone().add(rightVec);
+  const lp = leftWorld.clone().project(mollweideMap.camera);
+  const rp = rightWorld.clone().project(mollweideMap.camera);
+  const lx = (lp.x * 0.5 + 0.5) * rect.width + rect.left;
+  const rx = (rp.x * 0.5 + 0.5) * rect.width + rect.left;
+  const labelWidth = Math.abs(rx - lx);
+  const iconSize = 36;
+  const offset = labelWidth / 2 + iconSize / 2 + 10;
+  rotateHandle.style.left = `-${offset}px`;
+  scaleHandle.style.left = `${offset}px`;
 }
 
 function registerMollweideEditableLabels() {

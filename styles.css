@@ -307,8 +307,8 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   z-index: 1500;
 }
 #label-edit-overlay .handle {
-  width: 12px;
-  height: 12px;
+  width: 36px;
+  height: 36px;
   background: #ff6f61;
   border: 2px solid #fff;
   border-radius: 50%;
@@ -318,19 +318,17 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 10px;
+  font-size: 30px;
 }
 #label-edit-overlay .rotate-handle {
-  left: -30px;
   top: 0;
-  transform: translate(-100%, -50%);
   cursor: grab;
+  transform: translate(-100%, -50%);
 }
 #label-edit-overlay .scale-handle {
-  right: -30px;
   top: 0;
-  transform: translate(0, -50%);
   cursor: nwse-resize;
+  transform: translate(0, -50%);
 }
 
 /* Fullscreen Button for Maps */
