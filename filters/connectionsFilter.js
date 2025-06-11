@@ -137,7 +137,13 @@ export function createMollweideConnectionSegments(pairs) {
     linewidth: 1
   });
   const lineSegs = new THREE.LineSegments(geometry, material);
-  lineSegs.userData = { pairs, segments: GC_SEGMENTS };
+  lineSegs.userData = {
+    pairs,
+    segments: GC_SEGMENTS,
+    editableLine: true,
+    wrap: true,
+    type: 'connection'
+  };
   updateMollweideConnectionSegments(lineSegs);
   return lineSegs;
 }
@@ -156,7 +162,7 @@ export function updateMollweideConnectionSegments(lineSegs) {
     const cA = new THREE.Color(pair.starA.displayColor || '#ffffff');
     const cB = new THREE.Color(pair.starB.displayColor || '#ffffff');
     for (let j = 0; j < pts.length - 1; j++) {
-      const segs = splitMollweideWrap(pts[j], pts[j + 1]);
+      const segs = lineSegs.userData.wrap === false ? [[pts[j], pts[j + 1]]] : splitMollweideWrap(pts[j], pts[j + 1]);
       segs.forEach(([s, e]) => {
         if (idx + 6 > posAttr.array.length) return;
         posAttr.array[idx] = s.x; posAttr.array[idx+1] = s.y; posAttr.array[idx+2] = s.z;

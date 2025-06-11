@@ -86,6 +86,7 @@ const starLabelOffsets = new Map();
 const constellationLabelOffsets = new Map();
 const galacticLabelOffsets = new Map();
 let editableLabels = [];
+let editableLines = [];
 let selectedLabel = null;
 const dragOffset = new THREE.Vector3();
 const editPointer = new THREE.Vector2();
@@ -355,6 +356,7 @@ async function buildAndApplyFilters() {
   mollweideMap.updateConnections(currentMollweideFilteredStars, currentMollweideConnections);
   mollweideMap.labelManager.refreshLabels(currentMollweideFilteredStars);
   registerMollweideEditableLabels();
+  registerEditableLines();
 
   removeConstellationObjectsFromGlobe();
   removeConstellationOverlayObjectsFromGlobe();
@@ -700,7 +702,10 @@ class MapManager {
     if (!this.connectionGroup) return;
     if (this.mapType === 'Mollweide') {
       const segs = this.connectionGroup.children[0];
-      if (segs) updateMollweideConnectionSegments(segs);
+      if (segs) {
+        segs.userData.wrap = true;
+        updateMollweideConnectionSegments(segs);
+      }
     } else {
       this.updateConnections(stars, connectionObjs);
     }
@@ -896,9 +901,15 @@ async function updateMollweideView() {
   if (showConstellationBoundariesFlag) {
     if (constellationLinesMoll.length === 0) {
       constellationLinesMoll = createConstellationBoundariesForMollweide();
-      constellationLinesMoll.forEach(l => mollweideMap.scene.add(l));
+      constellationLinesMoll.forEach(l => {
+        l.userData.wrap = true;
+        mollweideMap.scene.add(l);
+      });
     } else {
-      constellationLinesMoll.forEach(l => updateConstellationBoundariesForMollweide(l));
+      constellationLinesMoll.forEach(l => {
+        l.userData.wrap = true;
+        updateConstellationBoundariesForMollweide(l);
+      });
     }
   }
   if (showConstellationNamesFlag) {
@@ -941,13 +952,14 @@ async function updateMollweideView() {
   if (showCelestialEquatorFlag && celestialEquatorMoll) {
     updateCelestialEquatorMollweide(celestialEquatorMoll);
   }
+  registerEditableLines();
   if (window.requestRender) window.requestRender();
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap(format, resolution) {
-  const width = resolution;
-  const height = Math.floor(resolution / 2);
+function exportMollweideMap() {
+  const width = 7680;
+  const height = 3840;
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
   exportRenderer.setPixelRatio(1);
   const finalCanvas = document.createElement('canvas');
@@ -976,29 +988,20 @@ function exportMollweideMap(format, resolution) {
   }
   exportRenderer.dispose();
 
-  if (format === 'png') {
-    finalCanvas.toBlob(b => {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(b);
-      link.download = 'mollweide_map.png';
-      link.click();
-      URL.revokeObjectURL(link.href);
-    }, 'image/png');
-  } else {
-    const dataUrl = finalCanvas.toDataURL('image/png');
-    const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [width, height] });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
-    pdf.save('mollweide_map.pdf');
-  }
+  finalCanvas.toBlob(b => {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(b);
+    link.download = 'mollweide_map.png';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, 'image/png');
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    const format = document.getElementById('export-format').value;
-    const res = parseInt(document.getElementById('export-resolution').value, 10);
-    exportMollweideMap(format, res);
+    exportMollweideMap();
   });
 }
 
@@ -1061,11 +1064,43 @@ function registerMollweideEditableLabels() {
   });
 }
 
+function registerEditableLines() {
+  editableLines = [];
+  mollweideMap.scene.traverse(obj => {
+    if (obj.userData && obj.userData.editableLine) {
+      editableLines.push(obj);
+    }
+  });
+}
+
+function toggleLineWrap(line) {
+  if (!line.userData) return;
+  line.userData.wrap = !line.userData.wrap;
+  if (line.userData._origColor === undefined) {
+    line.userData._origColor = line.material.color.clone();
+  }
+  line.material.color.set('#ff6f61');
+  setTimeout(() => {
+    if (line.material && line.userData._origColor) {
+      line.material.color.copy(line.userData._origColor);
+      requestRender();
+    }
+  }, 200);
+  if (line.userData.type === 'constellation') {
+    updateConstellationBoundariesForMollweide(line);
+  } else if (line.userData.type === 'connection') {
+    updateMollweideConnectionSegments(line);
+  } else if (line.userData.refreshFn) {
+    line.userData.refreshFn(line);
+  }
+  requestRender();
+}
+
 function onEditPointerDown(e) {
   if (!labelEditMode) return;
   const pos = getPointerPos(e);
   editRaycaster.setFromCamera(editPointer, mollweideMap.camera);
-  const intersects = editRaycaster.intersectObjects(editableLabels, false);
+  let intersects = editRaycaster.intersectObjects(editableLabels, false);
   if (intersects.length > 0) {
     selectedLabel = intersects[0].object;
     dragOffset.copy(pos).sub(selectedLabel.position);
@@ -1082,6 +1117,12 @@ function onEditPointerDown(e) {
     mollweideMap.canvas.classList.add('dragging');
     requestRender();
     e.preventDefault();
+  } else {
+    intersects = editRaycaster.intersectObjects(editableLines, false);
+    if (intersects.length > 0) {
+      toggleLineWrap(intersects[0].object);
+      e.preventDefault();
+    }
   }
 }
 
@@ -1139,6 +1180,7 @@ function setupLabelEditor() {
     mollweideMap.canvas.classList.toggle('edit-mode', labelEditMode);
     if (labelEditMode) {
       registerMollweideEditableLabels();
+      registerEditableLines();
     }
     requestRender();
   });

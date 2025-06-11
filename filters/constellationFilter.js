@@ -128,6 +128,9 @@ export function createConstellationBoundariesForMollweide() {
   lineSegs.computeLineDistances();
   lineSegs.userData.boundaryData = boundaryData;
   lineSegs.userData.R = R;
+  lineSegs.userData.editableLine = true;
+  lineSegs.userData.wrap = true;
+  lineSegs.userData.type = 'constellation';
   updateConstellationBoundariesForMollweide(lineSegs);
   return [lineSegs];
 }
@@ -144,11 +147,11 @@ export function updateConstellationBoundariesForMollweide(lineSegs) {
     const pEnd   = radToSphere(seg.ra2, seg.dec2, R);
     const arcPts  = greatCircleToMollweide(pStart, pEnd, R, 16, lambda0);
     for (let j = 0; j < arcPts.length - 1; j++) {
-      const splits = splitMollweideWrap(arcPts[j], arcPts[j + 1]);
+      const segs = lineSegs.userData.wrap === false ? [[arcPts[j], arcPts[j + 1]]] : splitMollweideWrap(arcPts[j], arcPts[j + 1]);
       for (let s = 0; s < 2; s++) {
-        if (s < splits.length) {
-          const a = splits[s][0];
-          const b = splits[s][1];
+        if (s < segs.length) {
+          const a = segs[s][0];
+          const b = segs[s][1];
           array[idx++] = a.x; array[idx++] = a.y; array[idx++] = 0;
           array[idx++] = b.x; array[idx++] = b.y; array[idx++] = 0;
         } else {
