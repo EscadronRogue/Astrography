@@ -252,6 +252,7 @@ export function createConstellationLabelsForMollweide() {
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
     sprite.position.copy(p);
+    sprite.userData = { name: c.name, ra: c.ra, dec: c.dec };
     labels.push(sprite);
   });
   return labels;

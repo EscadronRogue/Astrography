@@ -170,7 +170,12 @@ export class LabelManager {
           ? new THREE.Vector3(star.spherePosition.x, star.spherePosition.y, star.spherePosition.z)
           : new THREE.Vector3(star.mollweidePosition.x, star.mollweidePosition.y, star.mollweidePosition.z));
 
-    const offset = this.computeLabelOffset(star, starPos);
+    let offset;
+    if (this.mapType === 'Mollweide' && star.mollLabelOffset) {
+      offset = star.mollLabelOffset.clone();
+    } else {
+      offset = this.computeLabelOffset(star, starPos);
+    }
     const labelPos = starPos.clone().add(offset);
     labelObj.position.copy(labelPos);
 
