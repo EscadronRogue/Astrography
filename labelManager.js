@@ -76,7 +76,11 @@ export class LabelManager {
       const baseFontSize = (this.mapType === 'Globe'
         ? 64
         : (this.mapType === 'Mollweide' ? 72 : 24));
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
+      let scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
+      if (this.mapType === 'Mollweide') {
+        // Ensure a larger minimum label size for the Mollweide map
+        scaleFactor = Math.max(scaleFactor, 2);
+      }
       const fontSize = baseFontSize * scaleFactor;
 
       const canvas = document.createElement('canvas');
@@ -201,6 +205,11 @@ export class LabelManager {
       const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
       const baseDist = this.mapType === 'Mollweide' ? 1 : 0.5;
       const dist = baseDist * scaleFactor;
+      if (this.mapType === 'Mollweide') {
+        // Randomize the direction to reduce label overlap
+        const angle = Math.random() * Math.PI * 2;
+        return new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(dist);
+      }
       return new THREE.Vector3(1, 1, 0).multiplyScalar(dist);
     } else {
       // For the Globe, offset tangentially around the star on the sphere

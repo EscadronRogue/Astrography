@@ -311,9 +311,11 @@ export class TwoDControls {
     }
 
     getScale() {
+        // Adjust panning speed based on current zoom level
+        const zoom = this.camera.zoom || 1;
         return {
-            x: (this.camera.right - this.camera.left) / this.domElement.clientWidth,
-            y: (this.camera.top - this.camera.bottom) / this.domElement.clientHeight
+            x: (this.camera.right - this.camera.left) / (this.domElement.clientWidth * zoom),
+            y: (this.camera.top - this.camera.bottom) / (this.domElement.clientHeight * zoom)
         };
     }
 
