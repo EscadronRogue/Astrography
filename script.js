@@ -91,6 +91,10 @@ const dragOffset = new THREE.Vector3();
 const editPointer = new THREE.Vector2();
 const editRaycaster = new THREE.Raycaster();
 const editPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+let lineEditMode = false;
+let editableLines = [];
+const editHistory = [];
+let initialLabelPos = null;
 
 function getStarId(star) {
   return (
@@ -945,9 +949,9 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap(format, resolution) {
-  const width = resolution;
-  const height = Math.floor(resolution / 2);
+function exportMollweideMap() {
+  const width = 7680;
+  const height = 3840;
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
   exportRenderer.setPixelRatio(1);
   const finalCanvas = document.createElement('canvas');
@@ -976,29 +980,20 @@ function exportMollweideMap(format, resolution) {
   }
   exportRenderer.dispose();
 
-  if (format === 'png') {
-    finalCanvas.toBlob(b => {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(b);
-      link.download = 'mollweide_map.png';
-      link.click();
-      URL.revokeObjectURL(link.href);
-    }, 'image/png');
-  } else {
-    const dataUrl = finalCanvas.toDataURL('image/png');
-    const pdf = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'px', format: [width, height] });
-    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
-    pdf.save('mollweide_map.pdf');
-  }
+  finalCanvas.toBlob(b => {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(b);
+    link.download = 'mollweide_map.png';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, 'image/png');
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    const format = document.getElementById('export-format').value;
-    const res = parseInt(document.getElementById('export-resolution').value, 10);
-    exportMollweideMap(format, res);
+    exportMollweideMap();
   });
 }
 
@@ -1061,6 +1056,38 @@ function registerMollweideEditableLabels() {
   });
 }
 
+function registerMollweideEditableLines() {
+  editableLines = [];
+  if (mollweideMap.connectionGroup) {
+    mollweideMap.connectionGroup.traverse(obj => {
+      if (obj.isLine || obj.type === 'Line' || obj.type === 'LineSegments') {
+        editableLines.push(obj);
+      }
+    });
+  }
+  constellationLinesMoll.forEach(l => editableLines.push(l));
+  if (densityOverlay && densityOverlay.adjacentLines) {
+    densityOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
+  }
+  if (isolationOverlay && isolationOverlay.adjacentLines) {
+    isolationOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
+  }
+}
+
+function onLinePointerDown(e) {
+  if (!lineEditMode) return;
+  getPointerPos(e);
+  editRaycaster.setFromCamera(editPointer, mollweideMap.camera);
+  const intersects = editRaycaster.intersectObjects(editableLines, false);
+  if (intersects.length > 0) {
+    const obj = intersects[0].object;
+    editHistory.push({ type: 'toggleVisible', object: obj, prevVisible: obj.visible });
+    obj.visible = false;
+    requestRender();
+    e.preventDefault();
+  }
+}
+
 function onEditPointerDown(e) {
   if (!labelEditMode) return;
   const pos = getPointerPos(e);
@@ -1068,6 +1095,7 @@ function onEditPointerDown(e) {
   const intersects = editRaycaster.intersectObjects(editableLabels, false);
   if (intersects.length > 0) {
     selectedLabel = intersects[0].object;
+    initialLabelPos = selectedLabel.position.clone();
     dragOffset.copy(pos).sub(selectedLabel.position);
     selectedLabel.userData._origScale = selectedLabel.scale.clone();
     selectedLabel.userData._origColor = selectedLabel.material.color.clone();
@@ -1126,8 +1154,13 @@ function onEditPointerUp() {
     selectedLabel.userData.lineObj.material.color.copy(selectedLabel.userData._origLineColor);
   }
   mollweideMap.canvas.classList.remove('dragging');
+  if (initialLabelPos) {
+    const prevOffset = initialLabelPos.clone().sub(anchor);
+    editHistory.push({ type: 'moveLabel', label: selectedLabel, prevOffset });
+  }
   requestRender();
   selectedLabel = null;
+  initialLabelPos = null;
 }
 
 function setupLabelEditor() {
@@ -1136,7 +1169,12 @@ function setupLabelEditor() {
   btn.addEventListener('click', () => {
     labelEditMode = !labelEditMode;
     btn.classList.toggle('active', labelEditMode);
-    mollweideMap.canvas.classList.toggle('edit-mode', labelEditMode);
+    if (labelEditMode) {
+      lineEditMode = false;
+      const lbtn = document.getElementById('toggle-line-editor');
+      if (lbtn) lbtn.classList.remove('active');
+    }
+    mollweideMap.canvas.classList.toggle('edit-mode', labelEditMode || lineEditMode);
     if (labelEditMode) {
       registerMollweideEditableLabels();
     }
@@ -1145,6 +1183,53 @@ function setupLabelEditor() {
   mollweideMap.canvas.addEventListener('pointerdown', onEditPointerDown);
   mollweideMap.canvas.addEventListener('pointermove', onEditPointerMove);
   window.addEventListener('pointerup', onEditPointerUp);
+}
+
+function setupLineEditor() {
+  const btn = document.getElementById('toggle-line-editor');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    lineEditMode = !lineEditMode;
+    btn.classList.toggle('active', lineEditMode);
+    if (lineEditMode) {
+      labelEditMode = false;
+      const lbtn = document.getElementById('toggle-label-editor');
+      if (lbtn) lbtn.classList.remove('active');
+      registerMollweideEditableLines();
+    }
+    mollweideMap.canvas.classList.toggle('edit-mode', lineEditMode || labelEditMode);
+    requestRender();
+  });
+  mollweideMap.canvas.addEventListener('pointerdown', onLinePointerDown);
+}
+
+function setupUndoButton() {
+  const btn = document.getElementById('undo-edit');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const action = editHistory.pop();
+    if (!action) return;
+    if (action.type === 'toggleVisible') {
+      action.object.visible = action.prevVisible;
+    } else if (action.type === 'moveLabel') {
+      const label = action.label;
+      const anchor = label.userData.anchorFunc();
+      const newPos = anchor.clone().add(action.prevOffset);
+      label.position.copy(newPos);
+      if (label.userData.editType === 'star') {
+        starLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
+        if (label.userData.starRef) label.userData.starRef.mollLabelOffset = action.prevOffset.clone();
+        if (label.userData.lineObj) label.userData.lineObj.geometry.setFromPoints([anchor, newPos]);
+      } else if (label.userData.editType === 'constellation') {
+        constellationLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
+        label.userData.offset = action.prevOffset.clone();
+      } else if (label.userData.editType === 'galactic') {
+        galacticLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
+        label.userData.offset = action.prevOffset.clone();
+      }
+    }
+    requestRender();
+  });
 }
 
 async function main() {
@@ -1181,6 +1266,8 @@ async function main() {
     setupMapProjectionToggles();
     setupExportControls();
     setupLabelEditor();
+    setupLineEditor();
+    setupUndoButton();
     requestRender();
     loader.classList.add('hidden');
   } catch (err) {
