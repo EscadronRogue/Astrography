@@ -1,7 +1,69 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide } from '../utils/geometryUtils.js';
+import {
+  getGreatCirclePoints,
+  cachedRadToMollweide,
+  getMollweideLambda0,
+  splitMollweideWrap,
+  vectorToRaDecRad,
+  radToMollweide
+} from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
+
+// Helper material and geometry builders for wide fading lines on the Mollweide map
+function createWideLineMaterial(color) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(color) },
+      opacityFactor: { value: 1.0 }
+    },
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    vertexShader: `
+      attribute float side;
+      varying float vSide;
+      void main() {
+        vSide = side;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float opacityFactor;
+      varying float vSide;
+      void main() {
+        float alpha = 0.5 * (1.0 - abs(vSide)) * opacityFactor;
+        if(alpha <= 0.0) discard;
+        gl_FragColor = vec4(color, alpha);
+      }
+    `
+  });
+}
+
+function buildWideLineGeometry(points, width) {
+  const vertices = [];
+  const sides = [];
+  for (let i = 0; i < points.length; i += 2) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const dir = new THREE.Vector2(p2.x - p1.x, p2.y - p1.y).normalize();
+    const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(width / 2);
+    const a1 = new THREE.Vector3(p1.x + perp.x, p1.y + perp.y, p1.z);
+    const a2 = new THREE.Vector3(p1.x - perp.x, p1.y - perp.y, p1.z);
+    const b1 = new THREE.Vector3(p2.x + perp.x, p2.y + perp.y, p2.z);
+    const b2 = new THREE.Vector3(p2.x - perp.x, p2.y - perp.y, p2.z);
+
+    vertices.push(a1.x, a1.y, a1.z, a2.x, a2.y, a2.z, b2.x, b2.y, b2.z);
+    sides.push(1, -1, -1);
+    vertices.push(a1.x, a1.y, a1.z, b2.x, b2.y, b2.z, b1.x, b1.y, b1.z);
+    sides.push(1, -1, 1);
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geom.setAttribute('side', new THREE.Float32BufferAttribute(sides, 1));
+  return geom;
+}
 
 class DensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2) {
@@ -11,6 +73,7 @@ class DensityGridOverlay {
     this.cubesData = [];
     this.adjacentLines = [];
     this.maxDensity = 0;
+    this.mollLineWidth = 30; // width of connection lines on the Mollweide map
   }
 
   createGrid(stars) {
@@ -158,7 +221,7 @@ class DensityGridOverlay {
             const segsM = splitMollweideWrap(mollPts[m], mollPts[m + 1]);
             segsM.forEach(([s,e]) => { pointsM.push(s, e); });
           }
-          const geomM = new THREE.BufferGeometry().setFromPoints(pointsM);
+          const geomM = buildWideLineGeometry(pointsM, this.mollLineWidth);
           for (let i = 0; i < points.length; i++) {
             positions.push(points[i].x, points[i].y, points[i].z);
           }
@@ -172,13 +235,9 @@ class DensityGridOverlay {
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
-          const mollMat = new THREE.LineBasicMaterial({
-            color: 0xff0000,
-            transparent: true,
-            opacity: 0.9,
-            linewidth: 5
-          });
-          const lineM = new THREE.LineSegments(geomM, mollMat);
+          const mollMat = createWideLineMaterial(0xff0000);
+          const lineM = new THREE.Mesh(geomM, mollMat);
+          lineM.renderOrder = 1;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
         }
       });
@@ -258,8 +317,9 @@ class DensityGridOverlay {
         line.material.opacity = avgOpacity;
         line.material.vertexColors = false;
         line.material.needsUpdate = true;
-        lineM.material.color.copy(avgColor);
-        lineM.material.opacity = avgOpacity;
+        lineM.material.uniforms.color.value.copy(avgColor);
+        lineM.material.uniforms.opacityFactor.value = avgOpacity;
+        lineM.material.needsUpdate = true;
       }
     });
     if (sceneTC) {
@@ -293,7 +353,8 @@ class DensityGridOverlay {
         const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
         segs.forEach(([s,e]) => { pts.push(s, e); });
       }
-      obj.lineM.geometry.setFromPoints(pts);
+      obj.lineM.geometry.dispose();
+      obj.lineM.geometry = buildWideLineGeometry(pts, this.mollLineWidth);
     });
   }
 }
