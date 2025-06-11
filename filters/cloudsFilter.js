@@ -10,6 +10,61 @@ import {
   splitMollweideWrap
 } from '../utils/geometryUtils.js';
 
+// Helper material and geometry builders for wide fading lines on the Mollweide map
+function createWideLineMaterial(color) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      color: { value: new THREE.Color(color) },
+      opacityFactor: { value: 1.0 }
+    },
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    vertexShader: `
+      attribute float side;
+      varying float vSide;
+      void main() {
+        vSide = side;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      uniform float opacityFactor;
+      varying float vSide;
+      void main() {
+        float alpha = 0.5 * (1.0 - abs(vSide)) * opacityFactor;
+        if(alpha <= 0.0) discard;
+        gl_FragColor = vec4(color, alpha);
+      }
+    `
+  });
+}
+
+function buildWideLineGeometry(points, width) {
+  const vertices = [];
+  const sides = [];
+  for (let i = 0; i < points.length; i += 2) {
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const dir = new THREE.Vector2(p2.x - p1.x, p2.y - p1.y).normalize();
+    const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(width / 2);
+    const a1 = new THREE.Vector3(p1.x + perp.x, p1.y + perp.y, p1.z);
+    const a2 = new THREE.Vector3(p1.x - perp.x, p1.y - perp.y, p1.z);
+    const b1 = new THREE.Vector3(p2.x + perp.x, p2.y + perp.y, p2.z);
+    const b2 = new THREE.Vector3(p2.x - perp.x, p2.y - perp.y, p2.z);
+
+    vertices.push(a1.x, a1.y, a1.z, a2.x, a2.y, a2.z, b2.x, b2.y, b2.z);
+    sides.push(1, -1, -1);
+    vertices.push(a1.x, a1.y, a1.z, b2.x, b2.y, b2.z, b1.x, b1.y, b1.z);
+    sides.push(1, -1, 1);
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geom.setAttribute('side', new THREE.Float32BufferAttribute(sides, 1));
+  return geom;
+}
+
 /**
  * Loads a cloud data file (JSON) from the provided URL.
  * @param {string} cloudFileUrl - URL to the cloud JSON file.
@@ -37,7 +92,8 @@ export async function createCloudOverlay(
   cloudData,
   completeStarList,
   mapType,
-  cloudColor = new THREE.Color(0xff6600)
+  cloudColor = new THREE.Color(0xff6600),
+  opacityFactor = 1.0
 ) {
   const cloudNames = new Set(cloudData.map(d => d['Star Name']));
   const cloudStars = [];
@@ -77,7 +133,7 @@ export async function createCloudOverlay(
   }
 
   if (mapType === 'Mollweide') {
-    const segs = createMollweideCloudSegments(pairs, cloudColor);
+    const segs = createMollweideCloudSegments(pairs, cloudColor, opacityFactor);
     return segs;
   }
 
@@ -106,7 +162,7 @@ export async function createCloudOverlay(
     color: cloudColor,
     linewidth: 1,
     transparent: true,
-    opacity: 0.8,
+    opacity: 0.8 * opacityFactor,
     depthWrite: false
   });
   const lineSegments = new THREE.LineSegments(geometry, material);
@@ -142,59 +198,38 @@ function getCloudNameFromFileUrl(fileUrl) {
 
 const GC_SEGMENTS = 32;
 
-export function createMollweideCloudSegments(pairs, color) {
-  const segCount = pairs.length * GC_SEGMENTS * 2;
-  const positions = new Float32Array(segCount * 2 * 3);
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const material = new THREE.LineBasicMaterial({
-    color,
-    transparent: true,
-    opacity: 0.8,
-    linewidth: 1,
-    depthWrite: false
-  });
-  const segs = new THREE.LineSegments(geometry, material);
-  segs.renderOrder = 1;
-  segs.userData = { pairs, segments: GC_SEGMENTS, isMollweideCloud: true };
-  updateMollweideCloudSegments(segs);
-  return segs;
+export function createMollweideCloudSegments(pairs, color, opacityFactor = 1.0, width = 30) {
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), createWideLineMaterial(color));
+  mesh.material.uniforms.opacityFactor.value = opacityFactor;
+  mesh.renderOrder = 1;
+  mesh.userData = { pairs, segments: GC_SEGMENTS, lineWidth: width, isMollweideCloud: true };
+  updateMollweideCloudSegments(mesh);
+  return mesh;
 }
 
 export function updateMollweideCloudSegments(lineSegs) {
   const pairs = lineSegs.userData.pairs || [];
   const segsCount = lineSegs.userData.segments || GC_SEGMENTS;
-  const posAttr = lineSegs.geometry.getAttribute('position');
-  let idx = 0;
+  const width = lineSegs.userData.lineWidth || 30;
+  const pts = [];
   pairs.forEach(pair => {
     const p1 = pair.starA.spherePosition;
     const p2 = pair.starB.spherePosition;
     if (!p1 || !p2) return;
-    const pts = greatCircleToMollweide(
+    const gcPts = greatCircleToMollweide(
       p1,
       p2,
       100,
       segsCount,
       getMollweideLambda0()
     );
-    for (let j = 0; j < pts.length - 1; j++) {
-      const segs = splitMollweideWrap(pts[j], pts[j + 1]);
-      segs.forEach(([s, e]) => {
-        if (idx + 6 > posAttr.array.length) return;
-        posAttr.array[idx++] = s.x;
-        posAttr.array[idx++] = s.y;
-        posAttr.array[idx++] = s.z;
-        posAttr.array[idx++] = e.x;
-        posAttr.array[idx++] = e.y;
-        posAttr.array[idx++] = e.z;
-      });
+    for (let j = 0; j < gcPts.length - 1; j++) {
+      const segs = splitMollweideWrap(gcPts[j], gcPts[j + 1]);
+      segs.forEach(([s, e]) => { pts.push(s, e); });
     }
   });
-  for (; idx < posAttr.array.length; idx++) {
-    posAttr.array[idx] = 0;
-  }
-  posAttr.needsUpdate = true;
-  lineSegs.computeLineDistances();
+  lineSegs.geometry.dispose();
+  lineSegs.geometry = buildWideLineGeometry(pts, width);
 }
 
 /**
@@ -207,7 +242,7 @@ export function updateMollweideCloudSegments(lineSegs) {
  * @param {string} mapType - 'TrueCoordinates', 'Globe', or 'Mollweide'.
  * @param {Array} cloudDataFiles - Array of file URLs for cloud data.
  */
-export async function updateCloudsOverlay(completeStarList, scene, mapType, cloudDataFiles) {
+export async function updateCloudsOverlay(completeStarList, scene, mapType, cloudDataFiles, opacityFactor = 1.0) {
   if (!scene.userData.cloudOverlays) {
     scene.userData.cloudOverlays = [];
   } else {
@@ -219,7 +254,7 @@ export async function updateCloudsOverlay(completeStarList, scene, mapType, clou
       const cloudData = await loadCloudData(fileUrl);
       const cloudName = getCloudNameFromFileUrl(fileUrl);
       const cloudColor = uniqueColorFromName(cloudName);
-      const overlayLine = await createCloudOverlay(cloudData, completeStarList, mapType, cloudColor);
+      const overlayLine = await createCloudOverlay(cloudData, completeStarList, mapType, cloudColor, opacityFactor);
       if (overlayLine) {
         scene.add(overlayLine);
         scene.userData.cloudOverlays.push(overlayLine);

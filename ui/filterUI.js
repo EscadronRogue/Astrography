@@ -67,6 +67,8 @@ export function initFilterUI() {
   const densityTopNumber = document.getElementById('density-top-number');
   const densityGridSlider = document.getElementById('density-grid-slider');
   const densityGridNumber = document.getElementById('density-grid-number');
+  const densityOpacitySlider = document.getElementById('density-opacity-slider');
+  const densityOpacityNumber = document.getElementById('density-opacity-number');
   enableDensityChk.addEventListener('change', function () {
     const enabled = this.checked;
     densitySlider.disabled = !enabled;
@@ -78,6 +80,8 @@ export function initFilterUI() {
     densityTopNumber.disabled = !enabled;
     densityGridSlider.disabled = !enabled;
     densityGridNumber.disabled = !enabled;
+    densityOpacitySlider.disabled = !enabled;
+    densityOpacityNumber.disabled = !enabled;
   });
   densitySlider.addEventListener('input', function () {
     densityNumber.value = this.value;
@@ -111,6 +115,14 @@ export function initFilterUI() {
   });
   densityGridNumber.addEventListener('input', function () {
     densityGridSlider.value = this.value;
+  });
+  densityOpacitySlider.addEventListener('input', function () {
+    densityOpacityNumber.value = this.value;
+    document.getElementById('density-opacity-value').textContent = this.value;
+  });
+  densityOpacityNumber.addEventListener('input', function () {
+    densityOpacitySlider.value = this.value;
+    document.getElementById('density-opacity-value').textContent = this.value;
   });
 
   // Distance slider sync.
@@ -228,6 +240,46 @@ function addCloudsFieldset() {
     cloudDiv.appendChild(cloudChk);
     cloudDiv.appendChild(cloudLbl);
     contentDiv.appendChild(cloudDiv);
+  });
+
+  const opDiv = document.createElement('div');
+  opDiv.classList.add('filter-item');
+  const opLabel = document.createElement('label');
+  opLabel.htmlFor = 'cloud-opacity-slider';
+  opLabel.textContent = 'Overlay Opacity:';
+  const opSlider = document.createElement('input');
+  opSlider.type = 'range';
+  opSlider.id = 'cloud-opacity-slider';
+  opSlider.name = 'cloud-opacity';
+  opSlider.min = '0';
+  opSlider.max = '100';
+  opSlider.value = '100';
+  opSlider.step = '1';
+  const opNumber = document.createElement('input');
+  opNumber.type = 'number';
+  opNumber.id = 'cloud-opacity-number';
+  opNumber.name = 'cloud-opacity';
+  opNumber.min = '0';
+  opNumber.max = '100';
+  opNumber.value = '100';
+  opNumber.step = '1';
+  const opSpan = document.createElement('span');
+  opSpan.id = 'cloud-opacity-value';
+  opSpan.textContent = '100';
+  opDiv.appendChild(opLabel);
+  opDiv.appendChild(opSlider);
+  opDiv.appendChild(opNumber);
+  opDiv.appendChild(opSpan);
+  opDiv.appendChild(document.createTextNode('%'));
+  contentDiv.appendChild(opDiv);
+
+  opSlider.addEventListener('input', () => {
+    opNumber.value = opSlider.value;
+    opSpan.textContent = opSlider.value;
+  });
+  opNumber.addEventListener('input', () => {
+    opSlider.value = opNumber.value;
+    opSpan.textContent = opNumber.value;
   });
   
   fs.appendChild(contentDiv);
