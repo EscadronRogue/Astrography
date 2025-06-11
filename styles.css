@@ -333,6 +333,31 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   border-radius: 4px;
   font-size: 14px;
 }
+
+#label-controls {
+  position: absolute;
+  bottom: 60px;
+  left: 10px;
+  background: rgba(20, 20, 20, 0.8);
+  padding: 6px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  z-index: 11;
+  color: #ff6f61;
+  font-size: 12px;
+}
+#label-controls.hidden {
+  display: none;
+}
+#label-controls label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+#label-controls input[type='range'] {
+  width: 120px;
+}
 .export-btn {
   cursor: pointer;
 }
