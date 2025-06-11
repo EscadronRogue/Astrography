@@ -84,7 +84,7 @@ export class LabelManager {
       // overwhelmingly large. Map the typical size range (1–8) to a more
       // moderate label scale.
       const scaleFactor = THREE.MathUtils.clamp(
-        THREE.MathUtils.mapLinear(star.displaySize, 1, 8, 0.8, 1.8),
+        THREE.MathUtils.mapLinear(star.displaySize, 1, 8, 2, 4),
         0.8,
         1.8
       );
