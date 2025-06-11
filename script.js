@@ -201,8 +201,8 @@ function createGlobeGrid(R = 100, options = {}) {
 
 function createMollweideBorder(R = 100) {
   const points = [];
-  for (let i = 0; i <= 64; i++) {
-    const theta = (i / 64) * 2 * Math.PI;
+  for (let i = 0; i <= 128; i++) {
+    const theta = (i / 128) * 2 * Math.PI;
     const x = 2 * R * Math.cos(theta);
     const y = R * Math.sin(theta);
     points.push(new THREE.Vector3(x, y, 0));
@@ -598,7 +598,7 @@ class MapManager {
         if (child.material) child.material.dispose();
       }
       if (count === 0) return;
-      const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
+      const baseGeometry = new THREE.SphereGeometry(1, 32, 32);
       const vertexCount = baseGeometry.attributes.position.count;
       const dummyColors = new Float32Array(vertexCount * 3);
       for (let i = 0; i < vertexCount; i++) {
@@ -834,7 +834,7 @@ function updateSelectedStarHighlight() {
   if (!selectedStarData) return;
   let posTrue = selectedStarData.truePosition ? selectedStarData.truePosition : new THREE.Vector3(selectedStarData.x_coordinate, selectedStarData.y_coordinate, selectedStarData.z_coordinate);
   let radius = (selectedStarData.displaySize || 2) * 0.2 * 1.2;
-  const highlightGeom = new THREE.SphereGeometry(radius, 16, 16);
+  const highlightGeom = new THREE.SphereGeometry(radius, 32, 32);
   const highlightMat = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
   selectedHighlightTrue = new THREE.Mesh(highlightGeom, highlightMat);
   selectedHighlightTrue.position.copy(posTrue);
@@ -842,7 +842,7 @@ function updateSelectedStarHighlight() {
 
   let posGlobe = selectedStarData.spherePosition ? selectedStarData.spherePosition : projectStarGlobe(selectedStarData);
   let radiusGlobe = (selectedStarData.displaySize || 2) * 0.2 * 1.2;
-  const highlightGeomGlobe = new THREE.SphereGeometry(radiusGlobe, 16, 16);
+  const highlightGeomGlobe = new THREE.SphereGeometry(radiusGlobe, 32, 32);
   const highlightMatGlobe = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
   selectedHighlightGlobe = new THREE.Mesh(highlightGeomGlobe, highlightMatGlobe);
   selectedHighlightGlobe.position.copy(posGlobe);
@@ -850,7 +850,7 @@ function updateSelectedStarHighlight() {
 
   let posMoll = selectedStarData.mollweidePosition ? selectedStarData.mollweidePosition : projectStarMollweide(selectedStarData);
   let radiusMoll = (selectedStarData.displaySize || 2) * 0.4 * 1.2;
-  const highlightGeomMoll = new THREE.SphereGeometry(radiusMoll, 16, 16);
+  const highlightGeomMoll = new THREE.SphereGeometry(radiusMoll, 32, 32);
   const highlightMatMoll = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
   selectedHighlightMollweide = new THREE.Mesh(highlightGeomMoll, highlightMatMoll);
   selectedHighlightMollweide.position.copy(posMoll);
