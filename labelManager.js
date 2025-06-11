@@ -208,6 +208,16 @@ export class LabelManager {
       let scaleFactor = baseFactor;
       if (this.mapType === 'Mollweide') {
         const newMin = 4;
+
+      if (this.mapType === 'Mollweide') {
+        const angle = Math.random() * Math.PI * 2;
+        return new THREE.Vector3(
+          Math.cos(angle) * dist,
+          Math.sin(angle) * dist,
+          0
+        );
+      }
+
         const newMax = 8;
         scaleFactor = newMin + ((baseFactor - 1) * (newMax - newMin)) / 4;
       }
