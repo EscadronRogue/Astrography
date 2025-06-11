@@ -79,7 +79,7 @@ export class LabelManager {
       const baseFontSize = (this.mapType === 'Globe'
         ? 64
         : (this.mapType === 'Mollweide' ? 72 : 24));
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 2, 6);
+      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 2, 8);
       const fontSize = baseFontSize * scaleFactor;
 
       const canvas = document.createElement('canvas');
@@ -96,7 +96,7 @@ export class LabelManager {
 
       // Draw background rectangle (semi-transparent) and text
       ctx.font = `${fontSize}px Arial`;
-      ctx.fillStyle = hexToRGBA(starColor, 0.2);
+      ctx.fillStyle = hexToRGBA(starColor, 0.05);
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#ffffff';
       ctx.textBaseline = 'middle';
