@@ -730,7 +730,10 @@ class MapManager {
         if (child.geometry) child.geometry.dispose();
         if (child.material) child.material.dispose();
       }
-      if (count === 0) return;
+      if (count === 0) {
+        this.instancedMesh = null;
+        return;
+      }
       const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
       const vertexCount = baseGeometry.attributes.position.count;
       const dummyColors = new Float32Array(vertexCount * 3);
