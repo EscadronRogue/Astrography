@@ -1019,6 +1019,7 @@ function registerMollweideEditableLabels() {
     sprite.userData = sprite.userData || {};
     sprite.userData.editType = 'star';
     sprite.userData.editId = id;
+    sprite.userData.lineObj = mollweideMap.labelManager.lines.get(star);
     sprite.userData.starRef = star;
     sprite.userData.anchorFunc = () => star.mollweidePosition.clone();
     editableLabels.push(sprite);
@@ -1070,8 +1071,14 @@ function onEditPointerDown(e) {
     dragOffset.copy(pos).sub(selectedLabel.position);
     selectedLabel.userData._origScale = selectedLabel.scale.clone();
     selectedLabel.userData._origColor = selectedLabel.material.color.clone();
+    if (selectedLabel.userData.lineObj) {
+      selectedLabel.userData._origLineColor = selectedLabel.userData.lineObj.material.color.clone();
+    }
     selectedLabel.scale.multiplyScalar(1.2);
     selectedLabel.material.color.set('#ff6f61');
+    if (selectedLabel.userData.lineObj) {
+      selectedLabel.userData.lineObj.material.color.set('#ff6f61');
+    }
     mollweideMap.canvas.classList.add('dragging');
     requestRender();
     e.preventDefault();
@@ -1082,6 +1089,10 @@ function onEditPointerMove(e) {
   if (!labelEditMode || !selectedLabel) return;
   const pos = getPointerPos(e);
   selectedLabel.position.copy(pos.clone().sub(dragOffset));
+  if (selectedLabel.userData.editType === 'star' && selectedLabel.userData.lineObj) {
+    const anchor = selectedLabel.userData.anchorFunc();
+    selectedLabel.userData.lineObj.geometry.setFromPoints([anchor, selectedLabel.position]);
+  }
   requestRender();
   e.preventDefault();
 }
@@ -1095,6 +1106,9 @@ function onEditPointerUp() {
     if (selectedLabel.userData.starRef) {
       selectedLabel.userData.starRef.mollLabelOffset = offsetVec.clone();
     }
+    if (selectedLabel.userData.lineObj) {
+      selectedLabel.userData.lineObj.geometry.setFromPoints([anchor, selectedLabel.position]);
+    }
   } else if (selectedLabel.userData.editType === 'constellation') {
     constellationLabelOffsets.set(selectedLabel.userData.editId, { x: offsetVec.x, y: offsetVec.y });
     selectedLabel.userData.offset = offsetVec.clone();
@@ -1107,6 +1121,9 @@ function onEditPointerUp() {
   }
   if (selectedLabel.userData._origColor) {
     selectedLabel.material.color.copy(selectedLabel.userData._origColor);
+  }
+  if (selectedLabel.userData.lineObj && selectedLabel.userData._origLineColor) {
+    selectedLabel.userData.lineObj.material.color.copy(selectedLabel.userData._origLineColor);
   }
   mollweideMap.canvas.classList.remove('dragging');
   requestRender();
