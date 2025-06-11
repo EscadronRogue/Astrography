@@ -314,15 +314,22 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   border-radius: 50%;
   position: absolute;
   pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 10px;
 }
 #label-edit-overlay .rotate-handle {
-  top: -20px;
-  left: 0;
+  left: -30px;
+  top: 0;
+  transform: translate(-100%, -50%);
   cursor: grab;
 }
 #label-edit-overlay .scale-handle {
-  right: -20px;
-  bottom: -20px;
+  right: -30px;
+  top: 0;
+  transform: translate(0, -50%);
   cursor: nwse-resize;
 }
 

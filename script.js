@@ -1397,8 +1397,10 @@ function setupEditOverlay() {
   editOverlay.id = 'label-edit-overlay';
   rotateHandle = document.createElement('div');
   rotateHandle.className = 'handle rotate-handle';
+  rotateHandle.textContent = '⟳';
   scaleHandle = document.createElement('div');
   scaleHandle.className = 'handle scale-handle';
+  scaleHandle.textContent = '⤡';
   editOverlay.appendChild(rotateHandle);
   editOverlay.appendChild(scaleHandle);
   container.appendChild(editOverlay);
@@ -1433,7 +1435,8 @@ function onRotateMove(e) {
   if (!isRotating || !selectedLabel) return;
   const rect = editOverlay.getBoundingClientRect();
   const angle = Math.atan2(e.clientY - rect.top, e.clientX - rect.left);
-  const newRot = angle - rotateStartAngle + rotateInitialRotation;
+  const delta = angle - rotateStartAngle;
+  const newRot = rotateInitialRotation + delta * 0.5;
   selectedLabel.material.rotation = newRot;
   if (selectedLabel.userData.starRef) selectedLabel.userData.starRef.mollLabelRotation = newRot;
   starLabelRotations.set(selectedLabel.userData.editId, newRot);
@@ -1455,7 +1458,8 @@ function onScaleMove(e) {
   const dx = e.clientX - rect.left;
   const dy = e.clientY - rect.top;
   const dist = Math.hypot(dx, dy);
-  const factor = dist / scaleStart.dist;
+  const ratio = dist / scaleStart.dist;
+  const factor = 1 + (ratio - 1) * 0.5;
   const newX = scaleStart.sx * factor;
   const newY = scaleStart.sy * factor;
   selectedLabel.scale.set(newX, newY, 1);
