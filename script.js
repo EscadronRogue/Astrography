@@ -1080,7 +1080,40 @@ function onLinePointerDown(e) {
   editRaycaster.setFromCamera(editPointer, mollweideMap.camera);
   const intersects = editRaycaster.intersectObjects(editableLines, false);
   if (intersects.length > 0) {
-    const obj = intersects[0].object;
+    const intersect = intersects[0];
+    const obj = intersect.object;
+    const idx = intersect.index;
+    const posAttr = obj.geometry && obj.geometry.getAttribute('position');
+    if (posAttr && idx !== undefined) {
+      const start = obj.type === 'LineSegments' ? idx - (idx % 2) : idx;
+      const base = start * 3;
+      if (base + 5 < posAttr.array.length) {
+        const prevPos = [
+          posAttr.array[base], posAttr.array[base + 1], posAttr.array[base + 2],
+          posAttr.array[base + 3], posAttr.array[base + 4], posAttr.array[base + 5]
+        ];
+        for (let i = 0; i < 6; i++) posAttr.array[base + i] = NaN;
+        posAttr.needsUpdate = true;
+        let prevAlpha = null;
+        const alphaAttr = obj.geometry.getAttribute('alpha');
+        if (alphaAttr) {
+          prevAlpha = [alphaAttr.array[start], alphaAttr.array[start + 1]];
+          alphaAttr.array[start] = 0;
+          alphaAttr.array[start + 1] = 0;
+          alphaAttr.needsUpdate = true;
+        }
+        editHistory.push({
+          type: 'removeSegment',
+          object: obj,
+          index: start,
+          prevPos,
+          prevAlpha
+        });
+        requestRender();
+        e.preventDefault();
+        return;
+      }
+    }
     editHistory.push({ type: 'toggleVisible', object: obj, prevVisible: obj.visible });
     obj.visible = false;
     requestRender();
@@ -1211,6 +1244,21 @@ function setupUndoButton() {
     if (!action) return;
     if (action.type === 'toggleVisible') {
       action.object.visible = action.prevVisible;
+    } else if (action.type === 'removeSegment') {
+      const posAttr = action.object.geometry.getAttribute('position');
+      const base = action.index * 3;
+      action.prevPos.forEach((v, i) => {
+        posAttr.array[base + i] = v;
+      });
+      posAttr.needsUpdate = true;
+      if (action.prevAlpha) {
+        const alphaAttr = action.object.geometry.getAttribute('alpha');
+        if (alphaAttr) {
+          alphaAttr.array[action.index] = action.prevAlpha[0];
+          alphaAttr.array[action.index + 1] = action.prevAlpha[1];
+          alphaAttr.needsUpdate = true;
+        }
+      }
     } else if (action.type === 'moveLabel') {
       const label = action.label;
       const anchor = label.userData.anchorFunc();
