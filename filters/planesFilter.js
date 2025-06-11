@@ -349,6 +349,7 @@ export function createGalacticDirectionLabelsMollweide(R = 100) {
     const p = radToMollweide(eq.ra, eq.dec, R, lambda0);
     const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
     sprite.position.set(p.x, p.y, 0);
+    sprite.userData = { name: d.label, ra: eq.ra, dec: eq.dec };
     labels.push(sprite);
   });
   return labels;
@@ -356,10 +357,9 @@ export function createGalacticDirectionLabelsMollweide(R = 100) {
 
 export function updateGalacticDirectionLabelsMollweide(labels, R = 100) {
   const lambda0 = getMollweideLambda0();
-  const data = galacticDirectionData();
-  labels.forEach((sprite, i) => {
-    const eq = galacticToEquatorial(data[i].l, 0);
-    const p = radToMollweide(eq.ra, eq.dec, R, lambda0);
+  labels.forEach(sprite => {
+    if (!sprite.userData) return;
+    const p = radToMollweide(sprite.userData.ra, sprite.userData.dec, R, lambda0);
     sprite.position.set(p.x, p.y, 0);
   });
 }
