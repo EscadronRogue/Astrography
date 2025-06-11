@@ -105,6 +105,7 @@ let isRotating = false;
 let isScaling = false;
 let rotateStartAngle = 0;
 let rotateInitialRotation = 0;
+let rotateCurrentRotation = 0;
 let scaleStart = null;
 
 const ROTATE_SENSITIVITY = 0.3;
@@ -1438,6 +1439,7 @@ function setupEditOverlay() {
     const cy = rect.top + rect.height / 2;
     rotateStartAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
     rotateInitialRotation = selectedLabel.material.rotation || 0;
+    rotateCurrentRotation = rotateInitialRotation;
     document.addEventListener('pointermove', onRotateMove);
     document.addEventListener('pointerup', onRotateUp);
     e.stopPropagation();
@@ -1467,10 +1469,13 @@ function onRotateMove(e) {
   const cy = rect.top + rect.height / 2;
   const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
   const delta = angleDiff(angle, rotateStartAngle);
-  const newRot = rotateInitialRotation - delta * ROTATE_SENSITIVITY;
-  selectedLabel.material.rotation = newRot;
-  if (selectedLabel.userData.starRef) selectedLabel.userData.starRef.mollLabelRotation = newRot;
-  starLabelRotations.set(selectedLabel.userData.editId, newRot);
+  rotateCurrentRotation -= delta * ROTATE_SENSITIVITY;
+  selectedLabel.material.rotation = rotateCurrentRotation;
+  rotateStartAngle = angle;
+  if (selectedLabel.userData.starRef) {
+    selectedLabel.userData.starRef.mollLabelRotation = rotateCurrentRotation;
+  }
+  starLabelRotations.set(selectedLabel.userData.editId, rotateCurrentRotation);
   updateEditOverlay();
   requestRender();
 }
