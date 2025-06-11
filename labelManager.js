@@ -79,8 +79,8 @@ export class LabelManager {
       const baseFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
       let scaleFactor = baseFactor;
       if (this.mapType === 'Mollweide') {
-        const newMin = 4;
-        const newMax = 7.5;
+        const newMin = 1;
+        const newMax = 4;
         scaleFactor = newMin + ((baseFactor - 1) * (newMax - newMin)) / 4;
       }
       const fontSize = baseFontSize * scaleFactor;
