@@ -1426,7 +1426,9 @@ function setupEditOverlay() {
     if (!selectedLabel) return;
     isRotating = true;
     const rect = editOverlay.getBoundingClientRect();
-    rotateStartAngle = Math.atan2(e.clientY - rect.top, e.clientX - rect.left);
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    rotateStartAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
     rotateInitialRotation = selectedLabel.material.rotation || 0;
     document.addEventListener('pointermove', onRotateMove);
     document.addEventListener('pointerup', onRotateUp);
@@ -1438,8 +1440,10 @@ function setupEditOverlay() {
     if (!selectedLabel) return;
     isScaling = true;
     const rect = editOverlay.getBoundingClientRect();
-    const dx = e.clientX - rect.left;
-    const dy = e.clientY - rect.top;
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
     scaleStart = { dist: Math.hypot(dx, dy), sx: selectedLabel.scale.x, sy: selectedLabel.scale.y };
     document.addEventListener('pointermove', onScaleMove);
     document.addEventListener('pointerup', onScaleUp);
@@ -1451,9 +1455,11 @@ function setupEditOverlay() {
 function onRotateMove(e) {
   if (!isRotating || !selectedLabel) return;
   const rect = editOverlay.getBoundingClientRect();
-  const angle = Math.atan2(e.clientY - rect.top, e.clientX - rect.left);
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
   const delta = angle - rotateStartAngle;
-  const newRot = rotateInitialRotation + delta * 0.5;
+  const newRot = rotateInitialRotation - delta * 0.5;
   selectedLabel.material.rotation = newRot;
   if (selectedLabel.userData.starRef) selectedLabel.userData.starRef.mollLabelRotation = newRot;
   starLabelRotations.set(selectedLabel.userData.editId, newRot);
@@ -1472,8 +1478,10 @@ function onRotateUp() {
 function onScaleMove(e) {
   if (!isScaling || !selectedLabel) return;
   const rect = editOverlay.getBoundingClientRect();
-  const dx = e.clientX - rect.left;
-  const dy = e.clientY - rect.top;
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = e.clientX - cx;
+  const dy = e.clientY - cy;
   const dist = Math.hypot(dx, dy);
   const ratio = dist / scaleStart.dist;
   const factor = 1 + (ratio - 1) * 0.5;
@@ -1491,6 +1499,9 @@ function onScaleUp() {
   document.removeEventListener('pointermove', onScaleMove);
   document.removeEventListener('pointerup', onScaleUp);
   editHistory.push({ type: 'scaleLabel', label: selectedLabel, prevScale: new THREE.Vector3(scaleStart.sx, scaleStart.sy, 1) });
+  if (selectedLabel) {
+    selectedLabel.userData._origScale = selectedLabel.scale.clone();
+  }
   isScaling = false;
 }
 
