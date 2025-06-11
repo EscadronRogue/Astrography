@@ -79,10 +79,15 @@ export class LabelManager {
       const baseFontSize = (this.mapType === 'Globe'
         ? 64
         : (this.mapType === 'Mollweide' ? 72 : 24));
-      // Scale label size directly with the star's display size so that
-      // larger stars get proportionally larger labels. The clamp keeps
-      // the text from becoming unreadably small or excessively large.
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize, 1, 2);
+      // Scale label size with the star's display size but cap the extremes
+      // so small star labels remain readable and huge stars aren't
+      // overwhelmingly large. Map the typical size range (1–8) to a more
+      // moderate label scale.
+      const scaleFactor = THREE.MathUtils.clamp(
+        THREE.MathUtils.mapLinear(star.displaySize, 1, 8, 0.8, 1.8),
+        0.8,
+        1.8
+      );
       const fontSize = baseFontSize * scaleFactor;
 
       const canvas = document.createElement('canvas');
