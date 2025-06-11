@@ -1068,6 +1068,12 @@ function onEditPointerDown(e) {
   if (intersects.length > 0) {
     selectedLabel = intersects[0].object;
     dragOffset.copy(pos).sub(selectedLabel.position);
+    selectedLabel.userData._origScale = selectedLabel.scale.clone();
+    selectedLabel.userData._origColor = selectedLabel.material.color.clone();
+    selectedLabel.scale.multiplyScalar(1.2);
+    selectedLabel.material.color.set('#ff6f61');
+    mollweideMap.canvas.classList.add('dragging');
+    requestRender();
     e.preventDefault();
   }
 }
@@ -1076,6 +1082,7 @@ function onEditPointerMove(e) {
   if (!labelEditMode || !selectedLabel) return;
   const pos = getPointerPos(e);
   selectedLabel.position.copy(pos.clone().sub(dragOffset));
+  requestRender();
   e.preventDefault();
 }
 
@@ -1095,6 +1102,14 @@ function onEditPointerUp() {
     galacticLabelOffsets.set(selectedLabel.userData.editId, { x: offsetVec.x, y: offsetVec.y });
     selectedLabel.userData.offset = offsetVec.clone();
   }
+  if (selectedLabel.userData._origScale) {
+    selectedLabel.scale.copy(selectedLabel.userData._origScale);
+  }
+  if (selectedLabel.userData._origColor) {
+    selectedLabel.material.color.copy(selectedLabel.userData._origColor);
+  }
+  mollweideMap.canvas.classList.remove('dragging');
+  requestRender();
   selectedLabel = null;
 }
 
@@ -1104,9 +1119,11 @@ function setupLabelEditor() {
   btn.addEventListener('click', () => {
     labelEditMode = !labelEditMode;
     btn.classList.toggle('active', labelEditMode);
+    mollweideMap.canvas.classList.toggle('edit-mode', labelEditMode);
     if (labelEditMode) {
       registerMollweideEditableLabels();
     }
+    requestRender();
   });
   mollweideMap.canvas.addEventListener('pointerdown', onEditPointerDown);
   mollweideMap.canvas.addEventListener('pointermove', onEditPointerMove);

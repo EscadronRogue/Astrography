@@ -290,6 +290,12 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   border-radius: 4px;
   touch-action: none;
 }
+.map-container canvas.edit-mode {
+  cursor: move;
+}
+.map-container canvas.edit-mode.dragging {
+  cursor: grabbing;
+}
 
 /* Fullscreen Button for Maps */
 .fullscreen-btn {
