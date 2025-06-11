@@ -924,7 +924,7 @@ function exportMollweideMap(format, resolution) {
   const width = resolution;
   const height = Math.floor(resolution / 2);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
-  exportRenderer.setPixelRatio( Math.min(window.devicePixelRatio, 2) );
+  exportRenderer.setPixelRatio( Math.min(window.devicePixelRatio, 10) );
   const finalCanvas = document.createElement('canvas');
   finalCanvas.width = width;
   finalCanvas.height = height;
