@@ -179,6 +179,15 @@ export class LabelManager {
     const labelPos = starPos.clone().add(offset);
     labelObj.position.copy(labelPos);
 
+    if (this.mapType === 'Mollweide') {
+      if (star.mollLabelRotation !== undefined) {
+        labelObj.material.rotation = star.mollLabelRotation;
+      }
+      if (star.mollLabelScale) {
+        labelObj.scale.copy(star.mollLabelScale);
+      }
+    }
+
     // Globe labels: orient plane tangent to sphere
     if (this.mapType === 'Globe' && (labelObj instanceof THREE.Mesh)) {
       const normal = starPos.clone().normalize();

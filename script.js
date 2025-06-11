@@ -83,6 +83,8 @@ let showCelestialEquatorFlag = false;
 // --- Label Editing ---
 let labelEditMode = false;
 const starLabelOffsets = new Map();
+const starLabelRotations = new Map();
+const starLabelScales = new Map();
 const constellationLabelOffsets = new Map();
 const galacticLabelOffsets = new Map();
 let editableLabels = [];
@@ -95,6 +97,24 @@ let lineEditMode = false;
 let editableLines = [];
 const editHistory = [];
 let initialLabelPos = null;
+let editOverlay = null;
+let rotateHandle = null;
+let scaleHandle = null;
+let isDragging = false;
+let isRotating = false;
+let isScaling = false;
+let rotateStartAngle = 0;
+let rotateInitialRotation = 0;
+let rotateCurrentRotation = 0;
+let scaleStart = null;
+
+const ROTATE_SENSITIVITY = 0.3;
+
+function angleDiff(a, b) {
+  let diff = a - b;
+  diff = ((diff + Math.PI) % (Math.PI * 2)) - Math.PI;
+  return diff;
+}
 
 function getStarId(star) {
   return (
@@ -747,6 +767,7 @@ function requestRender() {
     requestAnimationFrame(() => {
       renderRequested = false;
       mapManagers.forEach(m => m.render());
+      updateEditOverlay();
     });
   }
 }
@@ -1007,6 +1028,38 @@ function getPointerPos(event) {
   return point;
 }
 
+function updateEditOverlay() {
+  if (!editOverlay) return;
+  if (!selectedLabel) {
+    editOverlay.style.display = 'none';
+    return;
+  }
+  const rect = mollweideMap.canvas.getBoundingClientRect();
+  const pos = selectedLabel.position.clone().project(mollweideMap.camera);
+  const x = (pos.x * 0.5 + 0.5) * rect.width + rect.left;
+  const y = (-pos.y * 0.5 + 0.5) * rect.height + rect.top;
+  editOverlay.style.display = 'block';
+  editOverlay.style.left = `${x}px`;
+  editOverlay.style.top = `${y}px`;
+
+  const center = selectedLabel.position.clone();
+  const halfW = selectedLabel.scale.x / 2;
+  const rightVec = new THREE.Vector3(1, 0, 0)
+    .applyQuaternion(mollweideMap.camera.quaternion)
+    .multiplyScalar(halfW);
+  const leftWorld = center.clone().sub(rightVec);
+  const rightWorld = center.clone().add(rightVec);
+  const lp = leftWorld.clone().project(mollweideMap.camera);
+  const rp = rightWorld.clone().project(mollweideMap.camera);
+  const lx = (lp.x * 0.5 + 0.5) * rect.width + rect.left;
+  const rx = (rp.x * 0.5 + 0.5) * rect.width + rect.left;
+  const labelWidth = Math.abs(rx - lx);
+  const iconSize = 36;
+  const offset = labelWidth / 2 + iconSize / 2 + 10;
+  rotateHandle.style.left = `-${offset}px`;
+  scaleHandle.style.left = `${offset}px`;
+}
+
 function registerMollweideEditableLabels() {
   editableLabels = [];
   mollweideMap.labelManager.sprites.forEach((sprite, star) => {
@@ -1023,6 +1076,16 @@ function registerMollweideEditableLabels() {
       star.mollLabelOffset = new THREE.Vector3(off.x, off.y, 0);
       sprite.position.copy(star.mollweidePosition.clone().add(star.mollLabelOffset));
     }
+    if (starLabelRotations.has(id)) {
+      const rot = starLabelRotations.get(id);
+      sprite.material.rotation = rot;
+      star.mollLabelRotation = rot;
+    }
+    if (starLabelScales.has(id)) {
+      const sc = starLabelScales.get(id);
+      sprite.scale.set(sc.x, sc.y, 1);
+      star.mollLabelScale = new THREE.Vector3(sc.x, sc.y, 1);
+    }
   });
   constellationLabelsMoll.forEach(sprite => {
     if (!sprite.userData) return;
@@ -1038,6 +1101,14 @@ function registerMollweideEditableLabels() {
       sprite.position.add(new THREE.Vector3(off.x, off.y, 0));
       sprite.userData.offset = new THREE.Vector3(off.x, off.y, 0);
     }
+    if (starLabelRotations.has(sprite.userData.name)) {
+      const rot = starLabelRotations.get(sprite.userData.name);
+      sprite.material.rotation = rot;
+    }
+    if (starLabelScales.has(sprite.userData.name)) {
+      const sc = starLabelScales.get(sprite.userData.name);
+      sprite.scale.set(sc.x, sc.y, 1);
+    }
   });
   galacticDirectionLabelsMoll.forEach(sprite => {
     if (!sprite.userData) return;
@@ -1052,6 +1123,14 @@ function registerMollweideEditableLabels() {
       const off = galacticLabelOffsets.get(sprite.userData.name);
       sprite.position.add(new THREE.Vector3(off.x, off.y, 0));
       sprite.userData.offset = new THREE.Vector3(off.x, off.y, 0);
+    }
+    if (starLabelRotations.has(sprite.userData.name)) {
+      const rot = starLabelRotations.get(sprite.userData.name);
+      sprite.material.rotation = rot;
+    }
+    if (starLabelScales.has(sprite.userData.name)) {
+      const sc = starLabelScales.get(sprite.userData.name);
+      sprite.scale.set(sc.x, sc.y, 1);
     }
   });
 }
@@ -1153,7 +1232,11 @@ function onEditPointerDown(e) {
   editRaycaster.setFromCamera(editPointer, mollweideMap.camera);
   const intersects = editRaycaster.intersectObjects(editableLabels, false);
   if (intersects.length > 0) {
-    selectedLabel = intersects[0].object;
+    const label = intersects[0].object;
+    if (selectedLabel !== label) {
+      selectedLabel = label;
+      updateEditOverlay();
+    }
     initialLabelPos = selectedLabel.position.clone();
     dragOffset.copy(pos).sub(selectedLabel.position);
     selectedLabel.userData._origScale = selectedLabel.scale.clone();
@@ -1167,19 +1250,27 @@ function onEditPointerDown(e) {
       selectedLabel.userData.lineObj.material.color.set('#ff6f61');
     }
     mollweideMap.canvas.classList.add('dragging');
+    isDragging = true;
     requestRender();
     e.preventDefault();
+  } else {
+    if (selectedLabel) {
+      selectedLabel = null;
+      updateEditOverlay();
+      requestRender();
+    }
   }
 }
 
 function onEditPointerMove(e) {
-  if (!labelEditMode || !selectedLabel) return;
+  if (!labelEditMode || !selectedLabel || !isDragging) return;
   const pos = getPointerPos(e);
   selectedLabel.position.copy(pos.clone().sub(dragOffset));
   if (selectedLabel.userData.editType === 'star' && selectedLabel.userData.lineObj) {
     const anchor = selectedLabel.userData.anchorFunc();
     selectedLabel.userData.lineObj.geometry.setFromPoints([anchor, selectedLabel.position]);
   }
+  updateEditOverlay();
   requestRender();
   e.preventDefault();
 }
@@ -1217,8 +1308,9 @@ function onEditPointerUp() {
     const prevOffset = initialLabelPos.clone().sub(anchor);
     editHistory.push({ type: 'moveLabel', label: selectedLabel, prevOffset });
   }
+  isDragging = false;
+  updateEditOverlay();
   requestRender();
-  selectedLabel = null;
   initialLabelPos = null;
 }
 
@@ -1236,6 +1328,9 @@ function setupLabelEditor() {
     mollweideMap.canvas.classList.toggle('edit-mode', labelEditMode || lineEditMode);
     if (labelEditMode) {
       registerMollweideEditableLabels();
+    } else {
+      selectedLabel = null;
+      updateEditOverlay();
     }
     requestRender();
   });
@@ -1255,6 +1350,8 @@ function setupLineEditor() {
       const lbtn = document.getElementById('toggle-label-editor');
       if (lbtn) lbtn.classList.remove('active');
       registerMollweideEditableLines();
+      selectedLabel = null;
+      updateEditOverlay();
     }
     mollweideMap.canvas.classList.toggle('edit-mode', lineEditMode || labelEditMode);
     requestRender();
@@ -1301,9 +1398,124 @@ function setupUndoButton() {
         galacticLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
         label.userData.offset = action.prevOffset.clone();
       }
+      updateEditOverlay();
+    } else if (action.type === 'rotateLabel') {
+      const label = action.label;
+      label.material.rotation = action.prevRotation;
+      if (label.userData.starRef) label.userData.starRef.mollLabelRotation = action.prevRotation;
+      starLabelRotations.set(label.userData.editId, action.prevRotation);
+      updateEditOverlay();
+    } else if (action.type === 'scaleLabel') {
+      const label = action.label;
+      label.scale.copy(action.prevScale);
+      if (label.userData.starRef) label.userData.starRef.mollLabelScale = action.prevScale.clone();
+      starLabelScales.set(label.userData.editId, { x: action.prevScale.x, y: action.prevScale.y });
+      updateEditOverlay();
     }
     requestRender();
   });
+}
+
+function setupEditOverlay() {
+  const container = document.querySelector('.label-container');
+  if (!container) return;
+  editOverlay = document.createElement('div');
+  editOverlay.id = 'label-edit-overlay';
+  rotateHandle = document.createElement('div');
+  rotateHandle.className = 'handle rotate-handle';
+  rotateHandle.textContent = '⟳';
+  scaleHandle = document.createElement('div');
+  scaleHandle.className = 'handle scale-handle';
+  scaleHandle.textContent = '⤡';
+  editOverlay.appendChild(rotateHandle);
+  editOverlay.appendChild(scaleHandle);
+  container.appendChild(editOverlay);
+
+  rotateHandle.addEventListener('pointerdown', e => {
+    if (!selectedLabel) return;
+    isRotating = true;
+    const rect = editOverlay.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    rotateStartAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
+    rotateInitialRotation = selectedLabel.material.rotation || 0;
+    rotateCurrentRotation = rotateInitialRotation;
+    document.addEventListener('pointermove', onRotateMove);
+    document.addEventListener('pointerup', onRotateUp);
+    e.stopPropagation();
+    e.preventDefault();
+  });
+
+  scaleHandle.addEventListener('pointerdown', e => {
+    if (!selectedLabel) return;
+    isScaling = true;
+    const rect = editOverlay.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = e.clientX - cx;
+    const dy = e.clientY - cy;
+    scaleStart = { dist: Math.hypot(dx, dy), sx: selectedLabel.scale.x, sy: selectedLabel.scale.y };
+    document.addEventListener('pointermove', onScaleMove);
+    document.addEventListener('pointerup', onScaleUp);
+    e.stopPropagation();
+    e.preventDefault();
+  });
+}
+
+function onRotateMove(e) {
+  if (!isRotating || !selectedLabel) return;
+  const rect = editOverlay.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
+  const delta = angleDiff(angle, rotateStartAngle);
+  rotateCurrentRotation -= delta * ROTATE_SENSITIVITY;
+  selectedLabel.material.rotation = rotateCurrentRotation;
+  rotateStartAngle = angle;
+  if (selectedLabel.userData.starRef) {
+    selectedLabel.userData.starRef.mollLabelRotation = rotateCurrentRotation;
+  }
+  starLabelRotations.set(selectedLabel.userData.editId, rotateCurrentRotation);
+  updateEditOverlay();
+  requestRender();
+}
+
+function onRotateUp() {
+  if (!isRotating) return;
+  document.removeEventListener('pointermove', onRotateMove);
+  document.removeEventListener('pointerup', onRotateUp);
+  editHistory.push({ type: 'rotateLabel', label: selectedLabel, prevRotation: rotateInitialRotation });
+  isRotating = false;
+}
+
+function onScaleMove(e) {
+  if (!isScaling || !selectedLabel) return;
+  const rect = editOverlay.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = e.clientX - cx;
+  const dy = e.clientY - cy;
+  const dist = Math.hypot(dx, dy);
+  const ratio = dist / scaleStart.dist;
+  const factor = 1 + (ratio - 1) * 0.5;
+  const newX = scaleStart.sx * factor;
+  const newY = scaleStart.sy * factor;
+  selectedLabel.scale.set(newX, newY, 1);
+  if (selectedLabel.userData.starRef) selectedLabel.userData.starRef.mollLabelScale = new THREE.Vector3(newX, newY, 1);
+  starLabelScales.set(selectedLabel.userData.editId, { x: newX, y: newY });
+  updateEditOverlay();
+  requestRender();
+}
+
+function onScaleUp() {
+  if (!isScaling) return;
+  document.removeEventListener('pointermove', onScaleMove);
+  document.removeEventListener('pointerup', onScaleUp);
+  editHistory.push({ type: 'scaleLabel', label: selectedLabel, prevScale: new THREE.Vector3(scaleStart.sx, scaleStart.sy, 1) });
+  if (selectedLabel) {
+    selectedLabel.userData._origScale = selectedLabel.scale.clone();
+  }
+  isScaling = false;
 }
 
 async function main() {
@@ -1342,6 +1554,7 @@ async function main() {
     setupLabelEditor();
     setupLineEditor();
     setupUndoButton();
+    setupEditOverlay();
     requestRender();
     loader.classList.add('hidden');
   } catch (err) {
