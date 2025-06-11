@@ -205,7 +205,7 @@ export class LabelManager {
       // there.
       let scaleFactor = star.displaySize / 2;
       if (this.mapType === 'Mollweide') {
-        scaleFactor = THREE.MathUtils.clamp(scaleFactor, 4, 7.5);
+        scaleFactor = THREE.MathUtils.clamp(scaleFactor, 2, 8);
       } else {
         scaleFactor = THREE.MathUtils.clamp(scaleFactor, 1, 5);
       }
