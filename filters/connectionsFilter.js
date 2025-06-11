@@ -191,7 +191,7 @@ export function updateMollweideConnectionSegments(lineSegs) {
  * @param {string} mapType - 'Globe' or other.
  * @returns {Array} - Array of THREE.Line objects.
  */
-export function createConnectionLines(stars, pairs, mapType) {
+export function createConnectionLines(stars, pairs, mapType, handleWrap = true) {
   if (!pairs || pairs.length === 0) return [];
   
   const largestPairDistance = pairs.reduce((max, p) => Math.max(max, p.distance), 0);
@@ -208,22 +208,34 @@ export function createConnectionLines(stars, pairs, mapType) {
       posB = new THREE.Vector3(starB.spherePosition.x, starB.spherePosition.y, starB.spherePosition.z);
     } else if (mapType === 'Mollweide') {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
-      const segments = splitMollweideWrap(
-        starA.mollweidePosition,
-        starB.mollweidePosition
+      const pts = greatCircleToMollweide(
+        starA.spherePosition,
+        starB.spherePosition,
+        100,
+        GC_SEGMENTS,
+        getMollweideLambda0()
       );
+      const segments = [];
+      for (let j = 0; j < pts.length - 1; j++) {
+        const segs = handleWrap ? splitMollweideWrap(pts[j], pts[j + 1]) : [[pts[j], pts[j + 1]]];
+        segs.forEach(s => segments.push(s));
+      }
+      const positions = [];
       segments.forEach(([s1, s2]) => {
-        const points = [s1, s2];
-        const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
-        const materialLine = new THREE.LineBasicMaterial({
-          color: c1.clone().lerp(c2, 0.5),
-          transparent: true,
-          opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)),
-          linewidth: THREE.MathUtils.lerp(5, 1, distance / (largestPairDistance || distance))
-        });
-        const line = new THREE.Line(geometryLine, materialLine);
-        lines.push(line);
+        positions.push(s1.x, s1.y, s1.z, s2.x, s2.y, s2.z);
       });
+      const geometryLine = new THREE.BufferGeometry();
+      geometryLine.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const materialLine = new THREE.LineBasicMaterial({
+        color: c1.clone().lerp(c2, 0.5),
+        transparent: true,
+        opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)),
+        linewidth: THREE.MathUtils.lerp(5, 1, distance / (largestPairDistance || distance))
+      });
+      const line = new THREE.LineSegments(geometryLine, materialLine);
+      line.computeLineDistances();
+      line.userData = { type: 'connection', starA, starB, distance, mapType, largestPairDistance, handleWrap };
+      lines.push(line);
       return;
     } else {
       // Use the computed truePosition if available
@@ -260,6 +272,52 @@ export function createConnectionLines(stars, pairs, mapType) {
     lines.push(line);
   });
   return lines;
+}
+
+export function updateConnectionLine(line) {
+  const {
+    starA,
+    starB,
+    distance,
+    mapType,
+    largestPairDistance,
+    handleWrap
+  } = line.userData || {};
+  if (!starA || !starB) return;
+  const c1 = new THREE.Color(starA.displayColor || '#ffffff');
+  const c2 = new THREE.Color(starB.displayColor || '#ffffff');
+  const positions = [];
+  if (mapType === 'Mollweide') {
+    const pts = greatCircleToMollweide(
+      starA.spherePosition,
+      starB.spherePosition,
+      100,
+      GC_SEGMENTS,
+      getMollweideLambda0()
+    );
+    for (let j = 0; j < pts.length - 1; j++) {
+      const segs = handleWrap ? splitMollweideWrap(pts[j], pts[j + 1]) : [[pts[j], pts[j + 1]]];
+      segs.forEach(([s1, s2]) => {
+        positions.push(s1.x, s1.y, s1.z, s2.x, s2.y, s2.z);
+      });
+    }
+  } else if (mapType === 'Globe') {
+    const curve = new THREE.CatmullRomCurve3(getGreatCirclePoints(starA.spherePosition, starB.spherePosition, 100, 32));
+    const pts = curve.getPoints(32);
+    for (let i = 0; i < pts.length - 1; i++) {
+      positions.push(pts[i].x, pts[i].y, pts[i].z, pts[i + 1].x, pts[i + 1].y, pts[i + 1].z);
+    }
+  } else {
+    positions.push(starA.truePosition.x, starA.truePosition.y, starA.truePosition.z);
+    positions.push(starB.truePosition.x, starB.truePosition.y, starB.truePosition.z);
+  }
+  line.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  line.computeLineDistances();
+  line.material.color.copy(c1.clone().lerp(c2, 0.5));
+  const normDist = distance / (largestPairDistance || distance);
+  line.material.opacity = THREE.MathUtils.lerp(1.0, 0.3, normDist);
+  line.material.linewidth = THREE.MathUtils.lerp(5, 1, normDist);
+  line.geometry.attributes.position.needsUpdate = true;
 }
 
 /**

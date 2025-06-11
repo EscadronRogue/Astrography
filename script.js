@@ -1,8 +1,8 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
-import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
+import { createConnectionLines, mergeConnectionLines, updateConnectionLine } from './filters/connectionsFilter.js';
+import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, createConstellationBoundaryLine, updateConstellationBoundaryLine, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
@@ -86,6 +86,7 @@ const starLabelOffsets = new Map();
 const constellationLabelOffsets = new Map();
 const galacticLabelOffsets = new Map();
 let editableLabels = [];
+let toggleableLines = [];
 let selectedLabel = null;
 const dragOffset = new THREE.Vector3();
 const editPointer = new THREE.Vector2();
@@ -355,6 +356,8 @@ async function buildAndApplyFilters() {
   mollweideMap.updateConnections(currentMollweideFilteredStars, currentMollweideConnections);
   mollweideMap.labelManager.refreshLabels(currentMollweideFilteredStars);
   registerMollweideEditableLabels();
+  registerMollweideToggleableLines();
+  registerMollweideToggleableLines();
 
   removeConstellationObjectsFromGlobe();
   removeConstellationOverlayObjectsFromGlobe();
@@ -371,6 +374,7 @@ async function buildAndApplyFilters() {
     constellationLabelsMoll = createConstellationLabelsForMollweide();
     constellationLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
     registerMollweideEditableLabels();
+    registerMollweideToggleableLines();
   }
   if (showConstellationOverlay) {
     const constellationOverlay = createConstellationOverlayForGlobe();
@@ -686,8 +690,8 @@ class MapManager {
       const linesArray = createConnectionLines(stars, connectionObjs, 'Globe');
       linesArray.forEach(line => this.connectionGroup.add(line));
     } else if (this.mapType === 'Mollweide') {
-      const merged = createMollweideConnectionSegments(connectionObjs);
-      this.connectionGroup.add(merged);
+      const linesArray = createConnectionLines(stars, connectionObjs, 'Mollweide');
+      linesArray.forEach(line => this.connectionGroup.add(line));
     } else {
       const merged = mergeConnectionLines(connectionObjs, this.mapType);
       this.connectionGroup.add(merged);
@@ -699,8 +703,9 @@ class MapManager {
   updateConnectionPositions(stars, connectionObjs) {
     if (!this.connectionGroup) return;
     if (this.mapType === 'Mollweide') {
-      const segs = this.connectionGroup.children[0];
-      if (segs) updateMollweideConnectionSegments(segs);
+      this.connectionGroup.children.forEach(line => {
+        updateConnectionLine(line);
+      });
     } else {
       this.updateConnections(stars, connectionObjs);
     }
@@ -898,7 +903,7 @@ async function updateMollweideView() {
       constellationLinesMoll = createConstellationBoundariesForMollweide();
       constellationLinesMoll.forEach(l => mollweideMap.scene.add(l));
     } else {
-      constellationLinesMoll.forEach(l => updateConstellationBoundariesForMollweide(l));
+      constellationLinesMoll.forEach(l => updateConstellationBoundaryLine(l));
     }
   }
   if (showConstellationNamesFlag) {
@@ -941,6 +946,7 @@ async function updateMollweideView() {
   if (showCelestialEquatorFlag && celestialEquatorMoll) {
     updateCelestialEquatorMollweide(celestialEquatorMoll);
   }
+  registerMollweideToggleableLines();
   if (window.requestRender) window.requestRender();
 }
 window.updateMollweideView = updateMollweideView;
@@ -996,9 +1002,7 @@ function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    const format = document.getElementById('export-format').value;
-    const res = parseInt(document.getElementById('export-resolution').value, 10);
-    exportMollweideMap(format, res);
+    exportMollweideMap('png', 7680);
   });
 }
 
@@ -1061,6 +1065,31 @@ function registerMollweideEditableLabels() {
   });
 }
 
+function registerMollweideToggleableLines() {
+  toggleableLines = [];
+  mollweideMap.scene.traverse(obj => {
+    if ((obj.type === 'Line' || obj.type === 'LineSegments') && obj.userData && obj.userData.type) {
+      toggleableLines.push(obj);
+    }
+  });
+}
+
+function toggleLineWrap(line) {
+  if (!line || !line.userData) return;
+  line.userData.handleWrap = !line.userData.handleWrap;
+  const origColor = line.material.color.clone();
+  line.material.color.set('#ff6f61');
+  setTimeout(() => {
+    line.material.color.copy(origColor);
+  }, 250);
+  if (line.userData.type === 'connection') {
+    updateConnectionLine(line);
+  } else if (line.userData.type === 'constellation') {
+    updateConstellationBoundaryLine(line);
+  }
+  requestRender();
+}
+
 function onEditPointerDown(e) {
   if (!labelEditMode) return;
   const pos = getPointerPos(e);
@@ -1082,6 +1111,12 @@ function onEditPointerDown(e) {
     mollweideMap.canvas.classList.add('dragging');
     requestRender();
     e.preventDefault();
+  } else {
+    const lineHits = editRaycaster.intersectObjects(toggleableLines, false);
+    if (lineHits.length > 0) {
+      toggleLineWrap(lineHits[0].object);
+      e.preventDefault();
+    }
   }
 }
 
@@ -1139,6 +1174,7 @@ function setupLabelEditor() {
     mollweideMap.canvas.classList.toggle('edit-mode', labelEditMode);
     if (labelEditMode) {
       registerMollweideEditableLabels();
+      registerMollweideToggleableLines();
     }
     requestRender();
   });

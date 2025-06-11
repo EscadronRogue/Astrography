@@ -111,7 +111,15 @@ export function createConstellationBoundariesForGlobe() {
 }
 
 export function createConstellationBoundariesForMollweide() {
-  const R = 100;
+  const lines = [];
+  boundaryData.forEach(seg => {
+    const line = createConstellationBoundaryLine(seg);
+    lines.push(line);
+  });
+  return lines;
+}
+
+export function createConstellationBoundaryLine(seg, handleWrap = true) {
   const material = new THREE.LineDashedMaterial({
     color: 0x888888,
     dashSize: 2,
@@ -120,47 +128,29 @@ export function createConstellationBoundariesForMollweide() {
     transparent: true,
     opacity: 0.4
   });
-  const maxSegments = boundaryData.length * 32; // 16 segments per boundary, each may wrap
-  const positions = new Float32Array(maxSegments * 2 * 3); // 2 vertices per segment
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const lineSegs = new THREE.LineSegments(geometry, material);
-  lineSegs.computeLineDistances();
-  lineSegs.userData.boundaryData = boundaryData;
-  lineSegs.userData.R = R;
-  updateConstellationBoundariesForMollweide(lineSegs);
-  return [lineSegs];
+  const line = new THREE.LineSegments(geometry, material);
+  line.userData = { seg, R: 100, handleWrap, type: 'constellation' };
+  updateConstellationBoundaryLine(line);
+  return line;
 }
 
-export function updateConstellationBoundariesForMollweide(lineSegs) {
-  const R = lineSegs.userData.R || 100;
+export function updateConstellationBoundaryLine(line) {
+  const { seg, R = 100, handleWrap } = line.userData;
   const lambda0 = getMollweideLambda0();
-  const data = lineSegs.userData.boundaryData || [];
-  const posAttr = lineSegs.geometry.getAttribute('position');
-  const array = posAttr.array;
-  let idx = 0;
-  data.forEach(seg => {
-    const pStart = radToSphere(seg.ra1, seg.dec1, R);
-    const pEnd   = radToSphere(seg.ra2, seg.dec2, R);
-    const arcPts  = greatCircleToMollweide(pStart, pEnd, R, 16, lambda0);
-    for (let j = 0; j < arcPts.length - 1; j++) {
-      const splits = splitMollweideWrap(arcPts[j], arcPts[j + 1]);
-      for (let s = 0; s < 2; s++) {
-        if (s < splits.length) {
-          const a = splits[s][0];
-          const b = splits[s][1];
-          array[idx++] = a.x; array[idx++] = a.y; array[idx++] = 0;
-          array[idx++] = b.x; array[idx++] = b.y; array[idx++] = 0;
-        } else {
-          array[idx++] = 0; array[idx++] = 0; array[idx++] = 0;
-          array[idx++] = 0; array[idx++] = 0; array[idx++] = 0;
-        }
-      }
-    }
-  });
-  for (; idx < array.length; idx++) array[idx] = 0;
-  posAttr.needsUpdate = true;
-  lineSegs.computeLineDistances();
+  const pStart = radToSphere(seg.ra1, seg.dec1, R);
+  const pEnd = radToSphere(seg.ra2, seg.dec2, R);
+  const arcPts = greatCircleToMollweide(pStart, pEnd, R, 16, lambda0);
+  const positions = [];
+  for (let j = 0; j < arcPts.length - 1; j++) {
+    const splits = handleWrap ? splitMollweideWrap(arcPts[j], arcPts[j + 1]) : [[arcPts[j], arcPts[j + 1]]];
+    splits.forEach(([a, b]) => {
+      positions.push(a.x, a.y, 0, b.x, b.y, 0);
+    });
+  }
+  line.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  line.computeLineDistances();
+  line.geometry.attributes.position.needsUpdate = true;
 }
 
 /**
