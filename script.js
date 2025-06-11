@@ -107,6 +107,14 @@ let rotateStartAngle = 0;
 let rotateInitialRotation = 0;
 let scaleStart = null;
 
+const ROTATE_SENSITIVITY = 0.3;
+
+function angleDiff(a, b) {
+  let diff = a - b;
+  diff = ((diff + Math.PI) % (Math.PI * 2)) - Math.PI;
+  return diff;
+}
+
 function getStarId(star) {
   return (
     star.Common_name_of_the_star ||
@@ -1458,8 +1466,8 @@ function onRotateMove(e) {
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
   const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
-  const delta = angle - rotateStartAngle;
-  const newRot = rotateInitialRotation - delta * 0.5;
+  const delta = angleDiff(angle, rotateStartAngle);
+  const newRot = rotateInitialRotation - delta * ROTATE_SENSITIVITY;
   selectedLabel.material.rotation = newRot;
   if (selectedLabel.userData.starRef) selectedLabel.userData.starRef.mollLabelRotation = newRot;
   starLabelRotations.set(selectedLabel.userData.editId, newRot);
