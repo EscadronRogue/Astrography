@@ -110,6 +110,92 @@ let scaleStart = null;
 
 const ROTATE_SENSITIVITY = 0.3;
 
+const PRESET_KEY = 'astrography-presets';
+
+function maybeSavePresets() {
+  const chk = document.getElementById('enable-save-presets');
+  if (chk && chk.checked) {
+    savePresets();
+  }
+}
+
+function savePresets() {
+  const form = document.getElementById('filters-form');
+  if (!form) return;
+  const data = {};
+  const fd = new FormData(form);
+  for (const [k, v] of fd.entries()) {
+    if (data[k]) {
+      if (!Array.isArray(data[k])) data[k] = [data[k]];
+      data[k].push(v);
+    } else {
+      data[k] = v;
+    }
+  }
+  const edits = {
+    starOffsets: Array.from(starLabelOffsets.entries()),
+    starRotations: Array.from(starLabelRotations.entries()),
+    starScales: Array.from(starLabelScales.entries()),
+    constellationOffsets: Array.from(constellationLabelOffsets.entries()),
+    galacticOffsets: Array.from(galacticLabelOffsets.entries())
+  };
+  const obj = { remember: true, form: data, edits };
+  localStorage.setItem(PRESET_KEY, JSON.stringify(obj));
+}
+
+function loadPresets() {
+  const str = localStorage.getItem(PRESET_KEY);
+  if (!str) return;
+  let obj;
+  try {
+    obj = JSON.parse(str);
+  } catch {
+    return;
+  }
+  const form = document.getElementById('filters-form');
+  if (obj.remember) {
+    const chk = document.getElementById('enable-save-presets');
+    if (chk) chk.checked = true;
+  }
+  if (form && obj.form) {
+    const data = obj.form;
+    for (const [k, v] of Object.entries(data)) {
+      const els = form.querySelectorAll(`[name='${k}']`);
+      els.forEach(el => {
+        if (el.type === 'checkbox') {
+          el.checked = Array.isArray(v) ? v.includes(el.value) : v === 'on' || v === el.value || v === true;
+        } else if (el.type === 'radio') {
+          el.checked = v === el.value;
+        } else {
+          el.value = v;
+        }
+      });
+      if (k === 'min-distance') document.getElementById('min-distance-slider').value = v;
+      if (k === 'max-distance') document.getElementById('max-distance-slider').value = v;
+      if (k === 'isolation') document.getElementById('isolation-slider').value = v;
+      if (k === 'isolation-grid-size') document.getElementById('isolation-grid-slider').value = v;
+      if (k === 'isolation-tolerance') document.getElementById('isolation-tolerance-slider').value = v;
+      if (k === 'density') document.getElementById('density-slider').value = v;
+      if (k === 'density-bottom-percent') document.getElementById('density-bottom-slider').value = v;
+      if (k === 'density-top-percent') document.getElementById('density-top-slider').value = v;
+      if (k === 'density-grid-size') document.getElementById('density-grid-slider').value = v;
+      if (k === 'density-tolerance') document.getElementById('density-tolerance-slider').value = v;
+    }
+  }
+  if (obj.edits) {
+    starLabelOffsets.clear();
+    obj.edits.starOffsets.forEach(([id, off]) => starLabelOffsets.set(id, off));
+    starLabelRotations.clear();
+    obj.edits.starRotations.forEach(([id, rot]) => starLabelRotations.set(id, rot));
+    starLabelScales.clear();
+    obj.edits.starScales.forEach(([id, sc]) => starLabelScales.set(id, sc));
+    constellationLabelOffsets.clear();
+    obj.edits.constellationOffsets.forEach(([id, off]) => constellationLabelOffsets.set(id, off));
+    galacticLabelOffsets.clear();
+    obj.edits.galacticOffsets.forEach(([id, off]) => galacticLabelOffsets.set(id, off));
+  }
+}
+
 function angleDiff(a, b) {
   let diff = a - b;
   diff = ((diff + Math.PI) % (Math.PI * 2)) - Math.PI;
@@ -779,21 +865,24 @@ function setupMapProjectionToggles() {
   const globeContainer = document.getElementById('sphereMap').parentElement;
   const mollContainer = document.getElementById('mollweideMap').parentElement;
   [trueContainer, globeContainer, mollContainer].forEach(c => c.remove());
-  mapsSection.appendChild(mollContainer);
 
   function handle(id, container, manager) {
     const cb = document.getElementById(id);
     if (!cb) return;
-    cb.addEventListener('change', () => {
+    function update() {
       if (cb.checked) {
         mapsSection.appendChild(container);
         manager.onResize();
-        container.scrollIntoView({ behavior: 'smooth' });
       } else if (container.isConnected) {
         container.remove();
       }
       requestRender();
+    }
+    cb.addEventListener('change', () => {
+      update();
+      maybeSavePresets();
     });
+    update();
   }
 
   handle('map-true', trueContainer, trueCoordinatesMap);
@@ -1216,6 +1305,7 @@ function onLinePointerDown(e) {
         });
         requestRender();
         e.preventDefault();
+        maybeSavePresets();
         return;
       }
     }
@@ -1223,6 +1313,7 @@ function onLinePointerDown(e) {
     obj.visible = false;
     requestRender();
     e.preventDefault();
+    maybeSavePresets();
   }
 }
 
@@ -1312,6 +1403,7 @@ function onEditPointerUp() {
   updateEditOverlay();
   requestRender();
   initialLabelPos = null;
+  maybeSavePresets();
 }
 
 function setupLabelEditor() {
@@ -1413,6 +1505,7 @@ function setupUndoButton() {
       updateEditOverlay();
     }
     requestRender();
+    maybeSavePresets();
   });
 }
 
@@ -1486,6 +1579,7 @@ function onRotateUp() {
   document.removeEventListener('pointerup', onRotateUp);
   editHistory.push({ type: 'rotateLabel', label: selectedLabel, prevRotation: rotateInitialRotation });
   isRotating = false;
+  maybeSavePresets();
 }
 
 function onScaleMove(e) {
@@ -1516,6 +1610,7 @@ function onScaleUp() {
     selectedLabel.userData._origScale = selectedLabel.scale.clone();
   }
   isScaling = false;
+  maybeSavePresets();
 }
 
 async function main() {
@@ -1525,10 +1620,25 @@ async function main() {
     cachedStars = await loadStarData();
     if (!cachedStars.length) throw new Error('No star data available');
     await setupFilterUI(cachedStars);
-    const debouncedApplyFilters = debounce(buildAndApplyFilters, 150);
     const form = document.getElementById('filters-form');
     if (form) {
-      form.addEventListener('change', debouncedApplyFilters);
+      const presetsFs = document.getElementById('save-presets-fieldset');
+      if (presetsFs) form.appendChild(presetsFs);
+    }
+    loadPresets();
+    const debouncedApplyFilters = debounce(buildAndApplyFilters, 150);
+    if (form) {
+      form.addEventListener('change', () => {
+        debouncedApplyFilters();
+        maybeSavePresets();
+      });
+    }
+    const clearBtn = document.getElementById('clear-saved-presets');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        localStorage.removeItem(PRESET_KEY);
+        window.location.reload();
+      });
     }
     trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates' });
     globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
@@ -1542,6 +1652,18 @@ async function main() {
       star.truePosition = getStarTruePosition(star);
       precalcMollweideData(star);
       updateMollweidePosition(star);
+      const id = getStarId(star);
+      if (starLabelOffsets.has(id)) {
+        const off = starLabelOffsets.get(id);
+        star.mollLabelOffset = new THREE.Vector3(off.x, off.y, 0);
+      }
+      if (starLabelRotations.has(id)) {
+        star.mollLabelRotation = starLabelRotations.get(id);
+      }
+      if (starLabelScales.has(id)) {
+        const sc = starLabelScales.get(id);
+        star.mollLabelScale = new THREE.Vector3(sc.x, sc.y, 1);
+      }
     });
     const globeGrid = createGlobeGrid(100, { color: 0x444444, opacity: 0.2, lineWidth: 1 });
     globeMap.scene.add(globeGrid);
