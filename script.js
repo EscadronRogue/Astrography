@@ -1104,6 +1104,9 @@ function setupLabelEditor() {
   btn.addEventListener('click', () => {
     labelEditMode = !labelEditMode;
     btn.classList.toggle('active', labelEditMode);
+    if (labelEditMode) {
+      registerMollweideEditableLabels();
+    }
   });
   mollweideMap.canvas.addEventListener('pointerdown', onEditPointerDown);
   mollweideMap.canvas.addEventListener('pointermove', onEditPointerMove);

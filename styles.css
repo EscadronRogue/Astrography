@@ -330,6 +330,10 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
 .export-btn {
   cursor: pointer;
 }
+.export-btn.active {
+  background: #ff6f61;
+  color: #000;
+}
 
 /* Tooltip */
 #tooltip {
