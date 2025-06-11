@@ -46,7 +46,10 @@ export class LabelManager {
 
     // Used to cache each star's last displayed label text, color, and size
     // so we only rebuild the label texture if something has changed.
-    this.labelCache = new Map(); 
+    this.labelCache = new Map();
+
+    // Track assigned label angles for each star system to avoid overlaps
+    this.systemAngles = new Map();
   }
 
   /**
@@ -193,15 +196,44 @@ export class LabelManager {
    * Simple helper to compute label offset from star position, so the label doesn't overlap the star mesh.
    */
   computeLabelOffset(star, starPos) {
-    if (this.mapType === 'TrueCoordinates' || this.mapType === 'Mollweide') {
-      // Offset labels in screen space proportional to the star size so that
-      // larger stars get more separation from their text. Use a slightly
-      // larger base distance for the Mollweide map since stars are scaled up
-      // there.
+    if (this.mapType === 'TrueCoordinates') {
+      // Simple screen space offset scaled by star size
       const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
-      const baseDist = this.mapType === 'Mollweide' ? 1 : 0.5;
-      const dist = baseDist * scaleFactor;
+      const dist = 0.5 * scaleFactor;
       return new THREE.Vector3(1, 1, 0).multiplyScalar(dist);
+    } else if (this.mapType === 'Mollweide') {
+      // Offset labels randomly around the star. Ensure labels from the same
+      // system are separated by at least 90 degrees and at most 270 degrees.
+      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
+      const dist = 1 * scaleFactor * 2; // double the offset
+
+      const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
+      let starMap = this.systemAngles.get(system);
+      if (!starMap) {
+        starMap = new Map();
+        this.systemAngles.set(system, starMap);
+      }
+
+      let angle = starMap.get(star);
+      if (angle === undefined) {
+        const existing = Array.from(starMap.values());
+        for (let attempt = 0; attempt < 10; attempt++) {
+          const candidate = Math.random() * Math.PI * 2;
+          const valid = existing.every(a => {
+            const diff = Math.abs(candidate - a) % (Math.PI * 2);
+            const minDiff = Math.min(diff, Math.PI * 2 - diff);
+            return minDiff > Math.PI / 2 && minDiff < (Math.PI * 3) / 2;
+          });
+          if (valid) {
+            angle = candidate;
+            break;
+          }
+        }
+        if (angle === undefined) angle = Math.random() * Math.PI * 2;
+        starMap.set(star, angle);
+      }
+
+      return new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(dist);
     } else {
       // For the Globe, offset tangentially around the star on the sphere
       const normal = starPos.clone().normalize();
