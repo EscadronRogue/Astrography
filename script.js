@@ -1080,7 +1080,33 @@ function onLinePointerDown(e) {
   editRaycaster.setFromCamera(editPointer, mollweideMap.camera);
   const intersects = editRaycaster.intersectObjects(editableLines, false);
   if (intersects.length > 0) {
-    const intersect = intersects[0];
+    let intersect = null;
+    for (const intr of intersects) {
+      const obj = intr.object;
+      const idx = intr.index;
+      const posAttr = obj.geometry && obj.geometry.getAttribute('position');
+      if (posAttr && idx !== undefined) {
+        const start = obj.type === 'LineSegments' ? idx - (idx % 2) : idx;
+        const base = start * 3;
+        if (base + 5 < posAttr.array.length) {
+          let removed = true;
+          for (let i = 0; i < 6; i++) {
+            if (!Number.isNaN(posAttr.array[base + i])) {
+              removed = false;
+              break;
+            }
+          }
+          if (!removed) {
+            intersect = intr;
+            break;
+          }
+        }
+      } else {
+        intersect = intr;
+        break;
+      }
+    }
+    if (!intersect) return;
     const obj = intersect.object;
     const idx = intersect.index;
     const posAttr = obj.geometry && obj.geometry.getAttribute('position');
