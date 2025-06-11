@@ -130,6 +130,7 @@ export function createConstellationBoundariesForMollweide() {
   lineSegs.userData.R = R;
   lineSegs.userData.editableLine = true;
   lineSegs.userData.wrap = true;
+  lineSegs.userData.noWrapSet = new Set();
   lineSegs.userData.type = 'constellation';
   updateConstellationBoundariesForMollweide(lineSegs);
   return [lineSegs];
@@ -141,13 +142,15 @@ export function updateConstellationBoundariesForMollweide(lineSegs) {
   const data = lineSegs.userData.boundaryData || [];
   const posAttr = lineSegs.geometry.getAttribute('position');
   const array = posAttr.array;
+  const noWrapSet = lineSegs.userData.noWrapSet || new Set();
   let idx = 0;
-  data.forEach(seg => {
+  data.forEach((seg, segIdx) => {
     const pStart = radToSphere(seg.ra1, seg.dec1, R);
     const pEnd   = radToSphere(seg.ra2, seg.dec2, R);
     const arcPts  = greatCircleToMollweide(pStart, pEnd, R, 16, lambda0);
+    const wrap = lineSegs.userData.wrap !== false && !noWrapSet.has(segIdx);
     for (let j = 0; j < arcPts.length - 1; j++) {
-      const segs = lineSegs.userData.wrap === false ? [[arcPts[j], arcPts[j + 1]]] : splitMollweideWrap(arcPts[j], arcPts[j + 1]);
+      const segs = wrap ? splitMollweideWrap(arcPts[j], arcPts[j + 1]) : [[arcPts[j], arcPts[j + 1]]];
       for (let s = 0; s < 2; s++) {
         if (s < segs.length) {
           const a = segs[s][0];

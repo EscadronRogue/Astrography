@@ -704,6 +704,7 @@ class MapManager {
       const segs = this.connectionGroup.children[0];
       if (segs) {
         segs.userData.wrap = true;
+        segs.userData.noWrapSet = new Set();
         updateMollweideConnectionSegments(segs);
       }
     } else {
@@ -903,11 +904,13 @@ async function updateMollweideView() {
       constellationLinesMoll = createConstellationBoundariesForMollweide();
       constellationLinesMoll.forEach(l => {
         l.userData.wrap = true;
+        l.userData.noWrapSet = new Set();
         mollweideMap.scene.add(l);
       });
     } else {
       constellationLinesMoll.forEach(l => {
         l.userData.wrap = true;
+        l.userData.noWrapSet = new Set();
         updateConstellationBoundariesForMollweide(l);
       });
     }
@@ -1073,9 +1076,17 @@ function registerEditableLines() {
   });
 }
 
-function toggleLineWrap(line) {
+function toggleLineWrap(line, segIdx = 0) {
   if (!line.userData) return;
-  line.userData.wrap = !line.userData.wrap;
+  const segsPerLine = (line.userData.segments || GC_SEGMENTS) * 2;
+  const noWrap = line.userData.noWrapSet || new Set();
+  const lineIndex = Math.floor(segIdx / segsPerLine);
+  if (noWrap.has(lineIndex)) {
+    noWrap.delete(lineIndex);
+  } else {
+    noWrap.add(lineIndex);
+  }
+  line.userData.noWrapSet = noWrap;
   if (line.userData._origColor === undefined) {
     line.userData._origColor = line.material.color.clone();
   }
@@ -1120,7 +1131,8 @@ function onEditPointerDown(e) {
   } else {
     intersects = editRaycaster.intersectObjects(editableLines, false);
     if (intersects.length > 0) {
-      toggleLineWrap(intersects[0].object);
+      const hit = intersects[0];
+      toggleLineWrap(hit.object, hit.index || 0);
       e.preventDefault();
     }
   }

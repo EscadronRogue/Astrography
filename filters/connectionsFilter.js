@@ -142,6 +142,7 @@ export function createMollweideConnectionSegments(pairs) {
     segments: GC_SEGMENTS,
     editableLine: true,
     wrap: true,
+    noWrapSet: new Set(),
     type: 'connection'
   };
   updateMollweideConnectionSegments(lineSegs);
@@ -153,16 +154,18 @@ export function updateMollweideConnectionSegments(lineSegs) {
   const segsCount = lineSegs.userData.segments || GC_SEGMENTS;
   const posAttr = lineSegs.geometry.getAttribute('position');
   const colorAttr = lineSegs.geometry.getAttribute('color');
+  const noWrapSet = lineSegs.userData.noWrapSet || new Set();
   let idx = 0;
-  pairs.forEach(pair => {
+  pairs.forEach((pair, pairIdx) => {
     const p1 = pair.starA.spherePosition;
     const p2 = pair.starB.spherePosition;
     if (!p1 || !p2) return;
     const pts = greatCircleToMollweide(p1, p2, 100, segsCount, getMollweideLambda0());
     const cA = new THREE.Color(pair.starA.displayColor || '#ffffff');
     const cB = new THREE.Color(pair.starB.displayColor || '#ffffff');
+    const wrap = lineSegs.userData.wrap !== false && !noWrapSet.has(pairIdx);
     for (let j = 0; j < pts.length - 1; j++) {
-      const segs = lineSegs.userData.wrap === false ? [[pts[j], pts[j + 1]]] : splitMollweideWrap(pts[j], pts[j + 1]);
+      const segs = wrap ? splitMollweideWrap(pts[j], pts[j + 1]) : [[pts[j], pts[j + 1]]];
       segs.forEach(([s, e]) => {
         if (idx + 6 > posAttr.array.length) return;
         posAttr.array[idx] = s.x; posAttr.array[idx+1] = s.y; posAttr.array[idx+2] = s.z;
