@@ -483,7 +483,11 @@ async function buildAndApplyFilters() {
   globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
   mollweideMap.addStars(currentMollweideFilteredStars);
   mollweideMap.updateStarPositions(currentMollweideFilteredStars);
-  mollweideMap.updateConnections(currentMollweideFilteredStars, currentMollweideConnections);
+  mollweideMap.updateConnections(
+    currentMollweideFilteredStars,
+    currentMollweideConnections,
+    mollweideMap.connectionOpacity
+  );
   mollweideMap.labelManager.refreshLabels(currentMollweideFilteredStars);
   registerMollweideEditableLabels();
 
@@ -850,7 +854,7 @@ class MapManager {
       const segs = this.connectionGroup.children[0];
       if (segs) updateMollweideConnectionSegments(segs);
     } else {
-      this.updateConnections(stars, connectionObjs);
+      this.updateConnections(stars, connectionObjs, this.connectionOpacity);
     }
     if (window.requestRender) window.requestRender();
   }
