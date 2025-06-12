@@ -537,19 +537,14 @@ async function buildAndApplyFilters() {
 
   // --- Dust Clouds Overlay ---
   if (showClouds) {
-    const form = document.getElementById('filters-form');
     const cloudDataFiles = cloudFiles;
-    // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
-    await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, cloudOpacity / 100);
-    await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles, cloudOpacity / 100);
-    await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, cloudOpacity / 100);
+    const displayLines = cloudDensityDisplay === 'lines';
 
-    const cloudPoints = await loadCloudPoints(cloudDataFiles);
-    const gridSize = computeGridSize(cloudDensityGridSize);
-    if (!cloudDensityOverlay ||
-        cloudDensityOverlay.minDistance !== parseFloat(minDistance) ||
-        cloudDensityOverlay.maxDistance !== parseFloat(maxDistance) ||
-        cloudDensityOverlay.gridSize !== gridSize) {
+    if (displayLines) {
+      // show classic line overlay and remove any grid overlay
+      await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, cloudOpacity / 100);
+      await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles, cloudOpacity / 100);
+      await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, cloudOpacity / 100);
       if (cloudDensityOverlay) {
         cloudDensityOverlay.cubesData.forEach(c => {
           trueCoordinatesMap.scene.remove(c.tcMesh);
@@ -558,16 +553,40 @@ async function buildAndApplyFilters() {
           globeMap.scene.remove(o.line);
           mollweideMap.scene.remove(o.lineM);
         });
+        cloudDensityOverlay = null;
       }
-      cloudDensityOverlay = initCloudDensityFilter(minDistance, maxDistance, gridSize);
-      cloudDensityOverlay.cubesData.forEach(c => trueCoordinatesMap.scene.add(c.tcMesh));
-      cloudDensityOverlay.adjacentLines.forEach(o => {
-        globeMap.scene.add(o.line);
-        mollweideMap.scene.add(o.lineM);
-      });
+    } else {
+      // show grid based overlay, remove classic lines
+      await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], cloudOpacity / 100);
+      await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', [], cloudOpacity / 100);
+      await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', [], cloudOpacity / 100);
+
+      const cloudPoints = await loadCloudPoints(cloudDataFiles);
+      const gridSize = computeGridSize(cloudDensityGridSize);
+      if (!cloudDensityOverlay ||
+          cloudDensityOverlay.minDistance !== parseFloat(minDistance) ||
+          cloudDensityOverlay.maxDistance !== parseFloat(maxDistance) ||
+          cloudDensityOverlay.gridSize !== gridSize) {
+        if (cloudDensityOverlay) {
+          cloudDensityOverlay.cubesData.forEach(c => {
+            trueCoordinatesMap.scene.remove(c.tcMesh);
+          });
+          cloudDensityOverlay.adjacentLines.forEach(o => {
+            globeMap.scene.remove(o.line);
+            mollweideMap.scene.remove(o.lineM);
+          });
+        }
+        cloudDensityOverlay = initCloudDensityFilter(minDistance, maxDistance, gridSize);
+        cloudDensityOverlay.cubesData.forEach(c => trueCoordinatesMap.scene.add(c.tcMesh));
+        cloudDensityOverlay.adjacentLines.forEach(o => {
+          globeMap.scene.add(o.line);
+          mollweideMap.scene.add(o.lineM);
+        });
+      }
+      updateCloudDensityFilter(cloudPoints, cloudDensityOverlay, trueCoordinatesMap.scene, globeMap.scene, mollweideMap.scene);
     }
-    updateCloudDensityFilter(cloudPoints, cloudDensityOverlay, trueCoordinatesMap.scene, globeMap.scene, mollweideMap.scene);
   } else {
+    // remove all cloud overlays
     await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', [], cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', [], cloudOpacity / 100);
