@@ -11,16 +11,28 @@ export function initFilterUI() {
   const enableConnectionsChk = document.getElementById('enable-connections');
   const connectionSlider = document.getElementById('connection-slider');
   const connectionNumber = document.getElementById('connection-number');
+  const connectionOpacitySlider = document.getElementById('connection-opacity-slider');
+  const connectionOpacityNumber = document.getElementById('connection-opacity-number');
   enableConnectionsChk.addEventListener('change', function () {
     const enabled = this.checked;
     connectionSlider.disabled = !enabled;
     connectionNumber.disabled = !enabled;
+    connectionOpacitySlider.disabled = !enabled;
+    connectionOpacityNumber.disabled = !enabled;
   });
   connectionSlider.addEventListener('input', function () {
     connectionNumber.value = this.value;
   });
   connectionNumber.addEventListener('input', function () {
     connectionSlider.value = this.value;
+  });
+  connectionOpacitySlider.addEventListener('input', function () {
+    connectionOpacityNumber.value = this.value;
+    document.getElementById('connection-opacity-value').textContent = this.value;
+  });
+  connectionOpacityNumber.addEventListener('input', function () {
+    connectionOpacitySlider.value = this.value;
+    document.getElementById('connection-opacity-value').textContent = this.value;
   });
 
   // Isolation Filter UI controls.
@@ -69,6 +81,14 @@ export function initFilterUI() {
   const densityGridNumber = document.getElementById('density-grid-number');
   const densityOpacitySlider = document.getElementById('density-opacity-slider');
   const densityOpacityNumber = document.getElementById('density-opacity-number');
+  const starOpacitySlider = document.getElementById('star-opacity-slider');
+  const starOpacityNumber = document.getElementById('star-opacity-number');
+  const constLineOpacitySlider = document.getElementById('constellation-line-opacity-slider');
+  const constLineOpacityNumber = document.getElementById('constellation-line-opacity-number');
+  const constNameOpacitySlider = document.getElementById('constellation-name-opacity-slider');
+  const constNameOpacityNumber = document.getElementById('constellation-name-opacity-number');
+  const planeOpacitySlider = document.getElementById('plane-opacity-slider');
+  const planeOpacityNumber = document.getElementById('plane-opacity-number');
   enableDensityChk.addEventListener('change', function () {
     const enabled = this.checked;
     densitySlider.disabled = !enabled;
@@ -123,6 +143,42 @@ export function initFilterUI() {
   densityOpacityNumber.addEventListener('input', function () {
     densityOpacitySlider.value = this.value;
     document.getElementById('density-opacity-value').textContent = this.value;
+  });
+
+  starOpacitySlider.addEventListener('input', function () {
+    starOpacityNumber.value = this.value;
+    document.getElementById('star-opacity-value').textContent = this.value;
+  });
+  starOpacityNumber.addEventListener('input', function () {
+    starOpacitySlider.value = this.value;
+    document.getElementById('star-opacity-value').textContent = this.value;
+  });
+
+  constLineOpacitySlider.addEventListener('input', function () {
+    constLineOpacityNumber.value = this.value;
+    document.getElementById('constellation-line-opacity-value').textContent = this.value;
+  });
+  constLineOpacityNumber.addEventListener('input', function () {
+    constLineOpacitySlider.value = this.value;
+    document.getElementById('constellation-line-opacity-value').textContent = this.value;
+  });
+
+  constNameOpacitySlider.addEventListener('input', function () {
+    constNameOpacityNumber.value = this.value;
+    document.getElementById('constellation-name-opacity-value').textContent = this.value;
+  });
+  constNameOpacityNumber.addEventListener('input', function () {
+    constNameOpacitySlider.value = this.value;
+    document.getElementById('constellation-name-opacity-value').textContent = this.value;
+  });
+
+  planeOpacitySlider.addEventListener('input', function () {
+    planeOpacityNumber.value = this.value;
+    document.getElementById('plane-opacity-value').textContent = this.value;
+  });
+  planeOpacityNumber.addEventListener('input', function () {
+    planeOpacitySlider.value = this.value;
+    document.getElementById('plane-opacity-value').textContent = this.value;
   });
 
   // Distance slider sync.

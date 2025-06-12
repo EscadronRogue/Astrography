@@ -72,7 +72,7 @@ export function computeConnectionPairs(stars, maxDistance) {
  * @param {Array} connectionObjs - Array of connection objects.
  * @returns {THREE.LineSegments} - The merged connection lines.
  */
-export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates') {
+export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates', opacity = 0.5) {
   const positions = [];
   const colors = [];
 
@@ -115,7 +115,7 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
   const material = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.5,
+    opacity,
     linewidth: 1
   });
   
@@ -123,7 +123,7 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
   return mergedLines;
 }
 
-export function createMollweideConnectionSegments(pairs) {
+export function createMollweideConnectionSegments(pairs, opacity = 0.5) {
   const segCount = pairs.length * GC_SEGMENTS * 2; // each GC segment may wrap
   const positions = new Float32Array(segCount * 2 * 3);
   const colors = new Float32Array(segCount * 2 * 3);
@@ -133,7 +133,7 @@ export function createMollweideConnectionSegments(pairs) {
   const material = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.5,
+    opacity,
     linewidth: 1
   });
   const lineSegs = new THREE.LineSegments(geometry, material);
@@ -191,7 +191,7 @@ export function updateMollweideConnectionSegments(lineSegs) {
  * @param {string} mapType - 'Globe' or other.
  * @returns {Array} - Array of THREE.Line objects.
  */
-export function createConnectionLines(stars, pairs, mapType) {
+export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5) {
   if (!pairs || pairs.length === 0) return [];
   
   const largestPairDistance = pairs.reduce((max, p) => Math.max(max, p.distance), 0);
@@ -235,7 +235,7 @@ export function createConnectionLines(stars, pairs, mapType) {
     
     const normDist = distance / (largestPairDistance || distance);
     const lineThickness = THREE.MathUtils.lerp(5, 1, normDist);
-    const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist);
+    const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
     
     let points;
     if (mapType === 'Globe') {
