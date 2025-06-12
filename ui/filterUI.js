@@ -2,6 +2,10 @@
 // Manages the UI for the filter form.
 
 export function initFilterUI() {
+  // Insert cloud-related categories before binding events so elements exist.
+  addCloudsFieldset();
+  addCloudDensityFieldset();
+
   // Toggle sidebar menu on mobile.
   document.getElementById('menu-toggle').addEventListener('click', function () {
     document.querySelector('.sidebar').classList.toggle('open');
@@ -218,9 +222,6 @@ export function initFilterUI() {
     maxDistanceSlider.value = this.value;
   });
 
-  // Add Dust Clouds fieldset.
-  addCloudsFieldset();
-  addCloudDensityFieldset();
 
   // Fullscreen button listeners.
   document.querySelectorAll('.fullscreen-btn').forEach(btn => {
