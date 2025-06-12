@@ -83,7 +83,7 @@ export function getConstellationBoundaries() {
 /**
  * Creates constellation boundary line meshes for the Globe.
  */
-export function createConstellationBoundariesForGlobe() {
+export function createConstellationBoundariesForGlobe(opacity = 0.4) {
   const lines = [];
   const R = 100;
   boundaryData.forEach(b => {
@@ -101,7 +101,7 @@ export function createConstellationBoundariesForGlobe() {
       gapSize: 1,
       linewidth: 1,
       transparent: true,
-      opacity: 0.4
+      opacity
     });
     const line = new THREE.Line(geometry, material);
     line.computeLineDistances();
@@ -110,7 +110,7 @@ export function createConstellationBoundariesForGlobe() {
   return lines;
 }
 
-export function createConstellationBoundariesForMollweide() {
+export function createConstellationBoundariesForMollweide(opacity = 0.4) {
   const R = 100;
   const material = new THREE.LineDashedMaterial({
     color: 0x888888,
@@ -118,7 +118,7 @@ export function createConstellationBoundariesForMollweide() {
     gapSize: 1,
     linewidth: 1,
     transparent: true,
-    opacity: 0.4
+    opacity
   });
   const maxSegments = boundaryData.length * 32; // 16 segments per boundary, each may wrap
   const positions = new Float32Array(maxSegments * 2 * 3); // 2 vertices per segment
@@ -168,7 +168,7 @@ export function updateConstellationBoundariesForMollweide(lineSegs) {
  * The labels are rendered using a custom shader material so that they are double-sided
  * and always oriented correctly.
  */
-export function createConstellationLabelsForGlobe() {
+export function createConstellationLabelsForGlobe(opacity = 0.8) {
   const labels = [];
   const R = 100;
   // For each center from the loaded centerData
@@ -190,7 +190,7 @@ export function createConstellationLabelsForGlobe() {
     const material = new THREE.ShaderMaterial({
       uniforms: {
         map: { value: texture },
-        opacity: { value: 0.8 }
+        opacity: { value: opacity }
       },
       vertexShader: `
         varying vec2 vUv;
@@ -230,7 +230,7 @@ export function createConstellationLabelsForGlobe() {
   return labels;
 }
 
-export function createConstellationLabelsForMollweide() {
+export function createConstellationLabelsForMollweide(opacity = 0.8) {
   const labels = [];
   const R = 100;
   const lambda0 = getMollweideLambda0();
@@ -248,7 +248,7 @@ export function createConstellationLabelsForMollweide() {
     ctx.fillStyle = '#888888';
     ctx.fillText(c.name, 10, baseFontSize);
     const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.8 });
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
     const sprite = new THREE.Sprite(material);
     sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
     sprite.position.copy(p);

@@ -57,7 +57,7 @@ function eclipticToEquatorial(lambda, beta = 0) {
   return { ra, dec };
 }
 
-export function createGalacticPlaneMesh(size = 250) {
+export function createGalacticPlaneMesh(size = 250, opacity = 0.2) {
   const half = size / 2;
   const dirs = [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2].map(l => {
     const { ra, dec } = galacticToEquatorial(l, 0);
@@ -76,7 +76,7 @@ export function createGalacticPlaneMesh(size = 250) {
   geom.computeVertexNormals();
   const mat = new THREE.MeshBasicMaterial({
     color: 0xffffff,
-    opacity: 0.2,
+    opacity,
     transparent: true,
     side: THREE.DoubleSide,
     depthWrite: false
@@ -84,69 +84,69 @@ export function createGalacticPlaneMesh(size = 250) {
   return new THREE.Mesh(geom, mat);
 }
 
-export function createEclipticPlaneMesh(size = 250) {
+export function createEclipticPlaneMesh(size = 250, opacity = 0.2) {
   const geom = new THREE.PlaneGeometry(size, size);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffff00, opacity: 0.2, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffff00, opacity, transparent: true, side: THREE.DoubleSide, depthWrite: false });
   const mesh = new THREE.Mesh(geom, mat);
   const pole = radToSphere(270 * DEG2RAD, 66.5607 * DEG2RAD, 1);
   mesh.lookAt(pole);
   return mesh;
 }
 
-export function createCelestialEquatorMesh(size = 250) {
+export function createCelestialEquatorMesh(size = 250, opacity = 0.2) {
   const geom = new THREE.PlaneGeometry(size, size);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity: 0.2, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff0000, opacity, transparent: true, side: THREE.DoubleSide, depthWrite: false });
   const mesh = new THREE.Mesh(geom, mat);
   const pole = radToSphere(0, 90 * DEG2RAD, 1);
   mesh.lookAt(pole);
   return mesh;
 }
 
-function createGreatCircleLine(points, color, width = 2) {
+function createGreatCircleLine(points, color, width = 2, opacity = 0.5) {
   const geom = new THREE.BufferGeometry().setFromPoints(points);
   const mat = new THREE.LineBasicMaterial({
     color,
     transparent: true,
-    opacity: 0.5,
+    opacity,
     linewidth: width
   });
   return new THREE.Line(geom, mat);
 }
 
-export function createGalacticPlaneGlobe(R = 100, segments = 180) {
+export function createGalacticPlaneGlobe(R = 100, segments = 180, opacity = 0.5) {
   const pts = [];
   for (let i = 0; i <= segments; i++) {
     const l = (i / segments) * 2 * Math.PI;
     const { ra, dec } = galacticToEquatorial(l, 0);
     pts.push(radToSphere(ra, dec, R));
   }
-  return createGreatCircleLine(pts, 0xffffff, 20);
+  return createGreatCircleLine(pts, 0xffffff, 20, opacity);
 }
 
-export function createEclipticPlaneGlobe(R = 100, segments = 180) {
+export function createEclipticPlaneGlobe(R = 100, segments = 180, opacity = 0.5) {
   const pts = [];
   for (let i = 0; i <= segments; i++) {
     const lam = (i / segments) * 2 * Math.PI;
     const { ra, dec } = eclipticToEquatorial(lam, 0);
     pts.push(radToSphere(ra, dec, R));
   }
-  return createGreatCircleLine(pts, 0xffff00, 10);
+  return createGreatCircleLine(pts, 0xffff00, 10, opacity);
 }
 
-export function createCelestialEquatorGlobe(R = 100, segments = 180) {
+export function createCelestialEquatorGlobe(R = 100, segments = 180, opacity = 0.5) {
   const pts = [];
   for (let i = 0; i <= segments; i++) {
     const ra = (i / segments) * 2 * Math.PI;
     const dec = 0;
     pts.push(radToSphere(ra, dec, R));
   }
-  return createGreatCircleLine(pts, 0xff0000, 10);
+  return createGreatCircleLine(pts, 0xff0000, 10, opacity);
 }
 
-export function createGalacticPlaneMollweide(segments = 180) {
+export function createGalacticPlaneMollweide(segments = 180, opacity = 0.5) {
   const line = new THREE.LineSegments(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 20, transparent: true, opacity: 0.5 })
+    new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 20, transparent: true, opacity })
   );
   line.userData.segments = segments;
   updateGalacticPlaneMollweide(line);
@@ -176,20 +176,20 @@ export function updateGalacticPlaneMollweide(line) {
   line.geometry = geom;
 }
 
-export function createEclipticPlaneMollweide(segments = 180) {
+export function createEclipticPlaneMollweide(segments = 180, opacity = 0.5) {
   const line = new THREE.LineSegments(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 10, transparent: true, opacity: 0.5 })
+    new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 10, transparent: true, opacity })
   );
   line.userData.segments = segments;
   updateEclipticPlaneMollweide(line);
   return line;
 }
 
-export function createCelestialEquatorMollweide(segments = 180) {
+export function createCelestialEquatorMollweide(segments = 180, opacity = 0.5) {
   const line = new THREE.LineSegments(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 10, transparent: true, opacity: 0.5 })
+    new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 10, transparent: true, opacity })
   );
   line.userData.segments = segments;
   updateCelestialEquatorMollweide(line);
@@ -310,24 +310,24 @@ function galacticDirectionData() {
   ];
 }
 
-export function createGalacticDirectionLabelsTrue(R = 100) {
+export function createGalacticDirectionLabelsTrue(R = 100, opacity = 0.8) {
   const labels = [];
   galacticDirectionData().forEach(d => {
     const eq = galacticToEquatorial(d.l, 0);
     const pos = radToSphere(eq.ra, eq.dec, R);
-    const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
+    const sprite = createTextSprite(d.label, '#ffffff', opacity, 450);
     sprite.position.copy(pos);
     labels.push(sprite);
   });
   return labels;
 }
 
-export function createGalacticDirectionLabelsGlobe(R = 102) {
+export function createGalacticDirectionLabelsGlobe(R = 102, opacity = 0.8) {
   const labels = [];
   galacticDirectionData().forEach(d => {
     const eq = galacticToEquatorial(d.l, 0);
     const pos = radToSphere(eq.ra, eq.dec, R);
-    const mesh = createTextPlane(d.label, '#ffffff', 0.8, 450);
+    const mesh = createTextPlane(d.label, '#ffffff', opacity, 450);
     mesh.position.copy(pos);
     const normal = pos.clone().normalize();
     const globalUp = new THREE.Vector3(0, 1, 0);
@@ -341,13 +341,13 @@ export function createGalacticDirectionLabelsGlobe(R = 102) {
   return labels;
 }
 
-export function createGalacticDirectionLabelsMollweide(R = 100) {
+export function createGalacticDirectionLabelsMollweide(R = 100, opacity = 0.8) {
   const lambda0 = getMollweideLambda0();
   const labels = [];
   galacticDirectionData().forEach(d => {
     const eq = galacticToEquatorial(d.l, 0);
     const p = radToMollweide(eq.ra, eq.dec, R, lambda0);
-    const sprite = createTextSprite(d.label, '#ffffff', 0.8, 450);
+    const sprite = createTextSprite(d.label, '#ffffff', opacity, 450);
     sprite.position.set(p.x, p.y, 0);
     sprite.userData = { name: d.label, ra: eq.ra, dec: eq.dec };
     labels.push(sprite);

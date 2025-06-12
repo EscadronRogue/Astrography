@@ -94,6 +94,18 @@
               <input type="radio" id="opacity-75" name="opacity" value="75" />
               <label for="opacity-75">75% Opacity</label>
             </div>
+            <div class="filter-item">
+              <label for="star-opacity-slider">Star Opacity:</label>
+              <input type="range" id="star-opacity-slider" name="star-opacity" min="0" max="100" value="100" step="1" />
+              <input type="number" id="star-opacity-number" name="star-opacity" min="0" max="100" value="100" step="1" />
+              <span id="star-opacity-value">100</span>%
+            </div>
+            <div class="filter-item">
+              <label for="star-name-opacity-slider">Star Name Opacity:</label>
+              <input type="range" id="star-name-opacity-slider" name="star-name-opacity" min="0" max="100" value="100" step="1" />
+              <input type="number" id="star-name-opacity-number" name="star-name-opacity" min="0" max="100" value="100" step="1" />
+              <span id="star-name-opacity-value">100</span>%
+            </div>
           </div>
         </fieldset>
 
@@ -140,6 +152,12 @@
             <div class="filter-item">
               <input type="range" id="connection-slider" name="connections" min="1" max="50" value="7" disabled />
               <input type="number" id="connection-number" name="connections" min="1" max="50" value="7" disabled /> Light Years
+            </div>
+            <div class="filter-item">
+              <label for="connection-opacity-slider">Line Opacity:</label>
+              <input type="range" id="connection-opacity-slider" name="connection-opacity" min="0" max="100" value="50" step="1" disabled />
+              <input type="number" id="connection-opacity-number" name="connection-opacity" min="0" max="100" value="50" step="1" disabled />
+              <span id="connection-opacity-value">50</span>%
             </div>
           </div>
         </fieldset>

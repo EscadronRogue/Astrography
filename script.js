@@ -418,6 +418,12 @@ async function buildAndApplyFilters() {
     densityGridSize,
     showClouds,
     cloudOpacity,
+    starOpacity,
+    starNameOpacity,
+    connectionOpacity,
+    constellationLineOpacity,
+    constellationNameOpacity,
+    planeOpacity,
     showGalacticPlane,
     showEclipticPlane,
     showCelestialEquator,
@@ -457,13 +463,31 @@ async function buildAndApplyFilters() {
     updateMollweidePosition(star);
   });
 
+  trueCoordinatesMap.setStarOpacity(starOpacity / 100);
+  globeMap.setStarOpacity(starOpacity / 100);
+  mollweideMap.setStarOpacity(starOpacity / 100);
+  trueCoordinatesMap.setLabelOpacity(starNameOpacity / 100);
+  globeMap.setLabelOpacity(starNameOpacity / 100);
+  mollweideMap.setLabelOpacity(starNameOpacity / 100);
+  trueCoordinatesMap.setConnectionOpacity(connectionOpacity / 100);
+  globeMap.setConnectionOpacity(connectionOpacity / 100);
+  mollweideMap.setConnectionOpacity(connectionOpacity / 100);
+
+  trueCoordinatesMap.connectionOpacity = connectionOpacity / 100;
+  globeMap.connectionOpacity = connectionOpacity / 100;
+  mollweideMap.connectionOpacity = connectionOpacity / 100;
+
   trueCoordinatesMap.updateMap(currentFilteredStars, currentConnections);
   trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
   globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
   globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
   mollweideMap.addStars(currentMollweideFilteredStars);
   mollweideMap.updateStarPositions(currentMollweideFilteredStars);
-  mollweideMap.updateConnections(currentMollweideFilteredStars, currentMollweideConnections);
+  mollweideMap.updateConnections(
+    currentMollweideFilteredStars,
+    currentMollweideConnections,
+    mollweideMap.connectionOpacity
+  );
   mollweideMap.labelManager.refreshLabels(currentMollweideFilteredStars);
   registerMollweideEditableLabels();
 
@@ -471,15 +495,15 @@ async function buildAndApplyFilters() {
   removeConstellationOverlayObjectsFromGlobe();
 
   if (showConstellationBoundaries) {
-    constellationLinesGlobe = createConstellationBoundariesForGlobe();
+    constellationLinesGlobe = createConstellationBoundariesForGlobe(constellationLineOpacity / 100);
     constellationLinesGlobe.forEach(ln => globeMap.scene.add(ln));
-    constellationLinesMoll = createConstellationBoundariesForMollweide();
+    constellationLinesMoll = createConstellationBoundariesForMollweide(constellationLineOpacity / 100);
     constellationLinesMoll.forEach(ln => mollweideMap.scene.add(ln));
   }
   if (showConstellationNames) {
-    constellationLabelsGlobe = createConstellationLabelsForGlobe();
+    constellationLabelsGlobe = createConstellationLabelsForGlobe(constellationNameOpacity / 100);
     constellationLabelsGlobe.forEach(lbl => globeMap.scene.add(lbl));
-    constellationLabelsMoll = createConstellationLabelsForMollweide();
+    constellationLabelsMoll = createConstellationLabelsForMollweide(constellationNameOpacity / 100);
     constellationLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
     registerMollweideEditableLabels();
   }
@@ -509,7 +533,7 @@ async function buildAndApplyFilters() {
     await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', [], cloudOpacity / 100);
   }
 
-  applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator);
+  applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator, planeOpacity / 100);
 
   applyGlobeSurface(globeOpaqueSurface);
   if (window.requestRender) window.requestRender();
@@ -545,35 +569,39 @@ function removeConstellationOverlayObjectsFromGlobe() {
   constellationOverlayMoll = [];
 }
 
-function applyPlanes(showGal, showEcl, showEq) {
+function applyPlanes(showGal, showEcl, showEq, opacity = 0.5) {
   if (showGal) {
     if (!galacticPlaneTrue) {
-      galacticPlaneTrue = createGalacticPlaneMesh(200);
+      galacticPlaneTrue = createGalacticPlaneMesh(200, opacity);
       trueCoordinatesMap.scene.add(galacticPlaneTrue);
     }
     if (!galacticPlaneGlobe) {
-      galacticPlaneGlobe = createGalacticPlaneGlobe(100);
+      galacticPlaneGlobe = createGalacticPlaneGlobe(100, undefined, opacity);
       globeMap.scene.add(galacticPlaneGlobe);
     }
     if (!galacticPlaneMoll) {
-      galacticPlaneMoll = createGalacticPlaneMollweide();
+      galacticPlaneMoll = createGalacticPlaneMollweide(undefined, opacity);
       mollweideMap.scene.add(galacticPlaneMoll);
     } else {
       updateGalacticPlaneMollweide(galacticPlaneMoll);
+      galacticPlaneMoll.material.opacity = opacity;
     }
+    galacticPlaneTrue.material.opacity = opacity;
+    galacticPlaneGlobe.material.opacity = opacity;
     if (galacticDirectionLabelsTrue.length === 0) {
-      galacticDirectionLabelsTrue = createGalacticDirectionLabelsTrue();
+      galacticDirectionLabelsTrue = createGalacticDirectionLabelsTrue( undefined, opacity);
       galacticDirectionLabelsTrue.forEach(lbl => trueCoordinatesMap.scene.add(lbl));
     }
     if (galacticDirectionLabelsGlobe.length === 0) {
-      galacticDirectionLabelsGlobe = createGalacticDirectionLabelsGlobe();
+      galacticDirectionLabelsGlobe = createGalacticDirectionLabelsGlobe(undefined, opacity);
       galacticDirectionLabelsGlobe.forEach(lbl => globeMap.scene.add(lbl));
     }
     if (galacticDirectionLabelsMoll.length === 0) {
-      galacticDirectionLabelsMoll = createGalacticDirectionLabelsMollweide();
+      galacticDirectionLabelsMoll = createGalacticDirectionLabelsMollweide(undefined, opacity);
       galacticDirectionLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
     } else {
       updateGalacticDirectionLabelsMollweide(galacticDirectionLabelsMoll);
+      galacticDirectionLabelsMoll.forEach(lbl => { lbl.material.opacity = opacity; });
     }
   } else {
     if (galacticPlaneTrue) { trueCoordinatesMap.scene.remove(galacticPlaneTrue); galacticPlaneTrue.geometry.dispose(); galacticPlaneTrue.material.dispose(); galacticPlaneTrue = null; }
@@ -589,19 +617,22 @@ function applyPlanes(showGal, showEcl, showEq) {
 
   if (showEcl) {
     if (!eclipticPlaneTrue) {
-      eclipticPlaneTrue = createEclipticPlaneMesh(200);
+      eclipticPlaneTrue = createEclipticPlaneMesh(200, opacity);
       trueCoordinatesMap.scene.add(eclipticPlaneTrue);
     }
     if (!eclipticPlaneGlobe) {
-      eclipticPlaneGlobe = createEclipticPlaneGlobe(100);
+      eclipticPlaneGlobe = createEclipticPlaneGlobe(100, undefined, opacity);
       globeMap.scene.add(eclipticPlaneGlobe);
     }
     if (!eclipticPlaneMoll) {
-      eclipticPlaneMoll = createEclipticPlaneMollweide();
+      eclipticPlaneMoll = createEclipticPlaneMollweide(undefined, opacity);
       mollweideMap.scene.add(eclipticPlaneMoll);
     } else {
       updateEclipticPlaneMollweide(eclipticPlaneMoll);
+      eclipticPlaneMoll.material.opacity = opacity;
     }
+    eclipticPlaneTrue.material.opacity = opacity;
+    eclipticPlaneGlobe.material.opacity = opacity;
   } else {
     if (eclipticPlaneTrue) { trueCoordinatesMap.scene.remove(eclipticPlaneTrue); eclipticPlaneTrue.geometry.dispose(); eclipticPlaneTrue.material.dispose(); eclipticPlaneTrue = null; }
     if (eclipticPlaneGlobe) { globeMap.scene.remove(eclipticPlaneGlobe); eclipticPlaneGlobe.geometry.dispose(); eclipticPlaneGlobe.material.dispose(); eclipticPlaneGlobe = null; }
@@ -610,19 +641,22 @@ function applyPlanes(showGal, showEcl, showEq) {
 
   if (showEq) {
     if (!celestialEquatorTrue) {
-      celestialEquatorTrue = createCelestialEquatorMesh(200);
+      celestialEquatorTrue = createCelestialEquatorMesh(200, opacity);
       trueCoordinatesMap.scene.add(celestialEquatorTrue);
     }
     if (!celestialEquatorGlobe) {
-      celestialEquatorGlobe = createCelestialEquatorGlobe(100);
+      celestialEquatorGlobe = createCelestialEquatorGlobe(100, undefined, opacity);
       globeMap.scene.add(celestialEquatorGlobe);
     }
     if (!celestialEquatorMoll) {
-      celestialEquatorMoll = createCelestialEquatorMollweide();
+      celestialEquatorMoll = createCelestialEquatorMollweide(undefined, opacity);
       mollweideMap.scene.add(celestialEquatorMoll);
     } else {
       updateCelestialEquatorMollweide(celestialEquatorMoll);
+      celestialEquatorMoll.material.opacity = opacity;
     }
+    celestialEquatorTrue.material.opacity = opacity;
+    celestialEquatorGlobe.material.opacity = opacity;
   } else {
     if (celestialEquatorTrue) { trueCoordinatesMap.scene.remove(celestialEquatorTrue); celestialEquatorTrue.geometry.dispose(); celestialEquatorTrue.material.dispose(); celestialEquatorTrue = null; }
     if (celestialEquatorGlobe) { globeMap.scene.remove(celestialEquatorGlobe); celestialEquatorGlobe.geometry.dispose(); celestialEquatorGlobe.material.dispose(); celestialEquatorGlobe = null; }
@@ -661,6 +695,9 @@ class MapManager {
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+    this.starOpacity = 1.0;
+    this.connectionOpacity = 0.5;
+    this.labelOpacity = 1.0;
     if (mapType === 'Mollweide') {
       const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
       // Use a larger frustum so the entire Mollweide projection fits on screen
@@ -716,6 +753,7 @@ class MapManager {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
     this.labelManager = new LabelManager(mapType, this.scene);
+    this.labelManager.setLabelOpacity(this.labelOpacity);
     this.starGroup = new THREE.Group();
     this.scene.add(this.starGroup);
     this.debouncedResize = debounce(() => this.onResize(), 200);
@@ -747,7 +785,7 @@ class MapManager {
       const material = new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 1.0,
+        opacity: this.starOpacity,
         vertexColors: true
       });
       this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
@@ -789,7 +827,7 @@ class MapManager {
     if (window.requestRender) window.requestRender();
   }
 
-  updateConnections(stars, connectionObjs) {
+  updateConnections(stars, connectionObjs, opacity = 0.5) {
     if (this.connectionGroup) {
       this.scene.remove(this.connectionGroup);
       this.connectionGroup = null;
@@ -797,13 +835,13 @@ class MapManager {
     if (!connectionObjs || connectionObjs.length === 0) return;
     this.connectionGroup = new THREE.Group();
     if (this.mapType === 'Globe') {
-      const linesArray = createConnectionLines(stars, connectionObjs, 'Globe');
+      const linesArray = createConnectionLines(stars, connectionObjs, 'Globe', opacity);
       linesArray.forEach(line => this.connectionGroup.add(line));
     } else if (this.mapType === 'Mollweide') {
-      const merged = createMollweideConnectionSegments(connectionObjs);
+      const merged = createMollweideConnectionSegments(connectionObjs, opacity);
       this.connectionGroup.add(merged);
     } else {
-      const merged = mergeConnectionLines(connectionObjs, this.mapType);
+      const merged = mergeConnectionLines(connectionObjs, this.mapType, opacity);
       this.connectionGroup.add(merged);
     }
     this.scene.add(this.connectionGroup);
@@ -816,14 +854,39 @@ class MapManager {
       const segs = this.connectionGroup.children[0];
       if (segs) updateMollweideConnectionSegments(segs);
     } else {
-      this.updateConnections(stars, connectionObjs);
+      this.updateConnections(stars, connectionObjs, this.connectionOpacity);
     }
     if (window.requestRender) window.requestRender();
   }
 
+  setStarOpacity(opacity) {
+    this.starOpacity = opacity;
+    if (this.instancedMesh) {
+      this.instancedMesh.material.opacity = opacity;
+      this.instancedMesh.material.needsUpdate = true;
+    }
+  }
+
+  setConnectionOpacity(opacity) {
+    this.connectionOpacity = opacity;
+    if (this.connectionGroup) {
+      this.connectionGroup.traverse(obj => {
+        if (obj.material) {
+          obj.material.opacity = opacity;
+          obj.material.needsUpdate = true;
+        }
+      });
+    }
+  }
+
+  setLabelOpacity(opacity) {
+    this.labelOpacity = opacity;
+    this.labelManager.setLabelOpacity(opacity);
+  }
+
   updateMap(stars, connectionObjs) {
     this.addStars(stars);
-    this.updateConnections(stars, connectionObjs);
+    this.updateConnections(stars, connectionObjs, this.connectionOpacity);
   }
 
   onResize() {

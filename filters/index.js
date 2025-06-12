@@ -15,6 +15,7 @@ import { applyDistanceFilter } from './distanceFilter.js';
 // Import the new Isolation and Density Filter modules.
 import { initIsolationFilter, updateIsolationFilter } from './isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './densityFilter.js';
+import { bindAdditionalOpacitySliders } from '../ui/filterUI.js';
 
 let filterForm = null;
 let isolationOverlay = null;
@@ -52,6 +53,7 @@ export async function setupFilterUI(allStars) {
   addConstellationsFieldset();
   addGlobeSurfaceFieldset();
   addPlanesFieldset();
+  bindAdditionalOpacitySliders();
   // Clouds fieldset is added in the UI file.
   await loadConstellationBoundaries();
   await loadConstellationCenters();
@@ -111,6 +113,68 @@ function addConstellationsFieldset() {
   overlayDiv.appendChild(overlayChk);
   overlayDiv.appendChild(overlayLbl);
   contentDiv.appendChild(overlayDiv);
+
+  const lineOpDiv = document.createElement('div');
+  lineOpDiv.classList.add('filter-item');
+  const lineOpLabel = document.createElement('label');
+  lineOpLabel.htmlFor = 'constellation-line-opacity-slider';
+  lineOpLabel.textContent = 'Line Opacity:';
+  const lineOpSlider = document.createElement('input');
+  lineOpSlider.type = 'range';
+  lineOpSlider.id = 'constellation-line-opacity-slider';
+  lineOpSlider.name = 'constellation-line-opacity';
+  lineOpSlider.min = '0';
+  lineOpSlider.max = '100';
+  lineOpSlider.value = '40';
+  lineOpSlider.step = '1';
+  const lineOpNumber = document.createElement('input');
+  lineOpNumber.type = 'number';
+  lineOpNumber.id = 'constellation-line-opacity-number';
+  lineOpNumber.name = 'constellation-line-opacity';
+  lineOpNumber.min = '0';
+  lineOpNumber.max = '100';
+  lineOpNumber.value = '40';
+  lineOpNumber.step = '1';
+  const lineOpSpan = document.createElement('span');
+  lineOpSpan.id = 'constellation-line-opacity-value';
+  lineOpSpan.textContent = '40';
+  lineOpDiv.appendChild(lineOpLabel);
+  lineOpDiv.appendChild(lineOpSlider);
+  lineOpDiv.appendChild(lineOpNumber);
+  lineOpDiv.appendChild(lineOpSpan);
+  lineOpDiv.appendChild(document.createTextNode('%'));
+  contentDiv.appendChild(lineOpDiv);
+
+  const nameOpDiv = document.createElement('div');
+  nameOpDiv.classList.add('filter-item');
+  const nameOpLabel = document.createElement('label');
+  nameOpLabel.htmlFor = 'constellation-name-opacity-slider';
+  nameOpLabel.textContent = 'Name Opacity:';
+  const nameOpSlider = document.createElement('input');
+  nameOpSlider.type = 'range';
+  nameOpSlider.id = 'constellation-name-opacity-slider';
+  nameOpSlider.name = 'constellation-name-opacity';
+  nameOpSlider.min = '0';
+  nameOpSlider.max = '100';
+  nameOpSlider.value = '80';
+  nameOpSlider.step = '1';
+  const nameOpNumber = document.createElement('input');
+  nameOpNumber.type = 'number';
+  nameOpNumber.id = 'constellation-name-opacity-number';
+  nameOpNumber.name = 'constellation-name-opacity';
+  nameOpNumber.min = '0';
+  nameOpNumber.max = '100';
+  nameOpNumber.value = '80';
+  nameOpNumber.step = '1';
+  const nameOpSpan = document.createElement('span');
+  nameOpSpan.id = 'constellation-name-opacity-value';
+  nameOpSpan.textContent = '80';
+  nameOpDiv.appendChild(nameOpLabel);
+  nameOpDiv.appendChild(nameOpSlider);
+  nameOpDiv.appendChild(nameOpNumber);
+  nameOpDiv.appendChild(nameOpSpan);
+  nameOpDiv.appendChild(document.createTextNode('%'));
+  contentDiv.appendChild(nameOpDiv);
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
@@ -206,6 +270,37 @@ function addPlanesFieldset() {
   eqDiv.appendChild(eqLbl);
   contentDiv.appendChild(eqDiv);
 
+  const planeOpDiv = document.createElement('div');
+  planeOpDiv.classList.add('filter-item');
+  const planeOpLabel = document.createElement('label');
+  planeOpLabel.htmlFor = 'plane-opacity-slider';
+  planeOpLabel.textContent = 'Plane Opacity:';
+  const planeOpSlider = document.createElement('input');
+  planeOpSlider.type = 'range';
+  planeOpSlider.id = 'plane-opacity-slider';
+  planeOpSlider.name = 'plane-opacity';
+  planeOpSlider.min = '0';
+  planeOpSlider.max = '100';
+  planeOpSlider.value = '50';
+  planeOpSlider.step = '1';
+  const planeOpNumber = document.createElement('input');
+  planeOpNumber.type = 'number';
+  planeOpNumber.id = 'plane-opacity-number';
+  planeOpNumber.name = 'plane-opacity';
+  planeOpNumber.min = '0';
+  planeOpNumber.max = '100';
+  planeOpNumber.value = '50';
+  planeOpNumber.step = '1';
+  const planeOpSpan = document.createElement('span');
+  planeOpSpan.id = 'plane-opacity-value';
+  planeOpSpan.textContent = '50';
+  planeOpDiv.appendChild(planeOpLabel);
+  planeOpDiv.appendChild(planeOpSlider);
+  planeOpDiv.appendChild(planeOpNumber);
+  planeOpDiv.appendChild(planeOpSpan);
+  planeOpDiv.appendChild(document.createTextNode('%'));
+  contentDiv.appendChild(planeOpDiv);
+
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
@@ -236,6 +331,12 @@ export function applyFilters(allStars) {
         densityTolerance: 0,
         densityOpacity: 100,
         cloudOpacity: 100,
+        starOpacity: 100,
+        starNameOpacity: 100,
+        connectionOpacity: 50,
+        constellationLineOpacity: 40,
+        constellationNameOpacity: 80,
+        planeOpacity: 50,
         enableIsolationLabeling: false,
         enableDensityLabeling: false,
         minDistance: 0,
@@ -277,6 +378,12 @@ export function applyFilters(allStars) {
     densityGridSize: parseFloat(formData.get('density-grid-size')) || 1,
     densityOpacity: parseFloat(formData.get('density-opacity')) || 100,
     cloudOpacity: parseFloat(formData.get('cloud-opacity')) || 100,
+    starOpacity: parseFloat(formData.get('star-opacity')) || 100,
+    starNameOpacity: parseFloat(formData.get('star-name-opacity')) || 100,
+    connectionOpacity: parseFloat(formData.get('connection-opacity')) || 50,
+    constellationLineOpacity: parseFloat(formData.get('constellation-line-opacity')) || 40,
+    constellationNameOpacity: parseFloat(formData.get('constellation-name-opacity')) || 80,
+    planeOpacity: parseFloat(formData.get('plane-opacity')) || 50,
     showClouds: (formData.getAll('dust-clouds').length > 0),
     showGalacticPlane: (formData.get('show-galactic-plane') !== null),
     showEclipticPlane: (formData.get('show-ecliptic-plane') !== null),
@@ -434,6 +541,12 @@ export function applyFilters(allStars) {
     densityGridSize: filters.densityGridSize,
     densityOpacity: filters.densityOpacity,
     cloudOpacity: filters.cloudOpacity,
+    starOpacity: filters.starOpacity,
+    starNameOpacity: filters.starNameOpacity,
+    connectionOpacity: filters.connectionOpacity,
+    constellationLineOpacity: filters.constellationLineOpacity,
+    constellationNameOpacity: filters.constellationNameOpacity,
+    planeOpacity: filters.planeOpacity,
     showClouds: filters.showClouds,
     showGalacticPlane: filters.showGalacticPlane,
     showEclipticPlane: filters.showEclipticPlane,
