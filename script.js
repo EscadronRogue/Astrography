@@ -1174,6 +1174,95 @@ function setupExportControls() {
   });
 }
 
+function downloadLabelEdits() {
+  const edits = {
+    starOffsets: Array.from(starLabelOffsets.entries()),
+    starRotations: Array.from(starLabelRotations.entries()),
+    starScales: Array.from(starLabelScales.entries()),
+    constellationOffsets: Array.from(constellationLabelOffsets.entries()),
+    galacticOffsets: Array.from(galacticLabelOffsets.entries())
+  };
+  const blob = new Blob([JSON.stringify(edits, null, 2)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'label-edits.json';
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function applyLabelEdits(edits) {
+  if (!edits) return;
+  if (edits.starOffsets) {
+    starLabelOffsets.clear();
+    edits.starOffsets.forEach(([id, off]) => starLabelOffsets.set(id, off));
+  }
+  if (edits.starRotations) {
+    starLabelRotations.clear();
+    edits.starRotations.forEach(([id, rot]) => starLabelRotations.set(id, rot));
+  }
+  if (edits.starScales) {
+    starLabelScales.clear();
+    edits.starScales.forEach(([id, sc]) => starLabelScales.set(id, sc));
+  }
+  if (edits.constellationOffsets) {
+    constellationLabelOffsets.clear();
+    edits.constellationOffsets.forEach(([id, off]) => constellationLabelOffsets.set(id, off));
+  }
+  if (edits.galacticOffsets) {
+    galacticLabelOffsets.clear();
+    edits.galacticOffsets.forEach(([id, off]) => galacticLabelOffsets.set(id, off));
+  }
+
+  if (cachedStars) {
+    cachedStars.forEach(star => {
+      const id = getStarId(star);
+      if (starLabelOffsets.has(id)) {
+        const off = starLabelOffsets.get(id);
+        star.mollLabelOffset = new THREE.Vector3(off.x, off.y, 0);
+      } else {
+        delete star.mollLabelOffset;
+      }
+      if (starLabelRotations.has(id)) {
+        star.mollLabelRotation = starLabelRotations.get(id);
+      } else {
+        delete star.mollLabelRotation;
+      }
+      if (starLabelScales.has(id)) {
+        const sc = starLabelScales.get(id);
+        star.mollLabelScale = new THREE.Vector3(sc.x, sc.y, 1);
+      } else {
+        delete star.mollLabelScale;
+      }
+    });
+  }
+  buildAndApplyFilters();
+  maybeSavePresets();
+}
+
+function setupEditIOControls() {
+  const dlBtn = document.getElementById('download-edits');
+  if (dlBtn) {
+    dlBtn.addEventListener('click', downloadLabelEdits);
+  }
+  const upBtn = document.getElementById('upload-edits');
+  const fileInput = document.getElementById('upload-edits-input');
+  if (upBtn && fileInput) {
+    upBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        applyLabelEdits(data);
+      } catch {
+        alert('Invalid edits file');
+      }
+      fileInput.value = '';
+    });
+  }
+}
+
 function getPointerPos(event) {
   const rect = mollweideMap.canvas.getBoundingClientRect();
   editPointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
@@ -1252,10 +1341,13 @@ function registerMollweideEditableLabels() {
       return new THREE.Vector3(p.x, p.y, 0);
     };
     editableLabels.push(sprite);
+    const anchor = sprite.userData.anchorFunc();
+    sprite.position.copy(anchor);
     if (constellationLabelOffsets.has(sprite.userData.name)) {
       const off = constellationLabelOffsets.get(sprite.userData.name);
-      sprite.position.add(new THREE.Vector3(off.x, off.y, 0));
-      sprite.userData.offset = new THREE.Vector3(off.x, off.y, 0);
+      const offsetVec = new THREE.Vector3(off.x, off.y, 0);
+      sprite.position.add(offsetVec);
+      sprite.userData.offset = offsetVec.clone();
     }
     if (starLabelRotations.has(sprite.userData.name)) {
       const rot = starLabelRotations.get(sprite.userData.name);
@@ -1275,10 +1367,13 @@ function registerMollweideEditableLabels() {
       return new THREE.Vector3(p.x, p.y, 0);
     };
     editableLabels.push(sprite);
+    const gAnchor = sprite.userData.anchorFunc();
+    sprite.position.copy(gAnchor);
     if (galacticLabelOffsets.has(sprite.userData.name)) {
       const off = galacticLabelOffsets.get(sprite.userData.name);
-      sprite.position.add(new THREE.Vector3(off.x, off.y, 0));
-      sprite.userData.offset = new THREE.Vector3(off.x, off.y, 0);
+      const offsetVec = new THREE.Vector3(off.x, off.y, 0);
+      sprite.position.add(offsetVec);
+      sprite.userData.offset = offsetVec.clone();
     }
     if (starLabelRotations.has(sprite.userData.name)) {
       const rot = starLabelRotations.get(sprite.userData.name);
@@ -1743,6 +1838,7 @@ async function main() {
     setupLabelEditor();
     setupLineEditor();
     setupUndoButton();
+    setupEditIOControls();
     setupEditOverlay();
     requestRender();
     loader.classList.add('hidden');
