@@ -40,6 +40,9 @@ export class LabelManager {
     this.mapType = mapType;
     this.scene = scene;
 
+    // Global opacity applied to star labels
+    this.labelOpacity = 1.0;
+
     // Keep references to label meshes (sprites or planes) and connecting lines
     this.sprites = new Map();
     this.lines = new Map();
@@ -120,7 +123,7 @@ export class LabelManager {
           (canvas.width / 100) * scaleFactor,
           (canvas.height / 100) * scaleFactor
         );
-        const material = getDoubleSidedLabelMaterial(texture);
+        const material = getDoubleSidedLabelMaterial(texture, this.labelOpacity);
         labelObj = new THREE.Mesh(planeGeom, material);
         labelObj.renderOrder = 1;
       } else {
@@ -129,6 +132,7 @@ export class LabelManager {
           depthWrite: true,
           depthTest: true,
           transparent: true,
+          opacity: this.labelOpacity,
         });
         labelObj = new THREE.Sprite(spriteMaterial);
         labelObj.scale.set(
@@ -313,5 +317,17 @@ export class LabelManager {
     this.sprites.clear();
     this.lines.clear();
     this.labelCache.clear();
+  }
+
+  setLabelOpacity(opacity) {
+    this.labelOpacity = opacity;
+    this.sprites.forEach(sprite => {
+      if (sprite.material.uniforms && sprite.material.uniforms.opacity) {
+        sprite.material.uniforms.opacity.value = opacity;
+      } else if (sprite.material.opacity !== undefined) {
+        sprite.material.opacity = opacity;
+      }
+      sprite.material.needsUpdate = true;
+    });
   }
 }

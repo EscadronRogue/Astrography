@@ -419,6 +419,7 @@ async function buildAndApplyFilters() {
     showClouds,
     cloudOpacity,
     starOpacity,
+    starNameOpacity,
     connectionOpacity,
     constellationLineOpacity,
     constellationNameOpacity,
@@ -465,6 +466,9 @@ async function buildAndApplyFilters() {
   trueCoordinatesMap.setStarOpacity(starOpacity / 100);
   globeMap.setStarOpacity(starOpacity / 100);
   mollweideMap.setStarOpacity(starOpacity / 100);
+  trueCoordinatesMap.setLabelOpacity(starNameOpacity / 100);
+  globeMap.setLabelOpacity(starNameOpacity / 100);
+  mollweideMap.setLabelOpacity(starNameOpacity / 100);
   trueCoordinatesMap.setConnectionOpacity(connectionOpacity / 100);
   globeMap.setConnectionOpacity(connectionOpacity / 100);
   mollweideMap.setConnectionOpacity(connectionOpacity / 100);
@@ -689,6 +693,7 @@ class MapManager {
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
     this.starOpacity = 1.0;
     this.connectionOpacity = 0.5;
+    this.labelOpacity = 1.0;
     if (mapType === 'Mollweide') {
       const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
       // Use a larger frustum so the entire Mollweide projection fits on screen
@@ -744,6 +749,7 @@ class MapManager {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
     this.labelManager = new LabelManager(mapType, this.scene);
+    this.labelManager.setLabelOpacity(this.labelOpacity);
     this.starGroup = new THREE.Group();
     this.scene.add(this.starGroup);
     this.debouncedResize = debounce(() => this.onResize(), 200);
@@ -867,6 +873,11 @@ class MapManager {
         }
       });
     }
+  }
+
+  setLabelOpacity(opacity) {
+    this.labelOpacity = opacity;
+    this.labelManager.setLabelOpacity(opacity);
   }
 
   updateMap(stars, connectionObjs) {

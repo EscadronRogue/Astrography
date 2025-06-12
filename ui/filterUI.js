@@ -83,6 +83,8 @@ export function initFilterUI() {
   const densityOpacityNumber = document.getElementById('density-opacity-number');
   const starOpacitySlider = document.getElementById('star-opacity-slider');
   const starOpacityNumber = document.getElementById('star-opacity-number');
+  const starNameOpacitySlider = document.getElementById('star-name-opacity-slider');
+  const starNameOpacityNumber = document.getElementById('star-name-opacity-number');
   const constLineOpacitySlider = document.getElementById('constellation-line-opacity-slider');
   const constLineOpacityNumber = document.getElementById('constellation-line-opacity-number');
   const constNameOpacitySlider = document.getElementById('constellation-name-opacity-slider');
@@ -152,6 +154,14 @@ export function initFilterUI() {
   starOpacityNumber.addEventListener('input', function () {
     starOpacitySlider.value = this.value;
     document.getElementById('star-opacity-value').textContent = this.value;
+  });
+  starNameOpacitySlider.addEventListener('input', function () {
+    starNameOpacityNumber.value = this.value;
+    document.getElementById('star-name-opacity-value').textContent = this.value;
+  });
+  starNameOpacityNumber.addEventListener('input', function () {
+    starNameOpacitySlider.value = this.value;
+    document.getElementById('star-name-opacity-value').textContent = this.value;
   });
 
   constLineOpacitySlider.addEventListener('input', function () {
