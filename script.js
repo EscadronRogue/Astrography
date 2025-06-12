@@ -11,6 +11,7 @@ import {
   updateCloudsOverlay,
   updateMollweideCloudSegments
 } from './filters/cloudsFilter.js';
+import { initCloudDensityFilter, updateCloudDensityFilter, loadCloudPoints } from './filters/cloudDensityFilter.js';
 import {
   createGalacticPlaneMesh,
   createEclipticPlaneMesh,
@@ -58,6 +59,7 @@ let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
 let isolationOverlay = null;
 let densityOverlay = null;
+let cloudDensityOverlay = null;
 let galacticPlaneTrue = null;
 let eclipticPlaneTrue = null;
 let celestialEquatorTrue = null;
@@ -209,6 +211,14 @@ function getStarId(star) {
     star.HD ||
     `${star.RA_in_degrees}_${star.DEC_in_degrees}`
   );
+}
+
+function computeGridSize(sliderValue) {
+  if (sliderValue >= 0) {
+    return 2 + sliderValue;
+  } else {
+    return 2 / (Math.abs(sliderValue) + 1);
+  }
 }
 
 function getStarTruePosition(star) {
@@ -416,7 +426,14 @@ async function buildAndApplyFilters() {
     maxDistance,
     isolationGridSize,
     densityGridSize,
+    cloudDensity,
+    cloudDensityTopPercent,
+    cloudDensityBottomPercent,
+    cloudDensityTolerance,
+    cloudDensityGridSize,
+    cloudDensityOpacity,
     showClouds,
+    cloudFiles,
     cloudOpacity,
     starOpacity,
     starNameOpacity,
@@ -521,16 +538,49 @@ async function buildAndApplyFilters() {
   // --- Dust Clouds Overlay ---
   if (showClouds) {
     const form = document.getElementById('filters-form');
-    // Get the file paths from the checked dust cloud checkboxes.
-    const cloudDataFiles = new FormData(form).getAll('dust-clouds');
+    const cloudDataFiles = cloudFiles;
     // Use the complete star list (cachedStars) so that the clouds overlay ignores the distance filter.
     await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles, cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, cloudOpacity / 100);
+
+    const cloudPoints = await loadCloudPoints(cloudDataFiles);
+    const gridSize = computeGridSize(cloudDensityGridSize);
+    if (!cloudDensityOverlay ||
+        cloudDensityOverlay.minDistance !== parseFloat(minDistance) ||
+        cloudDensityOverlay.maxDistance !== parseFloat(maxDistance) ||
+        cloudDensityOverlay.gridSize !== gridSize) {
+      if (cloudDensityOverlay) {
+        cloudDensityOverlay.cubesData.forEach(c => {
+          trueCoordinatesMap.scene.remove(c.tcMesh);
+        });
+        cloudDensityOverlay.adjacentLines.forEach(o => {
+          globeMap.scene.remove(o.line);
+          mollweideMap.scene.remove(o.lineM);
+        });
+      }
+      cloudDensityOverlay = initCloudDensityFilter(minDistance, maxDistance, gridSize);
+      cloudDensityOverlay.cubesData.forEach(c => trueCoordinatesMap.scene.add(c.tcMesh));
+      cloudDensityOverlay.adjacentLines.forEach(o => {
+        globeMap.scene.add(o.line);
+        mollweideMap.scene.add(o.lineM);
+      });
+    }
+    updateCloudDensityFilter(cloudPoints, cloudDensityOverlay, trueCoordinatesMap.scene, globeMap.scene, mollweideMap.scene);
   } else {
     await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', [], cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', [], cloudOpacity / 100);
+    if (cloudDensityOverlay) {
+      cloudDensityOverlay.cubesData.forEach(c => {
+        trueCoordinatesMap.scene.remove(c.tcMesh);
+      });
+      cloudDensityOverlay.adjacentLines.forEach(o => {
+        globeMap.scene.remove(o.line);
+        mollweideMap.scene.remove(o.lineM);
+      });
+      cloudDensityOverlay = null;
+    }
   }
 
   applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator, planeOpacity / 100);
@@ -1110,6 +1160,11 @@ async function updateMollweideView() {
       densityOverlay.refreshMollweide();
     }
   }
+  if (showCloudsFlag && cloudDensityOverlay) {
+    if (typeof cloudDensityOverlay.refreshMollweide === 'function') {
+      cloudDensityOverlay.refreshMollweide();
+    }
+  }
   if (showGalacticPlaneFlag && galacticPlaneMoll) {
     updateGalacticPlaneMollweide(galacticPlaneMoll);
     if (galacticDirectionLabelsMoll.length > 0) {
@@ -1303,6 +1358,9 @@ function registerMollweideEditableLines() {
   constellationLinesMoll.forEach(l => editableLines.push(l));
   if (densityOverlay && densityOverlay.adjacentLines) {
     densityOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
+  }
+  if (cloudDensityOverlay && cloudDensityOverlay.adjacentLines) {
+    cloudDensityOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
   }
   if (isolationOverlay && isolationOverlay.adjacentLines) {
     isolationOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));

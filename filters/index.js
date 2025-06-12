@@ -15,11 +15,13 @@ import { applyDistanceFilter } from './distanceFilter.js';
 // Import the new Isolation and Density Filter modules.
 import { initIsolationFilter, updateIsolationFilter } from './isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './densityFilter.js';
+import { initCloudDensityFilter, updateCloudDensityFilter, loadCloudPoints } from './cloudDensityFilter.js';
 import { bindAdditionalOpacitySliders } from '../ui/filterUI.js';
 
 let filterForm = null;
 let isolationOverlay = null;
 let densityOverlay = null;
+let cloudDensityOverlay = null;
 
 // Helper to compute a grid size from the isolationGridSize slider value.
 function computeIsolationGridSize(sliderValue) {
@@ -377,6 +379,12 @@ export function applyFilters(allStars) {
     isolationGridSize: parseFloat(formData.get('isolation-grid-size')) || 1,
     densityGridSize: parseFloat(formData.get('density-grid-size')) || 1,
     densityOpacity: parseFloat(formData.get('density-opacity')) || 100,
+    cloudDensity: parseFloat(formData.get('cloud-density')) || 10,
+    cloudDensityTopPercent: parseFloat(formData.get('cloud-density-top-percent')) || 10,
+    cloudDensityBottomPercent: parseFloat(formData.get('cloud-density-bottom-percent')) || 10,
+    cloudDensityTolerance: parseInt(formData.get('cloud-density-tolerance')) || 0,
+    cloudDensityGridSize: parseFloat(formData.get('cloud-density-grid-size')) || 1,
+    cloudDensityOpacity: parseFloat(formData.get('cloud-density-opacity')) || 100,
     cloudOpacity: parseFloat(formData.get('cloud-opacity')) || 100,
     starOpacity: parseFloat(formData.get('star-opacity')) || 100,
     starNameOpacity: parseFloat(formData.get('star-name-opacity')) || 100,
@@ -385,6 +393,7 @@ export function applyFilters(allStars) {
     constellationNameOpacity: parseFloat(formData.get('constellation-name-opacity')) || 80,
     planeOpacity: parseFloat(formData.get('plane-opacity')) || 50,
     showClouds: (formData.getAll('dust-clouds').length > 0),
+    cloudFiles: formData.getAll('dust-clouds'),
     showGalacticPlane: (formData.get('show-galactic-plane') !== null),
     showEclipticPlane: (formData.get('show-ecliptic-plane') !== null),
     showCelestialEquator: (formData.get('show-celestial-equator') !== null)
@@ -540,6 +549,12 @@ export function applyFilters(allStars) {
     isolationGridSize: filters.isolationGridSize,
     densityGridSize: filters.densityGridSize,
     densityOpacity: filters.densityOpacity,
+    cloudDensity: filters.cloudDensity,
+    cloudDensityTopPercent: filters.cloudDensityTopPercent,
+    cloudDensityBottomPercent: filters.cloudDensityBottomPercent,
+    cloudDensityTolerance: filters.cloudDensityTolerance,
+    cloudDensityGridSize: filters.cloudDensityGridSize,
+    cloudDensityOpacity: filters.cloudDensityOpacity,
     cloudOpacity: filters.cloudOpacity,
     starOpacity: filters.starOpacity,
     starNameOpacity: filters.starNameOpacity,
@@ -548,11 +563,13 @@ export function applyFilters(allStars) {
     constellationNameOpacity: filters.constellationNameOpacity,
     planeOpacity: filters.planeOpacity,
     showClouds: filters.showClouds,
+    cloudFiles: filters.cloudFiles,
     showGalacticPlane: filters.showGalacticPlane,
     showEclipticPlane: filters.showEclipticPlane,
     showCelestialEquator: filters.showCelestialEquator,
     isolationOverlay,
-    densityOverlay
+    densityOverlay,
+    cloudDensityOverlay
   };
 }
 
