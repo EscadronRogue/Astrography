@@ -1,5 +1,6 @@
 // /filters/index.js
 
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { loadStellarClassData } from './stellarClassData.js';
 import { applySizeFilter } from './sizeFilter.js';
 import { applyColorFilter } from './colorFilter.js';
@@ -15,11 +16,14 @@ import { applyDistanceFilter } from './distanceFilter.js';
 // Import the new Isolation and Density Filter modules.
 import { initIsolationFilter, updateIsolationFilter } from './isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './densityFilter.js';
+import { initCloudDensityFilter, updateCloudDensityFilter } from './cloudDensityFilter.js';
+import { uniqueColorFromName } from './cloudsFilter.js';
 import { bindAdditionalOpacitySliders } from '../ui/filterUI.js';
 
 let filterForm = null;
 let isolationOverlay = null;
 let densityOverlay = null;
+let cloudDensityOverlay = null;
 
 // Helper to compute a grid size from the isolationGridSize slider value.
 function computeIsolationGridSize(sliderValue) {
@@ -305,7 +309,7 @@ function addPlanesFieldset() {
   filterForm.appendChild(fs);
 }
 
-export function applyFilters(allStars) {
+export async function applyFilters(allStars) {
   if (!filterForm) {
     filterForm = document.getElementById('filters-form');
     if (!filterForm) {
@@ -330,6 +334,11 @@ export function applyFilters(allStars) {
         densityBottomPercent: 10,
         densityTolerance: 0,
         densityOpacity: 100,
+        enableCloudDensityFilter: false,
+        cloudDensity: 10,
+        cloudDensityTopPercent: 10,
+        cloudDensityGridSize: 1,
+        cloudDensityOpacity: 100,
         cloudOpacity: 100,
         starOpacity: 100,
         starNameOpacity: 100,
@@ -375,9 +384,14 @@ export function applyFilters(allStars) {
     minDistance: formData.get('min-distance'),
     maxDistance: formData.get('max-distance'),
     isolationGridSize: parseFloat(formData.get('isolation-grid-size')) || 1,
-    densityGridSize: parseFloat(formData.get('density-grid-size')) || 1,
-    densityOpacity: parseFloat(formData.get('density-opacity')) || 100,
-    cloudOpacity: parseFloat(formData.get('cloud-opacity')) || 100,
+   densityGridSize: parseFloat(formData.get('density-grid-size')) || 1,
+   densityOpacity: parseFloat(formData.get('density-opacity')) || 100,
+    enableCloudDensityFilter: (formData.get('enable-cloud-density-filter') !== null),
+    cloudDensity: parseFloat(formData.get('cloud-density')) || 10,
+    cloudDensityTopPercent: parseFloat(formData.get('cloud-density-top-percent')) || 10,
+    cloudDensityGridSize: parseFloat(formData.get('cloud-density-grid-size')) || 1,
+    cloudDensityOpacity: parseFloat(formData.get('cloud-density-opacity')) || 100,
+   cloudOpacity: parseFloat(formData.get('cloud-opacity')) || 100,
     starOpacity: parseFloat(formData.get('star-opacity')) || 100,
     starNameOpacity: parseFloat(formData.get('star-name-opacity')) || 100,
     connectionOpacity: parseFloat(formData.get('connection-opacity')) || 50,
@@ -513,6 +527,77 @@ export function applyFilters(allStars) {
     }
   }
 
+  // --- Cloud Density Filter Handling ---
+  if (filters.enableCloudDensityFilter) {
+    const gridSize = computeIsolationGridSize(filters.cloudDensityGridSize);
+    if (
+      !cloudDensityOverlay ||
+      cloudDensityOverlay.minDistance !== parseFloat(filters.minDistance) ||
+      cloudDensityOverlay.maxDistance !== parseFloat(filters.maxDistance) ||
+      cloudDensityOverlay.gridSize !== gridSize
+    ) {
+      if (cloudDensityOverlay) {
+        cloudDensityOverlay.cubesData.forEach(cell => {
+          window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        });
+        cloudDensityOverlay.adjacentLines.forEach(obj => {
+          window.globeMap.scene.remove(obj.line);
+          window.mollweideMap.scene.remove(obj.lineM);
+        });
+      }
+      cloudDensityOverlay = initCloudDensityFilter(filters.minDistance, filters.maxDistance, gridSize);
+      cloudDensityOverlay.cubesData.forEach(cell => {
+        window.trueCoordinatesMap.scene.add(cell.tcMesh);
+      });
+      cloudDensityOverlay.adjacentLines.forEach(obj => {
+        window.globeMap.scene.add(obj.line);
+        window.mollweideMap.scene.add(obj.lineM);
+      });
+    }
+    const form = document.getElementById('filters-form');
+    const checked = new FormData(form).getAll('dust-density-clouds');
+    const cloudMap = new Map();
+    const colorMap = new Map();
+    for (const file of checked) {
+      const data = await fetch(file).then(r=>r.json()).catch(()=>[]);
+      const name = file.split('/').pop().replace('_cloud_data.json','').replace('_',' ');
+      const points = data.map(d => {
+        const ra = d.RA * Math.PI/180;
+        const dec = d.DEC * Math.PI/180;
+        const dist = (d['d (pc)']||0)*3.26156;
+        return new THREE.Vector3(
+          -dist*Math.cos(dec)*Math.cos(ra),
+           dist*Math.sin(dec),
+          -dist*Math.cos(dec)*Math.sin(ra)
+        );
+      });
+      cloudMap.set(name, points);
+      const color = uniqueColorFromName(name);
+      colorMap.set(name, color);
+    }
+    updateCloudDensityFilter(
+      cloudDensityOverlay,
+      cloudMap,
+      window.trueCoordinatesMap.scene,
+      window.globeMap.scene,
+      window.mollweideMap.scene,
+      filters.cloudDensityTopPercent,
+      filters.cloudDensity,
+      colorMap
+    );
+  } else {
+    if (cloudDensityOverlay) {
+      cloudDensityOverlay.cubesData.forEach(cell => {
+        window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+      });
+      cloudDensityOverlay.adjacentLines.forEach(obj => {
+        window.globeMap.scene.remove(obj.line);
+        window.mollweideMap.scene.remove(obj.lineM);
+      });
+      cloudDensityOverlay = null;
+    }
+  }
+
   return {
     filteredStars,
     connections: pairs,
@@ -540,6 +625,11 @@ export function applyFilters(allStars) {
     isolationGridSize: filters.isolationGridSize,
     densityGridSize: filters.densityGridSize,
     densityOpacity: filters.densityOpacity,
+    enableCloudDensityFilter: filters.enableCloudDensityFilter,
+    cloudDensity: filters.cloudDensity,
+    cloudDensityTopPercent: filters.cloudDensityTopPercent,
+    cloudDensityGridSize: filters.cloudDensityGridSize,
+    cloudDensityOpacity: filters.cloudDensityOpacity,
     cloudOpacity: filters.cloudOpacity,
     starOpacity: filters.starOpacity,
     starNameOpacity: filters.starNameOpacity,
@@ -552,7 +642,8 @@ export function applyFilters(allStars) {
     showEclipticPlane: filters.showEclipticPlane,
     showCelestialEquator: filters.showCelestialEquator,
     isolationOverlay,
-    densityOverlay
+    densityOverlay,
+    cloudDensityOverlay
   };
 }
 

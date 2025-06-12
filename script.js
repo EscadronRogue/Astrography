@@ -58,6 +58,7 @@ let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
 let isolationOverlay = null;
 let densityOverlay = null;
+let cloudDensityOverlay = null;
 let galacticPlaneTrue = null;
 let eclipticPlaneTrue = null;
 let celestialEquatorTrue = null;
@@ -75,6 +76,7 @@ let showConstellationNamesFlag = false;
 let showConstellationOverlayFlag = false;
 let enableIsolationFilterFlag = false;
 let enableDensityFilterFlag = false;
+let enableCloudDensityFilterFlag = false;
 let showCloudsFlag = false;
 let showGalacticPlaneFlag = false;
 let showEclipticPlaneFlag = false;
@@ -391,7 +393,7 @@ function scheduleMollweideUpdate() {
 
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
-  const filters = applyFilters(cachedStars);
+  const filters = await applyFilters(cachedStars);
   const {
     filteredStars,
     connections,
@@ -428,7 +430,13 @@ async function buildAndApplyFilters() {
     showEclipticPlane,
     showCelestialEquator,
     isolationOverlay: returnedIsolationOverlay,
-    densityOverlay: returnedDensityOverlay
+    densityOverlay: returnedDensityOverlay,
+    cloudDensityOverlay: returnedCloudDensityOverlay,
+    enableCloudDensityFilter,
+    cloudDensity,
+    cloudDensityTopPercent,
+    cloudDensityOpacity,
+    cloudDensityGridSize
   } = filters;
 
   showConstellationBoundariesFlag = showConstellationBoundaries;
@@ -436,6 +444,7 @@ async function buildAndApplyFilters() {
   showConstellationOverlayFlag = showConstellationOverlay;
   enableIsolationFilterFlag = enableIsolationFilter;
   enableDensityFilterFlag = enableDensityFilter;
+  enableCloudDensityFilterFlag = enableCloudDensityFilter;
   showCloudsFlag = showClouds;
   showGalacticPlaneFlag = showGalacticPlane;
   showEclipticPlaneFlag = showEclipticPlane;
@@ -444,6 +453,7 @@ async function buildAndApplyFilters() {
   // store overlay references for external refresh calls
   isolationOverlay = returnedIsolationOverlay;
   densityOverlay = returnedDensityOverlay;
+  cloudDensityOverlay = returnedCloudDensityOverlay;
 
   currentFilteredStars = filteredStars;
   currentConnections = connections;
@@ -1110,6 +1120,11 @@ async function updateMollweideView() {
       densityOverlay.refreshMollweide();
     }
   }
+  if (enableCloudDensityFilterFlag && cloudDensityOverlay) {
+    if (typeof cloudDensityOverlay.refreshMollweide === 'function') {
+      cloudDensityOverlay.refreshMollweide();
+    }
+  }
   if (showGalacticPlaneFlag && galacticPlaneMoll) {
     updateGalacticPlaneMollweide(galacticPlaneMoll);
     if (galacticDirectionLabelsMoll.length > 0) {
@@ -1303,6 +1318,9 @@ function registerMollweideEditableLines() {
   constellationLinesMoll.forEach(l => editableLines.push(l));
   if (densityOverlay && densityOverlay.adjacentLines) {
     densityOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
+  }
+  if (cloudDensityOverlay && cloudDensityOverlay.adjacentLines) {
+    cloudDensityOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
   }
   if (isolationOverlay && isolationOverlay.adjacentLines) {
     isolationOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
