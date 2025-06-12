@@ -15,6 +15,7 @@ import { applyDistanceFilter } from './distanceFilter.js';
 // Import the new Isolation and Density Filter modules.
 import { initIsolationFilter, updateIsolationFilter } from './isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './densityFilter.js';
+import { bindAdditionalOpacitySliders } from '../ui/filterUI.js';
 
 let filterForm = null;
 let isolationOverlay = null;
@@ -52,6 +53,7 @@ export async function setupFilterUI(allStars) {
   addConstellationsFieldset();
   addGlobeSurfaceFieldset();
   addPlanesFieldset();
+  bindAdditionalOpacitySliders();
   // Clouds fieldset is added in the UI file.
   await loadConstellationBoundaries();
   await loadConstellationCenters();
