@@ -245,12 +245,14 @@ class CloudDensityGridOverlay {
   update(points, sceneTC, sceneGlobe, sceneMoll) {
     const radiusSlider = document.getElementById('cloud-density-slider');
     const tolSlider = document.getElementById('cloud-density-tolerance-slider');
-    const bottomSlider = document.getElementById('cloud-density-bottom-slider');
     const topSlider = document.getElementById('cloud-density-top-slider');
     const opacitySlider = document.getElementById('cloud-density-opacity-slider');
+    const modeSelect = document.getElementById('cloud-density-display');
+    const displayMode = modeSelect ? modeSelect.value : 'cells';
+    const showCells = displayMode === 'cells';
+    const showLines = displayMode === 'lines';
     const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
     const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
-    const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
     const topPct = topSlider ? parseFloat(topSlider.value) : 10;
     this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
 
@@ -260,11 +262,9 @@ class CloudDensityGridOverlay {
 
     const densities = this.cubesData.map(c => c.density);
     const sorted = densities.slice().sort((a,b) => a - b);
-    const bottomIdx = Math.floor(sorted.length * (bottomPct / 100));
     const topIdx = Math.floor(sorted.length * (1 - topPct / 100));
     const minD = sorted[0];
     const maxD = sorted[sorted.length - 1];
-    const bottomThr = sorted[Math.min(bottomIdx, sorted.length - 1)];
     const topThr = sorted[Math.max(topIdx, 0)];
 
     this.cubesData.forEach(cell => {
@@ -272,12 +272,7 @@ class CloudDensityGridOverlay {
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       let color = new THREE.Color(0xffffff);
       let alpha = 0;
-      if (cell.density <= bottomThr) {
-        const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
-        color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0xffffff), t);
-        alpha = 0.5 * (1 - t);
-        cell.active = true;
-      } else if (cell.density >= topThr) {
+      if (cell.density >= topThr) {
         const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
         const baseRed = new THREE.Color(0xff0000);
         const lightRed = lightenColor(baseRed.clone(), 0.4);
@@ -294,7 +289,7 @@ class CloudDensityGridOverlay {
       cell.tcMesh.material.color.copy(color);
       cell.globeMesh.material.color.copy(color);
       cell.mollweideMesh.material.color.copy(color);
-      cell.tcMesh.visible = cell.active;
+      cell.tcMesh.visible = showCells && cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale, scale, 1);
     });
@@ -302,8 +297,8 @@ class CloudDensityGridOverlay {
     this.adjacentLines.forEach(obj => {
       const { line, lineM, cell1, cell2 } = obj;
       const visible = cell1.active && cell2.active;
-      line.visible = visible;
-      lineM.visible = visible;
+      line.visible = showLines && visible;
+      lineM.visible = showLines && visible;
       if (visible) {
         const c1 = cell1.tcMesh.material.color;
         const c2 = cell2.tcMesh.material.color;

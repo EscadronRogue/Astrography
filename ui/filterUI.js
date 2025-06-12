@@ -366,36 +366,6 @@ function addCloudsFieldset() {
   tolDiv.appendChild(tolSlider);
   contentDiv.appendChild(tolDiv);
 
-  const bottomDiv = document.createElement('div');
-  bottomDiv.classList.add('filter-item');
-  const bottomLabel = document.createElement('label');
-  bottomLabel.htmlFor = 'cloud-density-bottom-slider';
-  bottomLabel.textContent = 'Bottom Cells %:';
-  const bottomSlider = document.createElement('input');
-  bottomSlider.type = 'range';
-  bottomSlider.id = 'cloud-density-bottom-slider';
-  bottomSlider.name = 'cloud-density-bottom-percent';
-  bottomSlider.min = '1';
-  bottomSlider.max = '50';
-  bottomSlider.value = '10';
-  bottomSlider.step = '1';
-  const bottomNumber = document.createElement('input');
-  bottomNumber.type = 'number';
-  bottomNumber.id = 'cloud-density-bottom-number';
-  bottomNumber.name = 'cloud-density-bottom-percent';
-  bottomNumber.min = '1';
-  bottomNumber.max = '50';
-  bottomNumber.value = '10';
-  bottomNumber.step = '1';
-  const bottomSpan = document.createElement('span');
-  bottomSpan.id = 'cloud-density-bottom-value';
-  bottomSpan.textContent = '10';
-  bottomDiv.appendChild(bottomLabel);
-  bottomDiv.appendChild(bottomSlider);
-  bottomDiv.appendChild(bottomNumber);
-  bottomDiv.appendChild(bottomSpan);
-  bottomDiv.appendChild(document.createTextNode('%'));
-  contentDiv.appendChild(bottomDiv);
 
   const topDiv = document.createElement('div');
   topDiv.classList.add('filter-item');
@@ -454,6 +424,26 @@ function addCloudsFieldset() {
   gridDiv.appendChild(gridNumber);
   contentDiv.appendChild(gridDiv);
 
+  const modeDiv = document.createElement('div');
+  modeDiv.classList.add('filter-item');
+  const modeLabel = document.createElement('label');
+  modeLabel.htmlFor = 'cloud-density-display';
+  modeLabel.textContent = 'Overlay Type:';
+  const modeSelect = document.createElement('select');
+  modeSelect.id = 'cloud-density-display';
+  modeSelect.name = 'cloud-density-display';
+  const optCells = document.createElement('option');
+  optCells.value = 'cells';
+  optCells.textContent = 'Cells';
+  const optLines = document.createElement('option');
+  optLines.value = 'lines';
+  optLines.textContent = 'Lines';
+  modeSelect.appendChild(optCells);
+  modeSelect.appendChild(optLines);
+  modeDiv.appendChild(modeLabel);
+  modeDiv.appendChild(modeSelect);
+  contentDiv.appendChild(modeDiv);
+
   const op2Div = document.createElement('div');
   op2Div.classList.add('filter-item');
   const op2Label = document.createElement('label');
@@ -495,14 +485,6 @@ function addCloudsFieldset() {
   });
   tolSlider.addEventListener('input', () => {
     tolVal.textContent = tolSlider.value;
-  });
-  bottomSlider.addEventListener('input', () => {
-    bottomNumber.value = bottomSlider.value;
-    bottomSpan.textContent = bottomSlider.value;
-  });
-  bottomNumber.addEventListener('input', () => {
-    bottomSlider.value = bottomNumber.value;
-    bottomSpan.textContent = bottomNumber.value;
   });
   topSlider.addEventListener('input', () => {
     topNumber.value = topSlider.value;
