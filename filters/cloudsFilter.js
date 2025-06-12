@@ -175,7 +175,7 @@ export async function createCloudOverlay(
  * @param {string} name 
  * @returns {THREE.Color}
  */
-function uniqueColorFromName(name) {
+export function uniqueColorFromName(name) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -190,7 +190,7 @@ function uniqueColorFromName(name) {
  * @param {string} fileUrl 
  * @returns {string} Cloud name.
  */
-function getCloudNameFromFileUrl(fileUrl) {
+export function getCloudNameFromFileUrl(fileUrl) {
   const parts = fileUrl.split('/');
   const filename = parts[parts.length - 1];
   return filename.replace('_cloud_data.json', '').replace('_', ' ');

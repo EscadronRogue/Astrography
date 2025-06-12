@@ -9,7 +9,9 @@ import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.
 import { applyGlobeSurfaceFilter } from './filters/globeSurfaceFilter.js';
 import {
   updateCloudsOverlay,
-  updateMollweideCloudSegments
+  updateMollweideCloudSegments,
+  uniqueColorFromName,
+  getCloudNameFromFileUrl
 } from './filters/cloudsFilter.js';
 import { initCloudDensityFilter, updateCloudDensityFilter, loadCloudPoints } from './filters/cloudDensityFilter.js';
 import {
@@ -59,7 +61,7 @@ let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
 let isolationOverlay = null;
 let densityOverlay = null;
-let cloudDensityOverlay = null;
+let cloudDensityOverlays = {};
 let galacticPlaneTrue = null;
 let eclipticPlaneTrue = null;
 let celestialEquatorTrue = null;
@@ -545,61 +547,59 @@ async function buildAndApplyFilters() {
       await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, cloudOpacity / 100);
       await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', cloudDataFiles, cloudOpacity / 100);
       await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, cloudOpacity / 100);
-      if (cloudDensityOverlay) {
-        cloudDensityOverlay.cubesData.forEach(c => {
-          trueCoordinatesMap.scene.remove(c.tcMesh);
-        });
-        cloudDensityOverlay.adjacentLines.forEach(o => {
-          globeMap.scene.remove(o.line);
-          mollweideMap.scene.remove(o.lineM);
-        });
-        cloudDensityOverlay = null;
-      }
+      Object.values(cloudDensityOverlays).forEach(ov => {
+        ov.cubesData.forEach(c => { trueCoordinatesMap.scene.remove(c.tcMesh); });
+        ov.adjacentLines.forEach(o => { globeMap.scene.remove(o.line); mollweideMap.scene.remove(o.lineM); });
+      });
+      cloudDensityOverlays = {};
     } else {
       // show grid based overlay, remove classic lines
       await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], cloudOpacity / 100);
       await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', [], cloudOpacity / 100);
       await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', [], cloudOpacity / 100);
 
-      const cloudPoints = await loadCloudPoints(cloudDataFiles);
+      const cloudPointsMap = await loadCloudPoints(cloudDataFiles);
       const gridSize = computeGridSize(cloudDensityGridSize);
-      if (!cloudDensityOverlay ||
-          cloudDensityOverlay.minDistance !== parseFloat(minDistance) ||
-          cloudDensityOverlay.maxDistance !== parseFloat(maxDistance) ||
-          cloudDensityOverlay.gridSize !== gridSize) {
-        if (cloudDensityOverlay) {
-          cloudDensityOverlay.cubesData.forEach(c => {
-            trueCoordinatesMap.scene.remove(c.tcMesh);
-          });
-          cloudDensityOverlay.adjacentLines.forEach(o => {
-            globeMap.scene.remove(o.line);
-            mollweideMap.scene.remove(o.lineM);
-          });
+      for (const file of cloudDataFiles) {
+        const points = cloudPointsMap[file] || [];
+        const cloudName = getCloudNameFromFileUrl(file);
+        const color = uniqueColorFromName(cloudName);
+        let overlay = cloudDensityOverlays[file];
+        if (!overlay ||
+            overlay.minDistance !== parseFloat(minDistance) ||
+            overlay.maxDistance !== parseFloat(maxDistance) ||
+            overlay.gridSize !== gridSize) {
+          if (overlay) {
+            overlay.cubesData.forEach(c => { trueCoordinatesMap.scene.remove(c.tcMesh); });
+            overlay.adjacentLines.forEach(o => { globeMap.scene.remove(o.line); mollweideMap.scene.remove(o.lineM); });
+          }
+          overlay = initCloudDensityFilter(minDistance, maxDistance, gridSize, color);
+          overlay.cubesData.forEach(c => trueCoordinatesMap.scene.add(c.tcMesh));
+          overlay.adjacentLines.forEach(o => { globeMap.scene.add(o.line); mollweideMap.scene.add(o.lineM); });
+          cloudDensityOverlays[file] = overlay;
         }
-        cloudDensityOverlay = initCloudDensityFilter(minDistance, maxDistance, gridSize);
-        cloudDensityOverlay.cubesData.forEach(c => trueCoordinatesMap.scene.add(c.tcMesh));
-        cloudDensityOverlay.adjacentLines.forEach(o => {
-          globeMap.scene.add(o.line);
-          mollweideMap.scene.add(o.lineM);
-        });
+        updateCloudDensityFilter(points, overlay, trueCoordinatesMap.scene, globeMap.scene, mollweideMap.scene);
       }
-      updateCloudDensityFilter(cloudPoints, cloudDensityOverlay, trueCoordinatesMap.scene, globeMap.scene, mollweideMap.scene);
+      // remove overlays for clouds no longer selected
+      Object.keys(cloudDensityOverlays).forEach(file => {
+        if (!cloudDataFiles.includes(file)) {
+          const ov = cloudDensityOverlays[file];
+          ov.cubesData.forEach(c => { trueCoordinatesMap.scene.remove(c.tcMesh); });
+          ov.adjacentLines.forEach(o => { globeMap.scene.remove(o.line); mollweideMap.scene.remove(o.lineM); });
+          delete cloudDensityOverlays[file];
+        }
+      });
     }
   } else {
     // remove all cloud overlays
     await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', [], cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', [], cloudOpacity / 100);
-    if (cloudDensityOverlay) {
-      cloudDensityOverlay.cubesData.forEach(c => {
-        trueCoordinatesMap.scene.remove(c.tcMesh);
-      });
-      cloudDensityOverlay.adjacentLines.forEach(o => {
-        globeMap.scene.remove(o.line);
-        mollweideMap.scene.remove(o.lineM);
-      });
-      cloudDensityOverlay = null;
-    }
+    Object.values(cloudDensityOverlays).forEach(ov => {
+      ov.cubesData.forEach(c => { trueCoordinatesMap.scene.remove(c.tcMesh); });
+      ov.adjacentLines.forEach(o => { globeMap.scene.remove(o.line); mollweideMap.scene.remove(o.lineM); });
+    });
+    cloudDensityOverlays = {};
   }
 
   applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator, planeOpacity / 100);
@@ -1179,10 +1179,12 @@ async function updateMollweideView() {
       densityOverlay.refreshMollweide();
     }
   }
-  if (showCloudsFlag && cloudDensityOverlay) {
-    if (typeof cloudDensityOverlay.refreshMollweide === 'function') {
-      cloudDensityOverlay.refreshMollweide();
-    }
+  if (showCloudsFlag && Object.keys(cloudDensityOverlays).length > 0) {
+    Object.values(cloudDensityOverlays).forEach(ov => {
+      if (typeof ov.refreshMollweide === 'function') {
+        ov.refreshMollweide();
+      }
+    });
   }
   if (showGalacticPlaneFlag && galacticPlaneMoll) {
     updateGalacticPlaneMollweide(galacticPlaneMoll);
@@ -1378,9 +1380,11 @@ function registerMollweideEditableLines() {
   if (densityOverlay && densityOverlay.adjacentLines) {
     densityOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
   }
-  if (cloudDensityOverlay && cloudDensityOverlay.adjacentLines) {
-    cloudDensityOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
-  }
+  Object.values(cloudDensityOverlays).forEach(ov => {
+    if (ov.adjacentLines) {
+      ov.adjacentLines.forEach(o => editableLines.push(o.lineM));
+    }
+  });
   if (isolationOverlay && isolationOverlay.adjacentLines) {
     isolationOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
   }

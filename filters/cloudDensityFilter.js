@@ -9,8 +9,9 @@ import { lightenColor } from './densityColorUtils.js';
  * Each JSON file contains objects with RA (deg), DEC (deg) and d (pc).
  */
 export async function loadCloudPoints(files) {
-  const pts = [];
+  const result = {};
   for (const file of files) {
+    result[file] = [];
     try {
       const resp = await fetch(file);
       if (!resp.ok) continue;
@@ -21,14 +22,14 @@ export async function loadCloudPoints(files) {
           const dec = degToRad(d.DEC);
           const distLy = d['d (pc)'] * 3.26156;
           const pos = radToSphere(ra, dec, distLy);
-          pts.push({ pos });
+          result[file].push({ pos });
         }
       });
     } catch (e) {
       console.error(e);
     }
   }
-  return pts;
+  return result;
 }
 
 function createWideLineMaterial(color) {
@@ -82,10 +83,11 @@ function buildWideLineGeometry(points, width) {
 }
 
 class CloudDensityGridOverlay {
-  constructor(minDistance, maxDistance, gridSize = 2) {
+  constructor(minDistance, maxDistance, gridSize = 2, color = 0xff0000) {
     this.minDistance = parseFloat(minDistance);
     this.maxDistance = parseFloat(maxDistance);
     this.gridSize = gridSize;
+    this.color = new THREE.Color(color);
     this.cubesData = [];
     this.adjacentLines = [];
     this.mollLineWidth = 30;
@@ -106,7 +108,7 @@ class CloudDensityGridOverlay {
           const distFromCenter = posTC.length();
           if (distFromCenter < this.minDistance || distFromCenter > this.maxDistance) continue;
           const geometry = new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize);
-          const material = new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.0, depthWrite: false });
+          const material = new THREE.MeshBasicMaterial({ color: this.color, transparent: true, opacity: 0.0, depthWrite: false });
           const cubeTC = new THREE.Mesh(geometry, material);
           cubeTC.position.copy(posTC);
           const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
@@ -230,10 +232,10 @@ class CloudDensityGridOverlay {
           }
           const geom = new THREE.BufferGeometry();
           geom.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-          const mat = new THREE.LineBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.3, linewidth: 2 });
+          const mat = new THREE.LineBasicMaterial({ color: this.color, transparent: true, opacity: 0.3, linewidth: 2 });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
-          const mollMat = createWideLineMaterial(0xff0000);
+          const mollMat = createWideLineMaterial(this.color);
           const lineM = new THREE.Mesh(geomM, mollMat);
           lineM.renderOrder = 1;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
@@ -270,13 +272,13 @@ class CloudDensityGridOverlay {
     this.cubesData.forEach(cell => {
       const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
-      let color = new THREE.Color(0xffffff);
+      let color = this.color.clone();
       let alpha = 0;
       if (cell.density >= topThr) {
         const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
-        const baseRed = new THREE.Color(0xff0000);
-        const lightRed = lightenColor(baseRed.clone(), 0.4);
-        color = lightRed.lerp(baseRed, t);
+        const baseColor = this.color.clone();
+        const lightColor = lightenColor(baseColor.clone(), 0.4);
+        color = lightColor.lerp(baseColor, t);
         alpha = 0.5 * t;
         cell.active = true;
       } else {
@@ -350,8 +352,8 @@ class CloudDensityGridOverlay {
   }
 }
 
-export function initCloudDensityFilter(minDistance, maxDistance, gridSize = 2) {
-  const overlay = new CloudDensityGridOverlay(minDistance, maxDistance, gridSize);
+export function initCloudDensityFilter(minDistance, maxDistance, gridSize = 2, color = 0xff0000) {
+  const overlay = new CloudDensityGridOverlay(minDistance, maxDistance, gridSize, color);
   overlay.createGrid();
   return overlay;
 }

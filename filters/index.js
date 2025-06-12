@@ -21,7 +21,7 @@ import { bindAdditionalOpacitySliders } from '../ui/filterUI.js';
 let filterForm = null;
 let isolationOverlay = null;
 let densityOverlay = null;
-let cloudDensityOverlay = null;
+let cloudDensityOverlays = {};
 
 // Helper to compute a grid size from the isolationGridSize slider value.
 function computeIsolationGridSize(sliderValue) {
@@ -569,7 +569,7 @@ export function applyFilters(allStars) {
     showCelestialEquator: filters.showCelestialEquator,
     isolationOverlay,
     densityOverlay,
-    cloudDensityOverlay
+    cloudDensityOverlays
   };
 }
 
