@@ -701,24 +701,28 @@ function createStarTexture() {
   return texture;
 }
 
-function createStarMaterial(texture, opacity, sizeAttenuation) {
+function createStarMaterial(texture, opacity, sizeAttenuation, cameraZoom) {
   return new THREE.ShaderMaterial({
     uniforms: {
       map: { value: texture },
       opacity: { value: opacity },
-      sizeAttenuation: { value: sizeAttenuation ? 1.0 : 0.0 }
+      sizeAttenuation: { value: sizeAttenuation ? 1.0 : 0.0 },
+      cameraZoom: { value: cameraZoom }
     },
     vertexShader: `
       attribute float size;
       attribute vec3 customColor;
       varying vec3 vColor;
       uniform float sizeAttenuation;
+      uniform float cameraZoom;
       void main() {
         vColor = customColor;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
         float s = size;
         if (sizeAttenuation > 0.5) {
           s *= 300.0 / -mvPosition.z;
+        } else {
+          s *= cameraZoom;
         }
         gl_PointSize = s;
         gl_Position = projectionMatrix * mvPosition;
@@ -838,7 +842,13 @@ class MapManager {
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
     const texture = createStarTexture();
-    const material = createStarMaterial(texture, this.starOpacity, !this.camera.isOrthographicCamera);
+    const zoomVal = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
+    const material = createStarMaterial(
+      texture,
+      this.starOpacity,
+      !this.camera.isOrthographicCamera,
+      zoomVal
+    );
 
     this.points = new THREE.Points(geometry, material);
     this.starGroup.add(this.points);
@@ -954,12 +964,20 @@ class MapManager {
       this.camera.aspect = w / h;
     }
     this.camera.updateProjectionMatrix();
+    if (this.points && this.points.material.uniforms.cameraZoom) {
+      const zoomVal = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
+      this.points.material.uniforms.cameraZoom.value = zoomVal;
+    }
     this.renderer.setSize(w, h);
     if (window.requestRender) window.requestRender();
   }
 
   render() {
     if (!this.canvas.isConnected) return;
+    if (this.points && this.points.material.uniforms.cameraZoom) {
+      const zoomVal = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
+      this.points.material.uniforms.cameraZoom.value = zoomVal;
+    }
     this.renderer.render(this.scene, this.camera);
   }
 }
