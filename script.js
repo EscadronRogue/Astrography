@@ -786,8 +786,17 @@ class MapManager {
         color: 0xffffff,
         transparent: true,
         opacity: this.starOpacity,
-        vertexColors: true
+        vertexColors: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
       });
+      material.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          'gl_FragColor = vec4( outgoingLight, diffuseColor.a );',
+          `float glow = pow(abs(dot(normalize(vNormal), vec3(0.0, 0.0, 1.0))), 3.0);
+           gl_FragColor = vec4( outgoingLight * glow, diffuseColor.a * glow );`
+        );
+      };
       this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
       this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
       this.starGroup.add(this.instancedMesh);
