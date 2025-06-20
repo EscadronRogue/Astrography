@@ -127,6 +127,19 @@ export function hexToRGBA(hex, opacity) {
   return `rgba(${r}, ${g}, ${b}, ${opacity})`;
 }
 
+function rgbToHex(r, g, b) {
+  const comp = c => c.toString(16).padStart(2, '0');
+  return '#' + comp(r) + comp(g) + comp(b);
+}
+
+export function mixColorWithWhite(hex, factor = 0.5) {
+  const { r, g, b } = hexToRgb(hex);
+  const r2 = Math.round(r + (255 - r) * factor);
+  const g2 = Math.round(g + (255 - g) * factor);
+  const b2 = Math.round(b + (255 - b) * factor);
+  return rgbToHex(r2, g2, b2);
+}
+
 /**
  * Resizes the canvas to fit its container.
  * @param {HTMLCanvasElement} canvas

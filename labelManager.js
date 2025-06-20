@@ -1,7 +1,7 @@
 // labelManager.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { hexToRGBA } from './utils.js';
+import { hexToRGBA, mixColorWithWhite } from './utils.js';
 
 /**
  * Returns a ShaderMaterial that renders a texture double‑sided without mirroring.
@@ -95,7 +95,7 @@ export class LabelManager {
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      ctx.font = `${fontSize}px Arial`;
+      ctx.font = `${fontSize}px Oswald`;
 
       const textMetrics = ctx.measureText(displayName);
       const textWidth = textMetrics.width;
@@ -106,10 +106,12 @@ export class LabelManager {
       canvas.height = textHeight + paddingY * 2;
 
       // Draw background rectangle (semi-transparent) and text
-      ctx.font = `${fontSize}px Arial`;
-      ctx.fillStyle = hexToRGBA(starColor, 0.05);
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#ffffff';
+      ctx.font = `${fontSize}px Oswald`;
+      if (this.mapType !== 'Mollweide') {
+        ctx.fillStyle = hexToRGBA(starColor, 0.05);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      ctx.fillStyle = mixColorWithWhite(starColor, 0.5);
       ctx.textBaseline = 'middle';
       ctx.fillText(displayName, paddingX, canvas.height / 2);
 
