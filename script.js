@@ -786,7 +786,9 @@ class MapManager {
         color: 0xffffff,
         transparent: true,
         opacity: this.starOpacity,
-        vertexColors: true
+        vertexColors: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
       });
       this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
       this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);

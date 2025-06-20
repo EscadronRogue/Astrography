@@ -107,9 +107,13 @@ export class LabelManager {
 
       // Draw background rectangle (semi-transparent) and text
       ctx.font = `${fontSize}px Arial`;
-      ctx.fillStyle = hexToRGBA(starColor, 0.05);
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#ffffff';
+      if (this.mapType !== 'Mollweide') {
+        ctx.fillStyle = hexToRGBA(starColor, 0.05);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      const mixColor = new THREE.Color(starColor)
+        .lerp(new THREE.Color('#ffffff'), 0.5);
+      ctx.fillStyle = `#${mixColor.getHexString()}`;
       ctx.textBaseline = 'middle';
       ctx.fillText(displayName, paddingX, canvas.height / 2);
 
