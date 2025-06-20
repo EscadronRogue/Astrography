@@ -759,6 +759,8 @@ class MapManager {
     this.starOpacity = 1.0;
     this.connectionOpacity = 0.5;
     this.labelOpacity = 1.0;
+    this.points = null;
+    this.instancedMesh = null;
     if (mapType === 'Mollweide') {
       const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
       // Use a larger frustum so the entire Mollweide projection fits on screen
@@ -823,68 +825,131 @@ class MapManager {
 
   addStars(stars) {
     const count = stars.length;
-    while (this.starGroup.children.length > 0) {
-      const child = this.starGroup.children[0];
-      this.starGroup.remove(child);
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
+    if (this.mapType === 'Mollweide') {
+      if (!this.points || this.points.geometry.getAttribute('position').count !== count) {
+        while (this.starGroup.children.length > 0) {
+          const child = this.starGroup.children[0];
+          this.starGroup.remove(child);
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) child.material.dispose();
+        }
+        if (count === 0) {
+          this.points = null;
+          return;
+        }
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+        const sizes = new Float32Array(count);
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+        const texture = createStarTexture();
+        const zoomVal = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
+        const material = createStarMaterial(
+          texture,
+          this.starOpacity,
+          !this.camera.isOrthographicCamera,
+          zoomVal
+        );
+        this.points = new THREE.Points(geometry, material);
+        this.starGroup.add(this.points);
+      }
+    } else {
+      if (!this.instancedMesh || this.instancedMesh.count !== count) {
+        while (this.starGroup.children.length > 0) {
+          const child = this.starGroup.children[0];
+          this.starGroup.remove(child);
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) child.material.dispose();
+        }
+        if (count === 0) {
+          this.instancedMesh = null;
+          return;
+        }
+        const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
+        const vertexCount = baseGeometry.attributes.position.count;
+        const dummyColors = new Float32Array(vertexCount * 3);
+        for (let i = 0; i < vertexCount; i++) {
+          dummyColors[i * 3] = 1;
+          dummyColors[i * 3 + 1] = 1;
+          dummyColors[i * 3 + 2] = 1;
+        }
+        baseGeometry.setAttribute('color', new THREE.BufferAttribute(dummyColors, 3));
+        const material = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          transparent: true,
+          opacity: this.starOpacity,
+          vertexColors: true
+        });
+        this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
+        this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+        this.starGroup.add(this.instancedMesh);
+      }
     }
-    if (count === 0) {
-      this.points = null;
-      return;
-    }
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
-    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-
-    const texture = createStarTexture();
-    const zoomVal = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
-    const material = createStarMaterial(
-      texture,
-      this.starOpacity,
-      !this.camera.isOrthographicCamera,
-      zoomVal
-    );
-
-    this.points = new THREE.Points(geometry, material);
-    this.starGroup.add(this.points);
     this.updateStarPositions(stars);
   }
 
   updateStarPositions(stars) {
-    if (!this.points) return;
-    const positions = this.points.geometry.attributes.position.array;
-    const colors = this.points.geometry.attributes.customColor.array;
-    const sizes = this.points.geometry.attributes.size.array;
-    for (let i = 0; i < stars.length; i++) {
-      const star = stars[i];
-      let pos;
-      if (this.mapType === 'TrueCoordinates') {
-        pos = star.truePosition ? star.truePosition.clone() : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
-      } else if (this.mapType === 'Globe') {
-        pos = star.spherePosition ? star.spherePosition.clone() : new THREE.Vector3(0, 0, 0);
-      } else {
-        pos = star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0);
+    if (this.mapType === 'Mollweide') {
+      if (!this.points) return;
+      const positions = this.points.geometry.attributes.position.array;
+      const colors = this.points.geometry.attributes.customColor.array;
+      const sizes = this.points.geometry.attributes.size.array;
+      for (let i = 0; i < stars.length; i++) {
+        const star = stars[i];
+        let pos;
+        if (this.mapType === 'TrueCoordinates') {
+          pos = star.truePosition ? star.truePosition.clone() : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
+        } else if (this.mapType === 'Globe') {
+          pos = star.spherePosition ? star.spherePosition.clone() : new THREE.Vector3(0, 0, 0);
+        } else {
+          pos = star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0);
+        }
+        const size = star.displaySize !== undefined ? star.displaySize : 1;
+        const baseScale = this.mapType === 'Mollweide' ? 0.4 : 0.2;
+        const scale = size * baseScale * 25.0;
+        positions[i * 3] = pos.x;
+        positions[i * 3 + 1] = pos.y;
+        positions[i * 3 + 2] = pos.z;
+        sizes[i] = scale;
+        const color = new THREE.Color(star.displayColor || '#ffffff');
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
       }
-      const size = star.displaySize !== undefined ? star.displaySize : 1;
-      const baseScale = this.mapType === 'Mollweide' ? 0.4 : 0.2;
-      const scale = size * baseScale * 25.0;
-      positions[i * 3] = pos.x;
-      positions[i * 3 + 1] = pos.y;
-      positions[i * 3 + 2] = pos.z;
-      sizes[i] = scale;
-      const color = new THREE.Color(star.displayColor || '#ffffff');
-      colors[i * 3] = color.r;
-      colors[i * 3 + 1] = color.g;
-      colors[i * 3 + 2] = color.b;
+      this.points.geometry.attributes.position.needsUpdate = true;
+      this.points.geometry.attributes.customColor.needsUpdate = true;
+      this.points.geometry.attributes.size.needsUpdate = true;
+    } else {
+      if (!this.instancedMesh) return;
+      const dummy = new THREE.Object3D();
+      const colors = this.instancedMesh.instanceColor.array;
+      for (let i = 0; i < stars.length; i++) {
+        const star = stars[i];
+        let pos;
+        if (this.mapType === 'TrueCoordinates') {
+          pos = star.truePosition ? star.truePosition.clone() : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
+        } else if (this.mapType === 'Globe') {
+          pos = star.spherePosition ? star.spherePosition.clone() : new THREE.Vector3(0, 0, 0);
+        } else {
+          pos = star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0);
+        }
+        const size = star.displaySize !== undefined ? star.displaySize : 1;
+        const baseScale = 0.2;
+        const scale = size * baseScale;
+        dummy.position.copy(pos);
+        dummy.scale.set(scale, scale, scale);
+        dummy.updateMatrix();
+        this.instancedMesh.setMatrixAt(i, dummy.matrix);
+        const color = new THREE.Color(star.displayColor || '#ffffff');
+        colors[i * 3] = color.r;
+        colors[i * 3 + 1] = color.g;
+        colors[i * 3 + 2] = color.b;
+      }
+      this.instancedMesh.instanceMatrix.needsUpdate = true;
+      this.instancedMesh.instanceColor.needsUpdate = true;
     }
-    this.points.geometry.attributes.position.needsUpdate = true;
-    this.points.geometry.attributes.customColor.needsUpdate = true;
-    this.points.geometry.attributes.size.needsUpdate = true;
     this.starObjects = stars;
     if (window.requestRender) window.requestRender();
   }
@@ -923,9 +988,14 @@ class MapManager {
 
   setStarOpacity(opacity) {
     this.starOpacity = opacity;
-    if (this.points) {
-      this.points.material.uniforms.opacity.value = opacity;
-      this.points.material.needsUpdate = true;
+    if (this.mapType === 'Mollweide') {
+      if (this.points) {
+        this.points.material.uniforms.opacity.value = opacity;
+        this.points.material.needsUpdate = true;
+      }
+    } else if (this.instancedMesh) {
+      this.instancedMesh.material.opacity = opacity;
+      this.instancedMesh.material.needsUpdate = true;
     }
   }
 
