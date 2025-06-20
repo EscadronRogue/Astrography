@@ -49,9 +49,11 @@ function createStarTexture() {
     size / 2,
     size / 2
   );
+  // Highest opacity at the center fading smoothly outward
   gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
-  gradient.addColorStop(0.4, 'rgba(255,255,255,0.4)');
+  gradient.addColorStop(0.1, 'rgba(255,255,255,0.9)');
+  gradient.addColorStop(0.3, 'rgba(255,255,255,0.6)');
+  gradient.addColorStop(0.6, 'rgba(255,255,255,0.2)');
   gradient.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, size, size);
