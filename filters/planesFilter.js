@@ -244,11 +244,11 @@ export function updateCelestialEquatorMollweide(line) {
 function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  ctx.font = `${fontSize}px Arial`;
+  ctx.font = `${fontSize}px Oswald`;
   const textWidth = ctx.measureText(text).width;
   canvas.width = textWidth + 20;
   canvas.height = fontSize * 1.2;
-  ctx.font = `${fontSize}px Arial`;
+  ctx.font = `${fontSize}px Oswald`;
   ctx.fillStyle = color;
   ctx.fillText(text, 10, fontSize);
   const texture = new THREE.CanvasTexture(canvas);
@@ -262,11 +262,11 @@ function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150
 function createTextPlane(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  ctx.font = `${fontSize}px Arial`;
+  ctx.font = `${fontSize}px Oswald`;
   const textWidth = ctx.measureText(text).width;
   canvas.width = textWidth + 20;
   canvas.height = fontSize * 1.2;
-  ctx.font = `${fontSize}px Arial`;
+  ctx.font = `${fontSize}px Oswald`;
   ctx.fillStyle = color;
   ctx.fillText(text, 10, fontSize);
   const texture = new THREE.CanvasTexture(canvas);
