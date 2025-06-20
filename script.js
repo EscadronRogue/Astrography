@@ -35,6 +35,31 @@ import { showTooltip, hideTooltip } from './tooltips.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
 import { minimalRADifference } from './utils.js';
 
+function createStarTexture() {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(
+    size / 2,
+    size / 2,
+    0,
+    size / 2,
+    size / 2,
+    size / 2
+  );
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+const starTexture = createStarTexture();
+
 let cachedStars = null;
 let currentFilteredStars = [];
 let currentConnections = [];
@@ -783,9 +808,12 @@ class MapManager {
       }
       baseGeometry.setAttribute('color', new THREE.BufferAttribute(dummyColors, 3));
       const material = new THREE.MeshBasicMaterial({
+        map: starTexture,
         color: 0xffffff,
         transparent: true,
         opacity: this.starOpacity,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
         vertexColors: true
       });
       this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);

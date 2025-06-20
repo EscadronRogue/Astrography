@@ -3,6 +3,23 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { hexToRGBA } from './utils.js';
 
+function hexToRgb(hex) {
+  const normalized = hex.replace('#', '');
+  const bigint = parseInt(normalized, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return { r, g, b };
+}
+
+function mixWithWhite(hex) {
+  const { r, g, b } = hexToRgb(hex);
+  const nr = Math.round((r + 255) / 2);
+  const ng = Math.round((g + 255) / 2);
+  const nb = Math.round((b + 255) / 2);
+  return `rgb(${nr}, ${ng}, ${nb})`;
+}
+
 /**
  * Returns a ShaderMaterial that renders a texture double‑sided without mirroring.
  */
@@ -95,7 +112,7 @@ export class LabelManager {
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      ctx.font = `${fontSize}px Arial`;
+      ctx.font = `${fontSize}px Oswald`;
 
       const textMetrics = ctx.measureText(displayName);
       const textWidth = textMetrics.width;
@@ -106,10 +123,13 @@ export class LabelManager {
       canvas.height = textHeight + paddingY * 2;
 
       // Draw background rectangle (semi-transparent) and text
-      ctx.font = `${fontSize}px Arial`;
-      ctx.fillStyle = hexToRGBA(starColor, 0.05);
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#ffffff';
+      ctx.font = `${fontSize}px Oswald`;
+      if (this.mapType !== 'Mollweide') {
+        ctx.fillStyle = hexToRGBA(starColor, 0.05);
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      const labelColor = mixWithWhite(starColor);
+      ctx.fillStyle = labelColor;
       ctx.textBaseline = 'middle';
       ctx.fillText(displayName, paddingX, canvas.height / 2);
 
