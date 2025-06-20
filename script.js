@@ -797,10 +797,14 @@ class MapManager {
       geometry.setAttribute('size', new THREE.BufferAttribute(new Float32Array(count), 1));
 
       const starTexture = createStarTexture();
+      const size = new THREE.Vector2();
+      this.renderer.getSize(size);
       const material = new THREE.ShaderMaterial({
         uniforms: {
           opacity: { value: this.starOpacity },
-          map: { value: starTexture }
+          map: { value: starTexture },
+          viewportHeight: { value: size.y },
+          frustumSize: { value: this.frustumSize || 1 }
         },
         transparent: true,
         vertexColors: true,
@@ -808,15 +812,19 @@ class MapManager {
         depthWrite: false,
         vertexShader: `
           attribute float size;
+          uniform float viewportHeight;
+          uniform float frustumSize;
           varying vec3 vColor;
           void main() {
             vColor = color;
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            float s = size;
+            float pixelSize;
             if (projectionMatrix[3][3] == 0.0) {
-              s *= 300.0 / -mvPosition.z;
+              pixelSize = size * viewportHeight * projectionMatrix[1][1] / -mvPosition.z;
+            } else {
+              pixelSize = size * viewportHeight / frustumSize;
             }
-            gl_PointSize = s;
+            gl_PointSize = pixelSize;
             gl_Position = projectionMatrix * mvPosition;
           }
         `,
@@ -833,6 +841,7 @@ class MapManager {
           }
         `
       });
+      this.starMaterial = material;
       this.starPoints = new THREE.Points(geometry, material);
       this.starGroup.add(this.starPoints);
     }
@@ -857,7 +866,7 @@ class MapManager {
       }
 
       const size = star.displaySize !== undefined ? star.displaySize : 1;
-      const baseScale = this.mapType === 'Mollweide' ? 6.0 : 3.0;
+      const baseScale = this.mapType === 'Mollweide' ? 0.4 : 0.2;
       const scaledSize = size * baseScale;
 
       posAttr.setXYZ(i, pos.x, pos.y, pos.z);
@@ -950,6 +959,14 @@ class MapManager {
     }
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
+    if (this.starMaterial) {
+      const size = new THREE.Vector2();
+      this.renderer.getSize(size);
+      this.starMaterial.uniforms.viewportHeight.value = size.y;
+      if (this.camera.isOrthographicCamera) {
+        this.starMaterial.uniforms.frustumSize.value = this.frustumSize;
+      }
+    }
     if (window.requestRender) window.requestRender();
   }
 
