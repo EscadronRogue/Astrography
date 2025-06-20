@@ -756,13 +756,14 @@ class MapManager {
     this.labelManager.setLabelOpacity(this.labelOpacity);
     this.starGroup = new THREE.Group();
     this.scene.add(this.starGroup);
+    this.points = null;
     this.debouncedResize = debounce(() => this.onResize(), 200);
     window.addEventListener('resize', this.debouncedResize, false);
   }
 
   addStars(stars) {
     const count = stars.length;
-    if (!this.instancedMesh || this.instancedMesh.count !== count) {
+    if (!this.points || this.points.geometry.getAttribute("position").count !== count) {
       while (this.starGroup.children.length > 0) {
         const child = this.starGroup.children[0];
         this.starGroup.remove(child);
@@ -770,35 +771,56 @@ class MapManager {
         if (child.material) child.material.dispose();
       }
       if (count === 0) {
-        this.instancedMesh = null;
+        this.points = null;
         return;
       }
-      const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
-      const vertexCount = baseGeometry.attributes.position.count;
-      const dummyColors = new Float32Array(vertexCount * 3);
-      for (let i = 0; i < vertexCount; i++) {
-        dummyColors[i * 3] = 1;
-        dummyColors[i * 3 + 1] = 1;
-        dummyColors[i * 3 + 2] = 1;
-      }
-      baseGeometry.setAttribute('color', new THREE.BufferAttribute(dummyColors, 3));
-      const material = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3));
+      geometry.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3));
+      geometry.setAttribute("size", new THREE.Float32BufferAttribute(new Float32Array(count), 1));
+      const material = new THREE.ShaderMaterial({
+        uniforms: { opacity: { value: this.starOpacity }, perspective: { value: this.camera.isPerspectiveCamera ? 1.0 : 0.0 } },
+        vertexColors: true,
         transparent: true,
-        opacity: this.starOpacity,
-        vertexColors: true
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: `
+          uniform float perspective;
+          attribute float size;
+          varying vec3 vColor;
+          void main() {
+            vColor = color;
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            if (perspective > 0.5) {
+              gl_PointSize = size * (300.0 / -mvPosition.z);
+            } else {
+              gl_PointSize = size;
+            }
+            gl_Position = projectionMatrix * mvPosition;
+          }`,
+        fragmentShader: `
+          uniform float opacity;
+          varying vec3 vColor;
+          void main() {
+            float dist = length(gl_PointCoord - vec2(0.5));
+            float a = smoothstep(0.5, 0.0, dist) * opacity;
+            gl_FragColor = vec4(vColor, a);
+          }`
       });
-      this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
-      this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
-      this.starGroup.add(this.instancedMesh);
+      this.points = new THREE.Points(geometry, material);
+      this.starGroup.add(this.points);
     }
     this.updateStarPositions(stars);
   }
 
   updateStarPositions(stars) {
-    if (!this.instancedMesh) return;
-    const dummy = new THREE.Object3D();
-    const colors = this.instancedMesh.instanceColor.array;
+    if (!this.points) return;
+    const posAttr = this.points.geometry.getAttribute('position');
+    const colorAttr = this.points.geometry.getAttribute('color');
+    const sizeAttr = this.points.geometry.getAttribute('size');
+    const positions = posAttr.array;
+    const colors = colorAttr.array;
+    const sizes = sizeAttr.array;
     for (let i = 0; i < stars.length; i++) {
       const star = stars[i];
       let pos;
@@ -810,19 +832,21 @@ class MapManager {
         pos = star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0);
       }
       const size = star.displaySize !== undefined ? star.displaySize : 1;
-      const baseScale = this.mapType === 'Mollweide' ? 0.4 : 0.2;
-      const scale = size * baseScale;
-      dummy.position.copy(pos);
-      dummy.scale.set(scale, scale, scale);
-      dummy.updateMatrix();
-      this.instancedMesh.setMatrixAt(i, dummy.matrix);
+      const baseSize = this.mapType === 'Mollweide' ? 10 : 6;
+      const pixelSize = size * baseSize;
+      positions[i * 3] = pos.x;
+      positions[i * 3 + 1] = pos.y;
+      positions[i * 3 + 2] = pos.z;
       const color = new THREE.Color(star.displayColor || '#ffffff');
       colors[i * 3] = color.r;
       colors[i * 3 + 1] = color.g;
       colors[i * 3 + 2] = color.b;
+      sizes[i] = pixelSize;
     }
-    this.instancedMesh.instanceMatrix.needsUpdate = true;
-    this.instancedMesh.instanceColor.needsUpdate = true;
+    posAttr.needsUpdate = true;
+    colorAttr.needsUpdate = true;
+    sizeAttr.needsUpdate = true;
+    this.points.material.uniforms.opacity.value = this.starOpacity;
     this.starObjects = stars;
     if (window.requestRender) window.requestRender();
   }
@@ -861,9 +885,9 @@ class MapManager {
 
   setStarOpacity(opacity) {
     this.starOpacity = opacity;
-    if (this.instancedMesh) {
-      this.instancedMesh.material.opacity = opacity;
-      this.instancedMesh.material.needsUpdate = true;
+    if (this.points) {
+      this.points.material.uniforms.opacity.value = opacity;
+      this.points.material.needsUpdate = true;
     }
   }
 
@@ -970,7 +994,9 @@ function initStarInteractions(map) {
     if (intersects.length > 0) {
       const intersect = intersects[0];
       let index;
-      if (intersect.object instanceof THREE.InstancedMesh) {
+      if (intersect.object instanceof THREE.Points) {
+        index = intersect.index;
+      } else if (intersect.object instanceof THREE.InstancedMesh) {
         index = intersect.instanceId;
       } else {
         index = map.starGroup.children.indexOf(intersect.object);
@@ -1001,7 +1027,9 @@ function initStarInteractions(map) {
     if (intersects.length > 0) {
       const intersect = intersects[0];
       let index;
-      if (intersect.object instanceof THREE.InstancedMesh) {
+      if (intersect.object instanceof THREE.Points) {
+        index = intersect.index;
+      } else if (intersect.object instanceof THREE.InstancedMesh) {
         index = intersect.instanceId;
       } else {
         index = map.starGroup.children.indexOf(intersect.object);

@@ -177,12 +177,12 @@ export function createConstellationLabelsForGlobe(opacity = 0.8) {
     const baseFontSize = 300; // Very large base font size
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    ctx.font = `${baseFontSize}px Arial`;
+    ctx.font = `${baseFontSize}px Oswald`;
     const textWidth = ctx.measureText(c.name).width;
     canvas.width = textWidth + 20;
     canvas.height = baseFontSize * 1.2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `${baseFontSize}px Arial`;
+    ctx.font = `${baseFontSize}px Oswald`;
     ctx.fillStyle = '#888888';
     ctx.fillText(c.name, 10, baseFontSize);
     const texture = new THREE.CanvasTexture(canvas);
@@ -239,12 +239,12 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
     const baseFontSize = 300;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    ctx.font = `${baseFontSize}px Arial`;
+    ctx.font = `${baseFontSize}px Oswald`;
     const textWidth = ctx.measureText(c.name).width;
     canvas.width = textWidth + 20;
     canvas.height = baseFontSize * 1.2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `${baseFontSize}px Arial`;
+    ctx.font = `${baseFontSize}px Oswald`;
     ctx.fillStyle = '#888888';
     ctx.fillText(c.name, 10, baseFontSize);
     const texture = new THREE.CanvasTexture(canvas);
