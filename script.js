@@ -182,6 +182,12 @@ function loadPresets() {
       if (k === 'density-top-percent') document.getElementById('density-top-slider').value = v;
       if (k === 'density-grid-size') document.getElementById('density-grid-slider').value = v;
       if (k === 'density-tolerance') document.getElementById('density-tolerance-slider').value = v;
+      if (k === 'density-bottom-opacity') document.getElementById('density-bottom-opacity-slider').value = v;
+      if (k === 'density-middle-opacity') document.getElementById('density-middle-opacity-slider').value = v;
+      if (k === 'density-top-opacity') document.getElementById('density-top-opacity-slider').value = v;
+      if (k === 'density-bottom-color') document.getElementById('density-bottom-color').value = v;
+      if (k === 'density-middle-color') document.getElementById('density-middle-color').value = v;
+      if (k === 'density-top-color') document.getElementById('density-top-color').value = v;
     }
   }
   if (obj.edits) {

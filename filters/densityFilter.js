@@ -226,12 +226,22 @@ class DensityGridOverlay {
     const tolSlider = document.getElementById('density-tolerance-slider');
     const bottomSlider = document.getElementById('density-bottom-slider');
     const topSlider = document.getElementById('density-top-slider');
-    const opacitySlider = document.getElementById('density-opacity-slider');
+    const bottomOpacitySlider = document.getElementById('density-bottom-opacity-slider');
+    const middleOpacitySlider = document.getElementById('density-middle-opacity-slider');
+    const topOpacitySlider = document.getElementById('density-top-opacity-slider');
+    const bottomColorInput = document.getElementById('density-bottom-color');
+    const middleColorInput = document.getElementById('density-middle-color');
+    const topColorInput = document.getElementById('density-top-color');
     const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
     const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
     const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
     const topPct = topSlider ? parseFloat(topSlider.value) : 10;
-    this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
+    const bottomOpacity = bottomOpacitySlider ? parseFloat(bottomOpacitySlider.value) / 100 : 1.0;
+    const middleOpacity = middleOpacitySlider ? parseFloat(middleOpacitySlider.value) / 100 : 1.0;
+    const topOpacity = topOpacitySlider ? parseFloat(topOpacitySlider.value) / 100 : 1.0;
+    const bottomColor = bottomColorInput ? bottomColorInput.value : '#0000ff';
+    const middleColor = middleColorInput ? middleColorInput.value : '#00ff00';
+    const topColor = topColorInput ? topColorInput.value : '#ff0000';
 
     const extendedStars = stars.filter(star => {
       const d = star.Distance_from_the_Sun;
@@ -258,21 +268,27 @@ class DensityGridOverlay {
       let alpha = 0;
       if (cell.density <= bottomThr) {
         const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
-        color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0xffffff), t);
-        alpha = 0.5 * (1 - t);
+        const base = new THREE.Color(bottomColor);
+        color = base.lerp(new THREE.Color(0xffffff), t);
+        alpha = 0.5 * (1 - t) * bottomOpacity;
         cell.active = true;
       } else if (cell.density >= topThr) {
         const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
-        const baseRed = new THREE.Color(0xff0000);
-        const lightRed = lightenColor(baseRed.clone(), 0.4);
-        color = lightRed.lerp(baseRed, t);
-        alpha = 0.5 * t;
+        const base = new THREE.Color(topColor);
+        const light = lightenColor(base.clone(), 0.4);
+        color = light.lerp(base, t);
+        alpha = 0.5 * t * topOpacity;
         cell.active = true;
       } else {
-        cell.active = false;
+        const t = (cell.density - bottomThr) / (topThr - bottomThr);
+        const base = new THREE.Color(middleColor);
+        const light = lightenColor(base.clone(), 0.4);
+        color = light.lerp(base, t);
+        alpha = 0.5 * middleOpacity;
+        cell.active = true;
       }
 
-      const finalAlpha = alpha * this.opacityFactor;
+      const finalAlpha = alpha;
       cell.tcMesh.material.opacity = finalAlpha;
       cell.globeMesh.material.opacity = finalAlpha;
       cell.mollSprite.material.opacity = finalAlpha;

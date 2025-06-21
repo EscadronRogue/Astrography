@@ -79,8 +79,15 @@ export function initFilterUI() {
   const densityTopNumber = document.getElementById('density-top-number');
   const densityGridSlider = document.getElementById('density-grid-slider');
   const densityGridNumber = document.getElementById('density-grid-number');
-  const densityOpacitySlider = document.getElementById('density-opacity-slider');
-  const densityOpacityNumber = document.getElementById('density-opacity-number');
+  const bottomOpacitySlider = document.getElementById('density-bottom-opacity-slider');
+  const bottomOpacityNumber = document.getElementById('density-bottom-opacity-number');
+  const middleOpacitySlider = document.getElementById('density-middle-opacity-slider');
+  const middleOpacityNumber = document.getElementById('density-middle-opacity-number');
+  const topOpacitySlider = document.getElementById('density-top-opacity-slider');
+  const topOpacityNumber = document.getElementById('density-top-opacity-number');
+  const bottomColorInput = document.getElementById('density-bottom-color');
+  const middleColorInput = document.getElementById('density-middle-color');
+  const topColorInput = document.getElementById('density-top-color');
   const starOpacitySlider = document.getElementById('star-opacity-slider');
   const starOpacityNumber = document.getElementById('star-opacity-number');
   const starNameOpacitySlider = document.getElementById('star-name-opacity-slider');
@@ -96,8 +103,15 @@ export function initFilterUI() {
     densityTopNumber.disabled = !enabled;
     densityGridSlider.disabled = !enabled;
     densityGridNumber.disabled = !enabled;
-    densityOpacitySlider.disabled = !enabled;
-    densityOpacityNumber.disabled = !enabled;
+    bottomOpacitySlider.disabled = !enabled;
+    bottomOpacityNumber.disabled = !enabled;
+    middleOpacitySlider.disabled = !enabled;
+    middleOpacityNumber.disabled = !enabled;
+    topOpacitySlider.disabled = !enabled;
+    topOpacityNumber.disabled = !enabled;
+    bottomColorInput.disabled = !enabled;
+    middleColorInput.disabled = !enabled;
+    topColorInput.disabled = !enabled;
   });
   densitySlider.addEventListener('input', function () {
     densityNumber.value = this.value;
@@ -132,13 +146,29 @@ export function initFilterUI() {
   densityGridNumber.addEventListener('input', function () {
     densityGridSlider.value = this.value;
   });
-  densityOpacitySlider.addEventListener('input', function () {
-    densityOpacityNumber.value = this.value;
-    document.getElementById('density-opacity-value').textContent = this.value;
+  bottomOpacitySlider.addEventListener('input', function () {
+    bottomOpacityNumber.value = this.value;
+    document.getElementById('density-bottom-opacity-value').textContent = this.value;
   });
-  densityOpacityNumber.addEventListener('input', function () {
-    densityOpacitySlider.value = this.value;
-    document.getElementById('density-opacity-value').textContent = this.value;
+  bottomOpacityNumber.addEventListener('input', function () {
+    bottomOpacitySlider.value = this.value;
+    document.getElementById('density-bottom-opacity-value').textContent = this.value;
+  });
+  middleOpacitySlider.addEventListener('input', function () {
+    middleOpacityNumber.value = this.value;
+    document.getElementById('density-middle-opacity-value').textContent = this.value;
+  });
+  middleOpacityNumber.addEventListener('input', function () {
+    middleOpacitySlider.value = this.value;
+    document.getElementById('density-middle-opacity-value').textContent = this.value;
+  });
+  topOpacitySlider.addEventListener('input', function () {
+    topOpacityNumber.value = this.value;
+    document.getElementById('density-top-opacity-value').textContent = this.value;
+  });
+  topOpacityNumber.addEventListener('input', function () {
+    topOpacitySlider.value = this.value;
+    document.getElementById('density-top-opacity-value').textContent = this.value;
   });
 
   starOpacitySlider.addEventListener('input', function () {
