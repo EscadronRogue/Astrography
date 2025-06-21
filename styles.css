@@ -385,6 +385,30 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   color: #000;
 }
 
+/* Export selection overlay */
+.export-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+}
+
+.export-overlay.hidden {
+  display: none;
+}
+
+.export-selection {
+  position: absolute;
+  border: 2px dashed #ff6f61;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.hidden {
+  display: none !important;
+}
+
 /* Tooltip */
 #tooltip {
   position: absolute;

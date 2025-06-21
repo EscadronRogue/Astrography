@@ -1270,7 +1270,7 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap() {
+function exportMollweideMap(format = 'png', cropRect = null) {
   const width = 7680;
   const height = 3840;
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1301,20 +1301,120 @@ function exportMollweideMap() {
   }
   exportRenderer.dispose();
 
-  finalCanvas.toBlob(b => {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(b);
-    link.download = 'mollweide_map.png';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }, 'image/png');
+  let outCanvas = finalCanvas;
+  if (cropRect) {
+    const scaleX = width / mollweideMap.canvas.clientWidth;
+    const scaleY = height / mollweideMap.canvas.clientHeight;
+    const cropW = Math.max(1, cropRect.width * scaleX);
+    const cropH = Math.max(1, cropRect.height * scaleY);
+    const cropX = cropRect.x * scaleX;
+    const cropY = cropRect.y * scaleY;
+    const c = document.createElement('canvas');
+    c.width = cropW;
+    c.height = cropH;
+    c.getContext('2d').drawImage(
+      finalCanvas,
+      cropX,
+      cropY,
+      cropW,
+      cropH,
+      0,
+      0,
+      cropW,
+      cropH
+    );
+    outCanvas = c;
+  }
+
+  if (format === 'pdf') {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: outCanvas.width >= outCanvas.height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [outCanvas.width, outCanvas.height]
+    });
+    pdf.addImage(outCanvas.toDataURL('image/png'), 'PNG', 0, 0, outCanvas.width, outCanvas.height);
+    pdf.save('mollweide_map.pdf');
+  } else {
+    outCanvas.toBlob(b => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(b);
+      link.download = 'mollweide_map.png';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }, 'image/png');
+  }
 }
 
 function setupExportControls() {
-  const btn = document.getElementById('export-mollweide');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    exportMollweideMap();
+  const exportBtn = document.getElementById('export-mollweide');
+  const pngBtn = document.getElementById('export-png');
+  const pdfBtn = document.getElementById('export-pdf');
+  const overlay = document.getElementById('mollweide-export-overlay');
+  const selRect = document.getElementById('export-selection');
+  if (!exportBtn || !pngBtn || !pdfBtn || !overlay || !selRect) return;
+
+  let selecting = false;
+  let startX = 0, startY = 0;
+  let currentRect = null;
+
+  function reset() {
+    selecting = false;
+    currentRect = null;
+    selRect.style.display = 'none';
+    overlay.classList.add('hidden');
+    pngBtn.classList.add('hidden');
+    pdfBtn.classList.add('hidden');
+  }
+
+  overlay.addEventListener('pointerdown', e => {
+    selecting = true;
+    const r = overlay.getBoundingClientRect();
+    startX = e.clientX - r.left;
+    startY = e.clientY - r.top;
+    selRect.style.display = 'block';
+    selRect.style.left = `${startX}px`;
+    selRect.style.top = `${startY}px`;
+    selRect.style.width = '0px';
+    selRect.style.height = '0px';
+  });
+
+  overlay.addEventListener('pointermove', e => {
+    if (!selecting) return;
+    const r = overlay.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    const left = Math.min(startX, x);
+    const top = Math.min(startY, y);
+    const w = Math.abs(x - startX);
+    const h = Math.abs(y - startY);
+    selRect.style.left = `${left}px`;
+    selRect.style.top = `${top}px`;
+    selRect.style.width = `${w}px`;
+    selRect.style.height = `${h}px`;
+    currentRect = { x: left, y: top, width: w, height: h };
+  });
+
+  window.addEventListener('pointerup', () => { selecting = false; });
+
+  exportBtn.addEventListener('click', () => {
+    overlay.classList.toggle('hidden');
+    pngBtn.classList.toggle('hidden');
+    pdfBtn.classList.toggle('hidden');
+    if (overlay.classList.contains('hidden')) {
+      selRect.style.display = 'none';
+      currentRect = null;
+    }
+  });
+
+  pngBtn.addEventListener('click', () => {
+    exportMollweideMap('png', currentRect);
+    reset();
+  });
+
+  pdfBtn.addEventListener('click', () => {
+    exportMollweideMap('pdf', currentRect);
+    reset();
   });
 }
 
