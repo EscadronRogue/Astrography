@@ -1270,9 +1270,9 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap() {
-  const width = 7680;
-  const height = 3840;
+function exportMollweideMap(format = 'png', rect = { x: 0, y: 0, w: 1, h: 1 }) {
+  let width = 7680;
+  let height = 3840;
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
   exportRenderer.setPixelRatio(1);
   const finalCanvas = document.createElement('canvas');
@@ -1301,21 +1301,112 @@ function exportMollweideMap() {
   }
   exportRenderer.dispose();
 
-  finalCanvas.toBlob(b => {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(b);
-    link.download = 'mollweide_map.png';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }, 'image/png');
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.beginPath();
+  ctx.ellipse(width / 2, height / 2, width / 2, height / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  if (rect.x !== 0 || rect.y !== 0 || rect.w !== 1 || rect.h !== 1) {
+    const cropCanvas = document.createElement('canvas');
+    const sx = Math.round(rect.x * width);
+    const sy = Math.round(rect.y * height);
+    const sw = Math.round(rect.w * width);
+    const sh = Math.round(rect.h * height);
+    cropCanvas.width = sw;
+    cropCanvas.height = sh;
+    cropCanvas.getContext('2d').drawImage(finalCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    width = sw;
+    height = sh;
+    finalCanvas.width = sw;
+    finalCanvas.height = sh;
+    finalCanvas.getContext('2d').drawImage(cropCanvas, 0, 0);
+  }
+
+  if (format === 'pdf') {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: width >= height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [width, height]
+    });
+    const imgData = finalCanvas.toDataURL('image/png');
+    pdf.addImage(imgData, 'PNG', 0, 0, width, height);
+    pdf.save('mollweide_map.pdf');
+  } else {
+    finalCanvas.toBlob(b => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(b);
+      link.download = 'mollweide_map.png';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }, 'image/png');
+  }
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
   if (!btn) return;
-  btn.addEventListener('click', () => {
-    exportMollweideMap();
-  });
+  btn.addEventListener('click', startExportSelection);
+}
+
+function startExportSelection() {
+  const canvas = document.getElementById('mollweideMap');
+  const overlay = document.getElementById('export-select-overlay');
+  if (!canvas || !overlay) return;
+  let startX = 0, startY = 0;
+  const rect = canvas.getBoundingClientRect();
+  canvas.style.cursor = 'crosshair';
+
+  function onDown(e) {
+    overlay.classList.remove('hidden');
+    startX = e.clientX - rect.left;
+    startY = e.clientY - rect.top;
+    overlay.style.left = `${startX}px`;
+    overlay.style.top = `${startY}px`;
+    overlay.style.width = '0px';
+    overlay.style.height = '0px';
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+  }
+
+  function onMove(e) {
+    const currX = e.clientX - rect.left;
+    const currY = e.clientY - rect.top;
+    const left = Math.min(startX, currX);
+    const top = Math.min(startY, currY);
+    const width = Math.abs(currX - startX);
+    const height = Math.abs(currY - startY);
+    overlay.style.left = `${left}px`;
+    overlay.style.top = `${top}px`;
+    overlay.style.width = `${width}px`;
+    overlay.style.height = `${height}px`;
+  }
+
+  function onUp(e) {
+    const endX = e.clientX - rect.left;
+    const endY = e.clientY - rect.top;
+    canvas.removeEventListener('pointermove', onMove);
+    canvas.removeEventListener('pointerup', onUp);
+    overlay.classList.add('hidden');
+    canvas.style.cursor = '';
+    const left = Math.min(startX, endX);
+    const top = Math.min(startY, endY);
+    const width = Math.abs(endX - startX);
+    const height = Math.abs(endY - startY);
+    const norm = {
+      x: left / rect.width,
+      y: top / rect.height,
+      w: width / rect.width,
+      h: height / rect.height
+    };
+    const fmt = prompt('Export format (png/pdf)?', 'png');
+    exportMollweideMap(fmt === 'pdf' ? 'pdf' : 'png', norm);
+    canvas.removeEventListener('pointerdown', onDown);
+  }
+
+  canvas.addEventListener('pointerdown', onDown);
 }
 
 function downloadLabelEdits() {

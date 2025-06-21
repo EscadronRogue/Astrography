@@ -22,9 +22,12 @@ function createWideLineMaterial(color) {
     side: THREE.DoubleSide,
     vertexShader: `
       attribute float side;
+      attribute float centerFade;
       varying float vSide;
+      varying float vCenterFade;
       void main() {
         vSide = side;
+        vCenterFade = centerFade;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
@@ -32,8 +35,11 @@ function createWideLineMaterial(color) {
       uniform vec3 color;
       uniform float opacityFactor;
       varying float vSide;
+      varying float vCenterFade;
       void main() {
-        float alpha = 0.5 * (1.0 - abs(vSide)) * opacityFactor;
+        float alphaSide = 1.0 - abs(vSide);
+        float alphaCenter = 1.0 - vCenterFade;
+        float alpha = 0.5 * alphaSide * alphaCenter * opacityFactor;
         if(alpha <= 0.0) discard;
         gl_FragColor = vec4(color, alpha);
       }
@@ -44,9 +50,19 @@ function createWideLineMaterial(color) {
 function buildWideLineGeometry(points, width) {
   const vertices = [];
   const sides = [];
+  const centerFades = [];
+
+  let totalLength = 0;
+  for (let i = 0; i < points.length; i += 2) {
+    totalLength += points[i].distanceTo(points[i + 1]);
+  }
+  let accLength = 0;
+  const halfLength = totalLength / 2;
+
   for (let i = 0; i < points.length; i += 2) {
     const p1 = points[i];
     const p2 = points[i + 1];
+    const segLen = p1.distanceTo(p2);
     const dir = new THREE.Vector2(p2.x - p1.x, p2.y - p1.y).normalize();
     const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(width / 2);
     const a1 = new THREE.Vector3(p1.x + perp.x, p1.y + perp.y, p1.z);
@@ -54,14 +70,23 @@ function buildWideLineGeometry(points, width) {
     const b1 = new THREE.Vector3(p2.x + perp.x, p2.y + perp.y, p2.z);
     const b2 = new THREE.Vector3(p2.x - perp.x, p2.y - perp.y, p2.z);
 
+    const startFade = Math.abs(accLength - halfLength) / halfLength;
+    const endFade = Math.abs(accLength + segLen - halfLength) / halfLength;
+
     vertices.push(a1.x, a1.y, a1.z, a2.x, a2.y, a2.z, b2.x, b2.y, b2.z);
     sides.push(1, -1, -1);
+    centerFades.push(startFade, startFade, endFade);
+
     vertices.push(a1.x, a1.y, a1.z, b2.x, b2.y, b2.z, b1.x, b1.y, b1.z);
     sides.push(1, -1, 1);
+    centerFades.push(startFade, endFade, endFade);
+
+    accLength += segLen;
   }
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geom.setAttribute('side', new THREE.Float32BufferAttribute(sides, 1));
+  geom.setAttribute('centerFade', new THREE.Float32BufferAttribute(centerFades, 1));
   return geom;
 }
 
