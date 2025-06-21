@@ -108,6 +108,13 @@ let rotateInitialRotation = 0;
 let rotateCurrentRotation = 0;
 let scaleStart = null;
 
+// --- Export Selection ---
+let exportOverlayElem = null;
+let exportRectElem = null;
+let exportButtonsElem = null;
+let exportStart = null;
+let exportSelection = null;
+
 const ROTATE_SENSITIVITY = 0.3;
 
 const PRESET_KEY = 'astrography-presets';
@@ -1270,7 +1277,7 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap() {
+function exportMollweideMapRect(selection, format = 'png') {
   const width = 7680;
   const height = 3840;
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1300,22 +1307,113 @@ function exportMollweideMap() {
     }
   }
   exportRenderer.dispose();
+  let outputCanvas = finalCanvas;
+  if (selection) {
+    const canvasRect = mollweideMap.canvas.getBoundingClientRect();
+    const scaleX = width / canvasRect.width;
+    const scaleY = height / canvasRect.height;
+    const sx = Math.round((selection.x - canvasRect.left) * scaleX);
+    const sy = Math.round((selection.y - canvasRect.top) * scaleY);
+    const sw = Math.round(selection.w * scaleX);
+    const sh = Math.round(selection.h * scaleY);
+    const crop = document.createElement('canvas');
+    crop.width = sw;
+    crop.height = sh;
+    crop.getContext('2d').drawImage(finalCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+    outputCanvas = crop;
+  }
 
-  finalCanvas.toBlob(b => {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(b);
-    link.download = 'mollweide_map.png';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }, 'image/png');
+  if (format === 'pdf') {
+    const imgData = outputCanvas.toDataURL('image/png');
+    const orientation = outputCanvas.width >= outputCanvas.height ? 'landscape' : 'portrait';
+    const pdf = new jspdf.jsPDF({ orientation, unit: 'px', format: [outputCanvas.width, outputCanvas.height] });
+    pdf.addImage(imgData, 'PNG', 0, 0, outputCanvas.width, outputCanvas.height);
+    pdf.save('mollweide_map.pdf');
+  } else {
+    outputCanvas.toBlob(b => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(b);
+      link.download = 'mollweide_map.png';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }, 'image/png');
+  }
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
-  if (!btn) return;
-  btn.addEventListener('click', () => {
-    exportMollweideMap();
-  });
+  exportOverlayElem = document.getElementById('export-overlay');
+  exportRectElem = document.getElementById('export-rectangle');
+  exportButtonsElem = document.getElementById('export-buttons');
+  if (!btn || !exportOverlayElem) return;
+  btn.addEventListener('click', startExportSelection);
+  exportOverlayElem.addEventListener('pointerdown', onExportPointerDown);
+  window.addEventListener('pointermove', onExportPointerMove);
+  window.addEventListener('pointerup', onExportPointerUp);
+  const pngBtn = document.getElementById('export-png');
+  const pdfBtn = document.getElementById('export-pdf');
+  if (pngBtn) pngBtn.addEventListener('click', () => finishExport('png'));
+  if (pdfBtn) pdfBtn.addEventListener('click', () => finishExport('pdf'));
+}
+
+function startExportSelection() {
+  exportButtonsElem.style.display = 'none';
+  exportRectElem.style.display = 'none';
+  exportOverlayElem.style.display = 'block';
+  exportOverlayElem.style.pointerEvents = 'auto';
+  exportStart = null;
+  exportSelection = null;
+  if (mollweideMap && mollweideMap.controls) {
+    mollweideMap.controls.enabled = false;
+  }
+}
+
+function onExportPointerDown(e) {
+  if (e.button !== 0) return;
+  exportStart = { x: e.clientX, y: e.clientY };
+  exportRectElem.style.display = 'block';
+  exportRectElem.style.left = `${exportStart.x}px`;
+  exportRectElem.style.top = `${exportStart.y}px`;
+  exportRectElem.style.width = '0px';
+  exportRectElem.style.height = '0px';
+}
+
+function onExportPointerMove(e) {
+  if (!exportStart) return;
+  const x = Math.min(exportStart.x, e.clientX);
+  const y = Math.min(exportStart.y, e.clientY);
+  const w = Math.abs(exportStart.x - e.clientX);
+  const h = Math.abs(exportStart.y - e.clientY);
+  exportRectElem.style.left = `${x}px`;
+  exportRectElem.style.top = `${y}px`;
+  exportRectElem.style.width = `${w}px`;
+  exportRectElem.style.height = `${h}px`;
+}
+
+function onExportPointerUp(e) {
+  if (!exportStart) return;
+  const x = Math.min(exportStart.x, e.clientX);
+  const y = Math.min(exportStart.y, e.clientY);
+  const w = Math.abs(exportStart.x - e.clientX);
+  const h = Math.abs(exportStart.y - e.clientY);
+  exportSelection = { x, y, w, h };
+  exportButtonsElem.style.left = `${x}px`;
+  exportButtonsElem.style.top = `${y + h + 10}px`;
+  exportButtonsElem.style.display = 'flex';
+  exportOverlayElem.style.pointerEvents = 'none';
+  exportStart = null;
+}
+
+function finishExport(format) {
+  if (!exportSelection) return;
+  exportMollweideMapRect(exportSelection, format);
+  exportOverlayElem.style.display = 'none';
+  exportButtonsElem.style.display = 'none';
+  exportRectElem.style.display = 'none';
+  exportSelection = null;
+  if (mollweideMap && mollweideMap.controls) {
+    mollweideMap.controls.enabled = true;
+  }
 }
 
 function downloadLabelEdits() {

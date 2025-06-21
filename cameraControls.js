@@ -37,6 +37,9 @@ export class ThreeDControls {
         this.lastTouch = null;
         this.touchStartDistance = 0;
 
+        // Controls can be temporarily disabled
+        this.enabled = true;
+
         // Bind event handlers
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseMove = this.onMouseMove.bind(this);
@@ -65,6 +68,7 @@ export class ThreeDControls {
      * @param {MouseEvent} event 
      */
     onMouseDown(event) {
+        if (!this.enabled) return;
         this.isRotating = true;
         this.previousMousePosition = {
             x: event.clientX,
@@ -77,7 +81,7 @@ export class ThreeDControls {
      * @param {MouseEvent} event 
      */
     onMouseMove(event) {
-        if (!this.isRotating) return;
+        if (!this.enabled || !this.isRotating) return;
 
         const deltaMove = {
             x: event.clientX - this.previousMousePosition.x,
@@ -116,6 +120,7 @@ export class ThreeDControls {
      * @param {MouseEvent} event 
      */
     onMouseUp(event) {
+        if (!this.enabled) return;
         this.isRotating = false;
     }
 
@@ -124,6 +129,7 @@ export class ThreeDControls {
      * @param {WheelEvent} event 
      */
     onWheel(event) {
+        if (!this.enabled) return;
         event.preventDefault();
 
         const delta = event.deltaY;
@@ -164,6 +170,7 @@ export class ThreeDControls {
      * @param {TouchEvent} event 
      */
     onTouchStart(event) {
+        if (!this.enabled) return;
         if (event.touches.length === 1) {
             // Single touch for rotation
             this.isTouchRotating = true;
@@ -181,6 +188,7 @@ export class ThreeDControls {
      * @param {TouchEvent} event 
      */
     onTouchMove(event) {
+        if (!this.enabled) return;
         event.preventDefault();
         if (this.isPinching && event.touches.length === 2) {
             // Handle pinch zoom
@@ -237,6 +245,7 @@ export class ThreeDControls {
      * @param {TouchEvent} event 
      */
     onTouchEnd(event) {
+        if (!this.enabled) return;
         if (event.touches.length === 0) {
             this.isTouchRotating = false;
             this.isPinching = false;
@@ -289,6 +298,9 @@ export class TwoDControls {
         this.isPinching = false;
         this.touchStartDistance = 0;
 
+        // Controls can be temporarily disabled
+        this.enabled = true;
+
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseMove = this.onMouseMove.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
@@ -337,6 +349,7 @@ export class TwoDControls {
     }
 
     onMouseDown(event) {
+        if (!this.enabled) return;
         this.isPanning = true;
         this.button = event.button;
         if (this.button === 2) event.preventDefault();
@@ -344,7 +357,7 @@ export class TwoDControls {
     }
 
     onMouseMove(event) {
-        if (!this.isPanning) return;
+        if (!this.enabled || !this.isPanning) return;
         const dx = event.clientX - this.lastPos.x;
         const dy = event.clientY - this.lastPos.y;
         this.pan(dx, dy, this.button);
@@ -353,11 +366,13 @@ export class TwoDControls {
     }
 
     onMouseUp() {
+        if (!this.enabled) return;
         this.isPanning = false;
         this.button = 0;
     }
 
     onWheel(event) {
+        if (!this.enabled) return;
         event.preventDefault();
         const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
         this.camera.zoom *= zoomFactor;
@@ -372,6 +387,7 @@ export class TwoDControls {
     }
 
     onTouchStart(event) {
+        if (!this.enabled) return;
         if (event.touches.length === 1) {
             this.isPanning = true;
             this.lastPos = { x: event.touches[0].clientX, y: event.touches[0].clientY };
@@ -382,6 +398,7 @@ export class TwoDControls {
     }
 
     onTouchMove(event) {
+        if (!this.enabled) return;
         event.preventDefault();
         if (this.isPinching && event.touches.length === 2) {
             const currentDistance = this.getTouchDistance(event.touches[0], event.touches[1]);
@@ -402,6 +419,7 @@ export class TwoDControls {
     }
 
     onTouchEnd() {
+        if (!this.enabled) return;
         this.isPanning = false;
         this.isPinching = false;
     }
