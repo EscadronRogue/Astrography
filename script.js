@@ -108,6 +108,12 @@ let rotateInitialRotation = 0;
 let rotateCurrentRotation = 0;
 let scaleStart = null;
 
+// --- Export Selection ---
+let exportOverlay = null;
+let exportRect = null;
+let exportButtons = null;
+let exportStart = null;
+
 const ROTATE_SENSITIVITY = 0.3;
 
 const PRESET_KEY = 'astrography-presets';
@@ -1270,9 +1276,22 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap() {
-  const width = 7680;
-  const height = 3840;
+function exportMollweideMap(crop = null, format = 'png') {
+  const widthFull = 7680;
+  const heightFull = 3840;
+  let width = widthFull;
+  let height = heightFull;
+  let offsetX = 0;
+  let offsetY = 0;
+  if (crop) {
+    const rect = mollweideMap.canvas.getBoundingClientRect();
+    const scaleX = widthFull / rect.width;
+    const scaleY = heightFull / rect.height;
+    width = Math.round(crop.width * scaleX);
+    height = Math.round(crop.height * scaleY);
+    offsetX = Math.round(crop.x * scaleX);
+    offsetY = Math.round((rect.height - crop.y - crop.height) * scaleY);
+  }
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
   exportRenderer.setPixelRatio(1);
   const finalCanvas = document.createElement('canvas');
@@ -1287,35 +1306,134 @@ function exportMollweideMap() {
       const tileH = Math.min(tile, height - y);
       exportRenderer.setSize(tileW, tileH);
       const cam = mollweideMap.camera.clone();
-      const aspect = width / height;
+      const aspect = widthFull / heightFull;
       cam.left = (-mollweideMap.frustumSize * aspect) / 2;
       cam.right = (mollweideMap.frustumSize * aspect) / 2;
       cam.top = mollweideMap.frustumSize / 2;
       cam.bottom = -mollweideMap.frustumSize / 2;
       cam.updateProjectionMatrix();
-      cam.setViewOffset(width, height, x, y, tileW, tileH);
+      cam.setViewOffset(widthFull, heightFull, offsetX + x, offsetY + y, tileW, tileH);
       exportRenderer.render(mollweideMap.scene, cam);
       cam.clearViewOffset();
       ctx.drawImage(exportRenderer.domElement, x, height - y - tileH, tileW, tileH);
     }
   }
   exportRenderer.dispose();
-
-  finalCanvas.toBlob(b => {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(b);
-    link.download = 'mollweide_map.png';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }, 'image/png');
+  if (format === 'png') {
+    finalCanvas.toBlob(b => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(b);
+      link.download = 'mollweide_map.png';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }, 'image/png');
+  } else {
+    const dataUrl = finalCanvas.toDataURL('image/png');
+    const pdf = new jspdf.jsPDF({
+      orientation: width >= height ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [width, height]
+    });
+    pdf.addImage(dataUrl, 'PNG', 0, 0, width, height);
+    pdf.save('mollweide_map.pdf');
+  }
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    exportMollweideMap();
+    startExportSelection();
   });
+}
+
+function startExportSelection() {
+  if (!exportOverlay) {
+    const container = document.querySelector('#mollweideMap').parentElement;
+    exportOverlay = document.createElement('div');
+    exportOverlay.id = 'export-selection-overlay';
+    exportRect = document.createElement('div');
+    exportRect.id = 'export-selection-rect';
+    exportButtons = document.createElement('div');
+    exportButtons.id = 'export-selection-buttons';
+    const pngBtn = document.createElement('button');
+    pngBtn.textContent = 'PNG';
+    pngBtn.className = 'export-btn';
+    const pdfBtn = document.createElement('button');
+    pdfBtn.textContent = 'PDF';
+    pdfBtn.className = 'export-btn';
+    exportButtons.appendChild(pngBtn);
+    exportButtons.appendChild(pdfBtn);
+    exportOverlay.appendChild(exportRect);
+    exportOverlay.appendChild(exportButtons);
+    container.appendChild(exportOverlay);
+    pngBtn.addEventListener('click', () => finishExport('png'));
+    pdfBtn.addEventListener('click', () => finishExport('pdf'));
+  }
+  exportOverlay.classList.add('active');
+  exportButtons.style.display = 'none';
+  exportRect.style.display = 'none';
+  const rect = mollweideMap.canvas.getBoundingClientRect();
+  exportOverlay.style.left = rect.left + 'px';
+  exportOverlay.style.top = rect.top + 'px';
+  exportOverlay.style.width = rect.width + 'px';
+  exportOverlay.style.height = rect.height + 'px';
+  exportOverlay.addEventListener('pointerdown', onExportDown);
+}
+
+function onExportDown(e) {
+  exportStart = { x: e.clientX, y: e.clientY };
+  exportRect.style.display = 'block';
+  const r = exportOverlay.getBoundingClientRect();
+  exportRect.style.left = (exportStart.x - r.left) + 'px';
+  exportRect.style.top = (exportStart.y - r.top) + 'px';
+  exportRect.style.width = '0px';
+  exportRect.style.height = '0px';
+  document.addEventListener('pointermove', onExportMove);
+  document.addEventListener('pointerup', onExportUp);
+  e.preventDefault();
+}
+
+function onExportMove(e) {
+  const r = exportOverlay.getBoundingClientRect();
+  const x = Math.max(r.left, Math.min(e.clientX, r.right)) - r.left;
+  const y = Math.max(r.top, Math.min(e.clientY, r.bottom)) - r.top;
+  const sx = exportStart.x - r.left;
+  const sy = exportStart.y - r.top;
+  const left = Math.min(sx, x);
+  const top = Math.min(sy, y);
+  const width = Math.abs(x - sx);
+  const height = Math.abs(y - sy);
+  exportRect.style.left = left + 'px';
+  exportRect.style.top = top + 'px';
+  exportRect.style.width = width + 'px';
+  exportRect.style.height = height + 'px';
+}
+
+function onExportUp() {
+  document.removeEventListener('pointermove', onExportMove);
+  document.removeEventListener('pointerup', onExportUp);
+  exportButtons.style.display = 'flex';
+  const r = exportRect.getBoundingClientRect();
+  const ov = exportOverlay.getBoundingClientRect();
+  exportButtons.style.left = (r.left - ov.left) + 'px';
+  exportButtons.style.top = (r.top - ov.top + r.height + 6) + 'px';
+}
+
+function finishExport(fmt) {
+  const r = exportRect.getBoundingClientRect();
+  const ov = exportOverlay.getBoundingClientRect();
+  const crop = {
+    x: r.left - ov.left,
+    y: r.top - ov.top,
+    width: r.width,
+    height: r.height
+  };
+  exportOverlay.classList.remove('active');
+  exportOverlay.removeEventListener('pointerdown', onExportDown);
+  exportButtons.style.display = 'none';
+  exportRect.style.display = 'none';
+  exportMollweideMap(crop, fmt);
 }
 
 function downloadLabelEdits() {
