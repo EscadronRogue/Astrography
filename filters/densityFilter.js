@@ -87,7 +87,6 @@ class DensityGridOverlay {
     this.maxDistance = parseFloat(maxDistance);
     this.gridSize = gridSize;
     this.cubesData = [];
-    this.adjacentLines = [];
     this.maxDensity = 0;
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
     this.opacityFactor = 1.0;
@@ -203,7 +202,6 @@ class DensityGridOverlay {
       }
     }
 
-    this.computeAdjacentLines();
   }
 
   computeCellDensity(cell, stars, radius = 10, tolerance = 0) {
@@ -222,63 +220,6 @@ class DensityGridOverlay {
     cell.density = sum;
   }
 
-  computeAdjacentLines() {
-    this.adjacentLines = [];
-    const cellMap = new Map();
-    this.cubesData.forEach(cell => {
-      const key = `${cell.grid.ix},${cell.grid.iy},${cell.grid.iz}`;
-      cellMap.set(key, cell);
-    });
-    const directions = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dz = -1; dz <= 1; dz++) {
-          if (dx === 0 && dy === 0 && dz === 0) continue;
-          if (dx > 0 || (dx === 0 && dy > 0) || (dx === 0 && dy === 0 && dz > 0)) {
-            directions.push({ dx, dy, dz });
-          }
-        }
-      }
-    }
-    directions.forEach(dir => {
-      this.cubesData.forEach(cell => {
-        const neighborKey = `${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`;
-        if (cellMap.has(neighborKey)) {
-          const neighbor = cellMap.get(neighborKey);
-          const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
-          const positions = [];
-          const mollPts = getGreatCirclePoints(cell.globeMesh.position,
-            neighbor.globeMesh.position, 100, 16).map(v => {
-              const { ra, dec } = vectorToRaDecRad(v, 100);
-              return radToMollweide(ra, dec, 100, getMollweideLambda0());
-            });
-          const pointsM = [];
-          for (let m = 0; m < mollPts.length - 1; m++) {
-            const segsM = splitMollweideWrap(mollPts[m], mollPts[m + 1]);
-            segsM.forEach(([s,e]) => { pointsM.push(s, e); });
-          }
-          const geomM = buildWideLineGeometry(pointsM, this.mollLineWidth);
-          for (let i = 0; i < points.length; i++) {
-            positions.push(points[i].x, points[i].y, points[i].z);
-          }
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          const mat = new THREE.LineBasicMaterial({
-            color: 0xff0000,
-            transparent: true,
-            opacity: 0.3,
-            linewidth: 2
-          });
-          const line = new THREE.Line(geom, mat);
-          line.renderOrder = 1;
-          const mollMat = createWideLineMaterial(0xff0000);
-          const lineM = new THREE.Mesh(geomM, mollMat);
-          lineM.renderOrder = 1;
-          this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
-        }
-      });
-    });
-  }
 
   update(stars, sceneTC, sceneGlobe, sceneMoll) {
     const radiusSlider = document.getElementById('density-slider');
@@ -357,30 +298,8 @@ class DensityGridOverlay {
       cell.mollweideMesh.scale.set(scale, scale, 1);
       cell.mollSprite.visible = cell.active;
     });
-    this.adjacentLines.forEach(obj => {
-      const { line, lineM, cell1, cell2 } = obj;
-      const visible = cell1.active && cell2.active;
-      line.visible = visible;
-      lineM.visible = visible;
-      if (visible) {
-        const c1 = cell1.tcMesh.material.color;
-        const c2 = cell2.tcMesh.material.color;
-        const avgColor = c1.clone().lerp(c2, 0.5);
-        const avgOpacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
-        line.material.color.copy(avgColor);
-        line.material.opacity = avgOpacity;
-        line.material.vertexColors = false;
-        line.material.needsUpdate = true;
-        lineM.material.uniforms.color.value.copy(avgColor);
-        lineM.material.uniforms.opacityFactor.value = avgOpacity;
-        lineM.material.needsUpdate = true;
-      }
-    });
     if (sceneTC) {
       this.cubesData.forEach(c => { sceneTC.add(c.tcMesh); });
-    }
-    if (sceneGlobe) {
-      this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
     }
     if (sceneMoll) {
       this.cubesData.forEach(c => { sceneMoll.add(c.mollSprite); });
@@ -400,20 +319,6 @@ class DensityGridOverlay {
         cell.mollY,
         0
       );
-    });
-    this.adjacentLines.forEach(obj => {
-      const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
-        obj.cell2.globeMesh.position, 100, 16).map(v => {
-          const { ra, dec } = vectorToRaDecRad(v, 100);
-          return radToMollweide(ra, dec, 100, lambda0);
-        });
-      const pts = [];
-      for (let i = 0; i < gcPts.length - 1; i++) {
-        const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
-        segs.forEach(([s,e]) => { pts.push(s, e); });
-      }
-      obj.lineM.geometry.dispose();
-      obj.lineM.geometry = buildWideLineGeometry(pts, this.mollLineWidth);
     });
   }
 }

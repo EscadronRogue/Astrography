@@ -1313,7 +1313,7 @@ function exportMollweideMap(format = 'png', rect = null) {
     cropCtx.drawImage(
       finalCanvas,
       rect.x * scaleX,
-      height - (rect.y + rect.height) * scaleY,
+      rect.y * scaleY,
       rect.width * scaleX,
       rect.height * scaleY,
       0,
