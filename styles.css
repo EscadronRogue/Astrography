@@ -385,6 +385,20 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   color: #000;
 }
 
+#export-options {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+#export-selection-rect {
+  position: absolute;
+  border: 2px dashed #ff6f61;
+  pointer-events: none;
+  z-index: 1000;
+}
+
 /* Tooltip */
 #tooltip {
   position: absolute;

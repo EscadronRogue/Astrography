@@ -10,6 +10,22 @@ import {
 import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
 
+function createCircleTexture(size = 128) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
+}
+
 // Helper material and geometry builders for wide fading lines on the Mollweide map
 function createWideLineMaterial(color) {
   return new THREE.ShaderMaterial({
@@ -75,6 +91,7 @@ class DensityGridOverlay {
     this.maxDensity = 0;
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
     this.opacityFactor = 1.0;
+    this.circleTexture = createCircleTexture();
   }
 
   createGrid(stars) {
@@ -109,10 +126,19 @@ class DensityGridOverlay {
 
           let projectedPos;
           let ra, dec;
+          let sprite;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
             squareMoll.position.set(0, 0, 0);
             ra = 0; dec = 0;
+            sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+              map: this.circleTexture,
+              color: 0xffffff,
+              transparent: true,
+              opacity: 0.0,
+              depthWrite: false
+            }));
+            sprite.position.set(0,0,0);
           } else {
             ra = Math.atan2(-posTC.z, -posTC.x);
             dec = Math.asin(posTC.y / distFromCenter);
@@ -124,6 +150,14 @@ class DensityGridOverlay {
             );
             const projMoll = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
             squareMoll.position.copy(projMoll);
+            sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+              map: this.circleTexture,
+              color: 0xffffff,
+              transparent: true,
+              opacity: 0.0,
+              depthWrite: false
+            }));
+            sprite.position.copy(projMoll);
           }
           let theta = dec;
           for (let i = 0; i < 10; i++) {
@@ -149,6 +183,7 @@ class DensityGridOverlay {
             tcMesh: cubeTC,
             globeMesh: squareGlobe,
             mollweideMesh: squareMoll,
+            mollSprite: sprite,
             tcPos: posTC,
             grid: {
               ix: Math.round(x / this.gridSize),
@@ -299,6 +334,9 @@ class DensityGridOverlay {
       const finalAlpha = alpha * this.opacityFactor;
       cell.tcMesh.material.opacity = finalAlpha;
       cell.globeMesh.material.opacity = finalAlpha;
+      cell.mollSprite.material.opacity = finalAlpha;
+      cell.mollSprite.material.color.copy(color);
+      cell.mollSprite.scale.set(scale * 10, scale * 10, 1);
       cell.mollweideMesh.material.opacity = finalAlpha;
       cell.tcMesh.material.color.copy(color);
       cell.globeMesh.material.color.copy(color);
@@ -306,6 +344,7 @@ class DensityGridOverlay {
       cell.tcMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale, scale, 1);
+      cell.mollSprite.visible = cell.active;
     });
     this.adjacentLines.forEach(obj => {
       const { line, lineM, cell1, cell2 } = obj;
@@ -333,7 +372,7 @@ class DensityGridOverlay {
       this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
     }
     if (sceneMoll) {
-      this.adjacentLines.forEach(o => { sceneMoll.add(o.lineM); });
+      this.cubesData.forEach(c => { sceneMoll.add(c.mollSprite); });
     }
   }
 
@@ -341,6 +380,11 @@ class DensityGridOverlay {
     this.cubesData.forEach(cell => {
       const lambda = minimalRADifference(cell.raRad - lambda0);
       cell.mollweideMesh.position.set(
+        cell.mollXFactor * lambda,
+        cell.mollY,
+        0
+      );
+      cell.mollSprite.position.set(
         cell.mollXFactor * lambda,
         cell.mollY,
         0
