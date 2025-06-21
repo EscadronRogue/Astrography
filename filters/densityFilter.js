@@ -336,7 +336,18 @@ class DensityGridOverlay {
       cell.globeMesh.material.opacity = finalAlpha;
       cell.mollSprite.material.opacity = finalAlpha;
       cell.mollSprite.material.color.copy(color);
-      cell.mollSprite.scale.set(scale * 10, scale * 10, 1);
+      let spriteSize = scale * 10;
+      const px = cell.mollSprite.position.x;
+      const py = cell.mollSprite.position.y;
+      const len = Math.sqrt(px * px + py * py);
+      if (len > 0) {
+        const denom = Math.sqrt((px * px) / 40000 + (py * py) / 10000);
+        const border = len / denom;
+        const maxR = border - len;
+        const allowed = maxR * 2; // diameter
+        if (allowed < spriteSize) spriteSize = Math.max(0, allowed);
+      }
+      cell.mollSprite.scale.set(spriteSize, spriteSize, 1);
       cell.mollweideMesh.material.opacity = finalAlpha;
       cell.tcMesh.material.color.copy(color);
       cell.globeMesh.material.color.copy(color);

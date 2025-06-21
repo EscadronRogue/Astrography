@@ -1353,15 +1353,17 @@ function exportMollweideMap(format = 'png', rect = null) {
 
 function startExportSelection() {
   const container = mollweideMap.canvas.parentElement;
+  const canvas = mollweideMap.canvas;
   exportSelection = null;
   exportRectDiv = document.createElement('div');
   exportRectDiv.id = 'export-selection-rect';
   container.appendChild(exportRectDiv);
   mollweideMap.controls.enabled = false;
 
-  const rect = container.getBoundingClientRect();
+  const canvasRect = canvas.getBoundingClientRect();
+  const contRect = container.getBoundingClientRect();
   function getPos(e) {
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return { x: e.clientX - canvasRect.left, y: e.clientY - canvasRect.top };
   }
 
   function onDown(e) {
@@ -1388,8 +1390,8 @@ function startExportSelection() {
     const y1 = Math.min(exportSelection.start.y, exportSelection.end.y);
     const x2 = Math.max(exportSelection.start.x, exportSelection.end.x);
     const y2 = Math.max(exportSelection.start.y, exportSelection.end.y);
-    exportRectDiv.style.left = `${x1}px`;
-    exportRectDiv.style.top = `${y1}px`;
+    exportRectDiv.style.left = `${x1 + canvasRect.left - contRect.left}px`;
+    exportRectDiv.style.top = `${y1 + canvasRect.top - contRect.top}px`;
     exportRectDiv.style.width = `${x2 - x1}px`;
     exportRectDiv.style.height = `${y2 - y1}px`;
   }

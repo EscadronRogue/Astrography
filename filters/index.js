@@ -484,6 +484,9 @@ export function applyFilters(allStars) {
       if (densityOverlay) {
         densityOverlay.cubesData.forEach(cell => {
           window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+          if (window.mollweideMap.scene.children.includes(cell.mollSprite)) {
+            window.mollweideMap.scene.remove(cell.mollSprite);
+          }
         });
         densityOverlay.adjacentLines.forEach(obj => {
           window.globeMap.scene.remove(obj.line);
@@ -493,6 +496,7 @@ export function applyFilters(allStars) {
       densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       densityOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.add(cell.tcMesh);
+        window.mollweideMap.scene.add(cell.mollSprite);
       });
       densityOverlay.adjacentLines.forEach(obj => {
         window.globeMap.scene.add(obj.line);
@@ -504,6 +508,9 @@ export function applyFilters(allStars) {
     if (densityOverlay) {
       densityOverlay.cubesData.forEach(cell => {
         window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        if (window.mollweideMap.scene.children.includes(cell.mollSprite)) {
+          window.mollweideMap.scene.remove(cell.mollSprite);
+        }
       });
       densityOverlay.adjacentLines.forEach(obj => {
         window.globeMap.scene.remove(obj.line);
