@@ -444,6 +444,7 @@ async function buildAndApplyFilters() {
   // store overlay references for external refresh calls
   isolationOverlay = returnedIsolationOverlay;
   densityOverlay = returnedDensityOverlay;
+  window.densityOverlay = densityOverlay;
 
   currentFilteredStars = filteredStars;
   currentConnections = connections;
@@ -1924,6 +1925,7 @@ async function main() {
   loader.classList.remove('hidden');
   try {
     cachedStars = await loadStarData();
+    window.cachedStars = cachedStars;
     if (!cachedStars.length) throw new Error('No star data available');
     await setupFilterUI(cachedStars);
     const form = document.getElementById('filters-form');

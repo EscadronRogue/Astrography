@@ -81,6 +81,8 @@ export function initFilterUI() {
   const densityGridNumber = document.getElementById('density-grid-number');
   const densityOpacitySlider = document.getElementById('density-opacity-slider');
   const densityOpacityNumber = document.getElementById('density-opacity-number');
+  const densityStyleBtn = document.getElementById('density-style-btn');
+  if (densityStyleBtn) densityStyleBtn.dataset.style = 'default';
   const starOpacitySlider = document.getElementById('star-opacity-slider');
   const starOpacityNumber = document.getElementById('star-opacity-number');
   const starNameOpacitySlider = document.getElementById('star-name-opacity-slider');
@@ -139,6 +141,19 @@ export function initFilterUI() {
   densityOpacityNumber.addEventListener('input', function () {
     densityOpacitySlider.value = this.value;
     document.getElementById('density-opacity-value').textContent = this.value;
+  });
+
+  densityStyleBtn.addEventListener('click', function () {
+    const old = this.dataset.style === 'old';
+    const newStyle = old ? 'default' : 'old';
+    this.dataset.style = newStyle;
+    this.textContent = newStyle === 'old' ? 'Switch to Default Style' : 'Switch to Old Map Style';
+    if (window.densityOverlay && typeof window.densityOverlay.setStyle === 'function') {
+      window.densityOverlay.setStyle(newStyle);
+      if (window.cachedStars) {
+        window.densityOverlay.update(window.cachedStars, window.trueCoordinatesMap.scene, window.globeMap.scene, window.mollweideMap.scene);
+      }
+    }
   });
 
   starOpacitySlider.addEventListener('input', function () {

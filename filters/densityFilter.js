@@ -75,6 +75,12 @@ class DensityGridOverlay {
     this.maxDensity = 0;
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
     this.opacityFactor = 1.0;
+    this.style = 'default';
+    this.minAlpha = 0.05; // minimum opacity for old map style
+  }
+
+  setStyle(newStyle) {
+    this.style = newStyle === 'old' ? 'old' : 'default';
   }
 
   createGrid(stars) {
@@ -280,30 +286,68 @@ class DensityGridOverlay {
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       let color = new THREE.Color(0xffffff);
       let alpha = 0;
-      if (cell.density <= bottomThr) {
-        const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
-        color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0xffffff), t);
-        alpha = 0.5 * (1 - t);
-        cell.active = true;
-      } else if (cell.density >= topThr) {
-        const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
-        const baseRed = new THREE.Color(0xff0000);
-        const lightRed = lightenColor(baseRed.clone(), 0.4);
-        color = lightRed.lerp(baseRed, t);
-        alpha = 0.5 * t;
-        cell.active = true;
+
+      if (this.style === 'old') {
+        const bottomCol = new THREE.Color(0xcad2d1); // light blueish beige
+        const topCol = new THREE.Color(0xbfa77a);   // darkish beige
+        const midCol = new THREE.Color(0xf5f1e3);   // whitish beige
+
+        if (cell.density <= bottomThr) {
+          const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
+          color = bottomCol;
+          alpha = 0.5 * (1 - t);
+          cell.active = true;
+        } else if (cell.density >= topThr) {
+          const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
+          color = topCol;
+          alpha = 0.5 * t;
+          cell.active = true;
+        } else {
+          color = midCol;
+          alpha = 0.125;
+          cell.active = true;
+        }
+
+        let finalAlpha;
+        if (color.equals(midCol)) {
+          finalAlpha = Math.max(this.minAlpha / 4, alpha * this.opacityFactor);
+        } else {
+          finalAlpha = Math.max(this.minAlpha, alpha * this.opacityFactor);
+        }
+        cell.tcMesh.material.opacity = finalAlpha;
+        cell.globeMesh.material.opacity = finalAlpha;
+        cell.mollweideMesh.material.opacity = finalAlpha;
+        cell.tcMesh.material.color.copy(color);
+        cell.globeMesh.material.color.copy(color);
+        cell.mollweideMesh.material.color.copy(color);
+        cell.tcMesh.visible = true;
       } else {
-        cell.active = false;
+        if (cell.density <= bottomThr) {
+          const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
+          color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0xffffff), t);
+          alpha = 0.5 * (1 - t);
+          cell.active = true;
+        } else if (cell.density >= topThr) {
+          const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
+          const baseRed = new THREE.Color(0xff0000);
+          const lightRed = lightenColor(baseRed.clone(), 0.4);
+          color = lightRed.lerp(baseRed, t);
+          alpha = 0.5 * t;
+          cell.active = true;
+        } else {
+          cell.active = false;
+        }
+
+        const finalAlpha = alpha * this.opacityFactor;
+        cell.tcMesh.material.opacity = finalAlpha;
+        cell.globeMesh.material.opacity = finalAlpha;
+        cell.mollweideMesh.material.opacity = finalAlpha;
+        cell.tcMesh.material.color.copy(color);
+        cell.globeMesh.material.color.copy(color);
+        cell.mollweideMesh.material.color.copy(color);
+        cell.tcMesh.visible = cell.active;
       }
 
-      const finalAlpha = alpha * this.opacityFactor;
-      cell.tcMesh.material.opacity = finalAlpha;
-      cell.globeMesh.material.opacity = finalAlpha;
-      cell.mollweideMesh.material.opacity = finalAlpha;
-      cell.tcMesh.material.color.copy(color);
-      cell.globeMesh.material.color.copy(color);
-      cell.mollweideMesh.material.color.copy(color);
-      cell.tcMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale, scale, 1);
     });
