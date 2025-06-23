@@ -341,6 +341,23 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   transform: translate(0, -50%);
 }
 
+#export-selection-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  cursor: crosshair;
+  display: none;
+  z-index: 1000;
+}
+#export-selection-rect {
+  position: absolute;
+  border: 2px dashed #ff6f61;
+  background: rgba(255, 111, 97, 0.2);
+  pointer-events: none;
+}
+
 /* Fullscreen Button for Maps */
 .fullscreen-btn {
   position: absolute;
@@ -366,7 +383,7 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   background: rgba(20, 20, 20, 0.7);
   padding: 5px;
   border-radius: 4px;
-  z-index: 10;
+  z-index: 1100;
 }
 .export-controls select,
 .export-controls button {
