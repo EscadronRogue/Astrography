@@ -806,12 +806,12 @@ class MapManager {
     this.labelOpacity = 1.0;
     this.points = null;
     this.instancedMesh = null;
-    if (mapType === 'Mollweide') {
-      const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-      // Use a larger frustum so the entire Mollweide projection fits on screen
-      this.frustumSize = 400;
-      this.camera = new THREE.OrthographicCamera(
-        (-this.frustumSize * aspect) / 2,
+      if (mapType === 'Mollweide') {
+        const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+        // Use a larger frustum so the entire Mollweide projection fits on screen
+        this.frustumSize = 400;
+        this.camera = new THREE.OrthographicCamera(
+          (-this.frustumSize * aspect) / 2,
         (this.frustumSize * aspect) / 2,
         this.frustumSize / 2,
         -this.frustumSize / 2,
@@ -835,10 +835,11 @@ class MapManager {
     this.scene.add(this.camera);
     const amb = new THREE.AmbientLight(0xffffff, 0.5);
     this.scene.add(amb);
-    const pt = new THREE.PointLight(0xffffff, 1);
-    this.scene.add(pt);
-    if (mapType === 'Mollweide') {
-      this.controls = new TwoDControls(this.camera, this.renderer.domElement, {
+      const pt = new THREE.PointLight(0xffffff, 1);
+      this.scene.add(pt);
+      if (mapType === 'Mollweide') {
+        const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
+        this.controls = new TwoDControls(this.camera, this.renderer.domElement, {
         rightCallback: (dx) => {
           let lambda0 = getMollweideLambda0() - dx * 0.002;
           const twoPi = Math.PI * 2;
