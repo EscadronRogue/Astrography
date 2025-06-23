@@ -340,48 +340,23 @@ function createGlobeGrid(R = 100, options = {}) {
   return gridGroup;
 }
 
-function createMollweideBorder(R = 100, thickness = 6, segments = 256) {
-  const inner = R;
-  const outer = R + thickness;
-  const geometry = new THREE.RingGeometry(inner, outer, segments);
+function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
+  const geometry = new THREE.RingGeometry(R, R + thickness, segments);
+  geometry.scale(2, 1, 1); // turn the circular ring into an ellipse
 
-  const pos = geometry.attributes.position;
-  const count = pos.count;
-  const alpha = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    const x = pos.getX(i);
-    const y = pos.getY(i);
-    const r = Math.sqrt(x * x + y * y);
-    alpha[i] = r <= inner + 1e-5 ? 1.0 : 0.0;
-  }
-  geometry.setAttribute('alpha', new THREE.BufferAttribute(alpha, 1));
-
-  const material = new THREE.ShaderMaterial({
-    uniforms: { color: { value: new THREE.Color(0xaaaaaa) } },
-    vertexShader: `
-      attribute float alpha;
-      varying float vAlpha;
-      void main() {
-        vAlpha = alpha;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 color;
-      varying float vAlpha;
-      void main() {
-        gl_FragColor = vec4(color, vAlpha);
-      }
-    `,
-    transparent: true,
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xaaaaaa,
+    side: THREE.DoubleSide,
+    depthTest: false,
     depthWrite: false
   });
+
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1001;
   return mesh;
 }
 
-function createMollweideMask(R = 100, segments = 256) {
+function createMollweideMask(R = 100, segments = 1024) {
   const outer = 1000;
   const shape = new THREE.Shape();
   shape.moveTo(-outer / 2, -outer / 2);
@@ -880,10 +855,10 @@ class MapManager {
         panCameraLeft: true,
         panCameraRight: false
       });
-      const border = createMollweideBorder(100);
-      this.scene.add(border);
       const mask = createMollweideMask(100);
       this.scene.add(mask);
+      const border = createMollweideBorder(100);
+      this.scene.add(border);
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
