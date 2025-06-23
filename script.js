@@ -340,24 +340,45 @@ function createGlobeGrid(R = 100, options = {}) {
   return gridGroup;
 }
 
-function createMollweideBorder(R = 100, segments = 256) {
-  const points = [];
-  for (let i = 0; i <= segments; i++) {
-    const theta = (i / segments) * 2 * Math.PI;
-    const x = 2 * R * Math.cos(theta);
-    const y = R * Math.sin(theta);
-    points.push(new THREE.Vector3(x, y, 0));
+function createMollweideBorder(R = 100, thickness = 6, segments = 256) {
+  const inner = R;
+  const outer = R + thickness;
+  const geometry = new THREE.RingGeometry(inner, outer, segments);
+
+  const pos = geometry.attributes.position;
+  const count = pos.count;
+  const alpha = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const x = pos.getX(i);
+    const y = pos.getY(i);
+    const r = Math.sqrt(x * x + y * y);
+    alpha[i] = r <= inner + 1e-5 ? 1.0 : 0.0;
   }
-  const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({
-    color: 0xaaaaaa,
-    opacity: 1.0,
-    transparent: false,
-    linewidth: 2
+  geometry.setAttribute('alpha', new THREE.BufferAttribute(alpha, 1));
+
+  const material = new THREE.ShaderMaterial({
+    uniforms: { color: { value: new THREE.Color(0xaaaaaa) } },
+    vertexShader: `
+      attribute float alpha;
+      varying float vAlpha;
+      void main() {
+        vAlpha = alpha;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 color;
+      varying float vAlpha;
+      void main() {
+        gl_FragColor = vec4(color, vAlpha);
+      }
+    `,
+    transparent: true,
+    depthWrite: false
   });
-  const line = new THREE.LineLoop(geom, mat);
-  line.renderOrder = 1001;
-  return line;
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 1001;
+  return mesh;
 }
 
 function createMollweideMask(R = 100, segments = 256) {
