@@ -279,27 +279,24 @@ class DensityGridOverlay {
       const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       let color = new THREE.Color(0xffffff);
-      let alpha = 0;
+      let active = false;
       if (cell.density <= bottomThr) {
         const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
         color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0xffffff), t);
-        alpha = 0.5 * (1 - t);
-        cell.active = true;
+        active = true;
       } else if (cell.density >= topThr) {
         const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
         const baseRed = new THREE.Color(0xff0000);
         const lightRed = lightenColor(baseRed.clone(), 0.4);
         color = lightRed.lerp(baseRed, t);
-        alpha = 0.5 * t;
-        cell.active = true;
-      } else {
-        cell.active = false;
+        active = true;
       }
 
-      const finalAlpha = alpha * this.opacityFactor;
-      cell.tcMesh.material.opacity = finalAlpha;
-      cell.globeMesh.material.opacity = finalAlpha;
-      const mollAlpha = cell.active ? this.opacityFactor : 0;
+      cell.active = active;
+      const baseAlpha = active ? 0.5 * this.opacityFactor : 0;
+      cell.tcMesh.material.opacity = baseAlpha;
+      cell.globeMesh.material.opacity = baseAlpha;
+      const mollAlpha = active ? this.opacityFactor : 0;
       cell.mollweideMesh.material.opacity = mollAlpha;
       cell.tcMesh.material.color.copy(color);
       cell.globeMesh.material.color.copy(color);
@@ -317,9 +314,9 @@ class DensityGridOverlay {
         const c1 = cell1.tcMesh.material.color;
         const c2 = cell2.tcMesh.material.color;
         const avgColor = c1.clone().lerp(c2, 0.5);
-        const avgOpacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
+        const uniformOpacity = 0.5 * this.opacityFactor;
         line.material.color.copy(avgColor);
-        line.material.opacity = avgOpacity;
+        line.material.opacity = uniformOpacity;
         line.material.vertexColors = false;
         line.material.needsUpdate = true;
         lineM.material.uniforms.color.value.copy(avgColor);
