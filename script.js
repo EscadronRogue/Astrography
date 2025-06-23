@@ -353,6 +353,37 @@ function createMollweideBorder(R = 100) {
   return new THREE.LineLoop(geom, mat);
 }
 
+function createMollweideMask(R = 100) {
+  const outer = 1000;
+  const shape = new THREE.Shape();
+  shape.moveTo(-outer / 2, -outer / 2);
+  shape.lineTo(outer / 2, -outer / 2);
+  shape.lineTo(outer / 2, outer / 2);
+  shape.lineTo(-outer / 2, outer / 2);
+  shape.lineTo(-outer / 2, -outer / 2);
+
+  const hole = new THREE.Path();
+  for (let i = 0; i <= 64; i++) {
+    const theta = (i / 64) * 2 * Math.PI;
+    const x = 2 * R * Math.cos(theta);
+    const y = R * Math.sin(theta);
+    if (i === 0) hole.moveTo(x, y);
+    else hole.lineTo(x, y);
+  }
+  shape.holes.push(hole);
+  const geom = new THREE.ShapeGeometry(shape);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true // ensure mask renders with transparent objects
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.renderOrder = 1000;
+  return mesh;
+}
+
 async function loadStarData() {
   const manifestUrl = 'data/manifest.json';
   try {
@@ -822,6 +853,8 @@ class MapManager {
       });
       const border = createMollweideBorder(100);
       this.scene.add(border);
+      const mask = createMollweideMask(100);
+      this.scene.add(mask);
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
