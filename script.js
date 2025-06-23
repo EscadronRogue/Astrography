@@ -340,20 +340,23 @@ function createGlobeGrid(R = 100, options = {}) {
   return gridGroup;
 }
 
-function createMollweideBorder(R = 100) {
-  const points = [];
-  for (let i = 0; i <= 64; i++) {
-    const theta = (i / 64) * 2 * Math.PI;
-    const x = 2 * R * Math.cos(theta);
-    const y = R * Math.sin(theta);
-    points.push(new THREE.Vector3(x, y, 0));
-  }
-  const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa, opacity: 0.5, transparent: true });
-  return new THREE.LineLoop(geom, mat);
+function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
+  const geometry = new THREE.RingGeometry(R, R + thickness, segments);
+  geometry.scale(2, 1, 1); // turn the circular ring into an ellipse
+
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xaaaaaa,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false
+  });
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 1001;
+  return mesh;
 }
 
-function createMollweideMask(R = 100) {
+function createMollweideMask(R = 100, segments = 1024) {
   const outer = 1000;
   const shape = new THREE.Shape();
   shape.moveTo(-outer / 2, -outer / 2);
@@ -363,13 +366,14 @@ function createMollweideMask(R = 100) {
   shape.lineTo(-outer / 2, -outer / 2);
 
   const hole = new THREE.Path();
-  for (let i = 0; i <= 64; i++) {
-    const theta = (i / 64) * 2 * Math.PI;
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
     const x = 2 * R * Math.cos(theta);
     const y = R * Math.sin(theta);
     if (i === 0) hole.moveTo(x, y);
     else hole.lineTo(x, y);
   }
+  hole.closePath();
   shape.holes.push(hole);
   const geom = new THREE.ShapeGeometry(shape);
   const mat = new THREE.MeshBasicMaterial({
@@ -851,10 +855,10 @@ class MapManager {
         panCameraLeft: true,
         panCameraRight: false
       });
-      const border = createMollweideBorder(100);
-      this.scene.add(border);
       const mask = createMollweideMask(100);
       this.scene.add(mask);
+      const border = createMollweideBorder(100);
+      this.scene.add(border);
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
