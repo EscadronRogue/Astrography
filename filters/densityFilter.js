@@ -33,7 +33,7 @@ function createWideLineMaterial(color) {
       uniform float opacityFactor;
       varying float vSide;
       void main() {
-        float alpha = 0.5 * (1.0 - abs(vSide)) * opacityFactor;
+        float alpha = (1.0 - abs(vSide)) * opacityFactor;
         if(alpha <= 0.0) discard;
         gl_FragColor = vec4(color, alpha);
       }
