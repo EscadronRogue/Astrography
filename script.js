@@ -353,6 +353,41 @@ function createMollweideBorder(R = 100) {
   return new THREE.LineLoop(geom, mat);
 }
 
+function createMollweideMask(frustumSize, aspect, R = 100) {
+  const group = new THREE.Group();
+  const halfW = (frustumSize * aspect) / 2;
+  const halfH = frustumSize / 2;
+  const ellW = 2 * R;
+  const ellH = R;
+  const mat = new THREE.MeshBasicMaterial({ color: 0x000000, depthWrite: false, depthTest: false });
+  const fullW = halfW * 2;
+  const fullH = halfH * 2;
+  if (halfW > ellW) {
+    const sideW = halfW - ellW;
+    const geoL = new THREE.PlaneGeometry(sideW, fullH);
+    const left = new THREE.Mesh(geoL, mat);
+    left.position.set(-(ellW + sideW / 2), 0, 1);
+    group.add(left);
+    const geoR = new THREE.PlaneGeometry(sideW, fullH);
+    const right = new THREE.Mesh(geoR, mat);
+    right.position.set(ellW + sideW / 2, 0, 1);
+    group.add(right);
+  }
+  if (halfH > ellH) {
+    const sideH = halfH - ellH;
+    const geoT = new THREE.PlaneGeometry(fullW, sideH);
+    const top = new THREE.Mesh(geoT, mat);
+    top.position.set(0, ellH + sideH / 2, 1);
+    group.add(top);
+    const geoB = new THREE.PlaneGeometry(fullW, sideH);
+    const bottom = new THREE.Mesh(geoB, mat);
+    bottom.position.set(0, -(ellH + sideH / 2), 1);
+    group.add(bottom);
+  }
+  return group;
+}
+
+
 async function loadStarData() {
   const manifestUrl = 'data/manifest.json';
   try {
@@ -821,6 +856,8 @@ class MapManager {
         panCameraRight: false
       });
       const border = createMollweideBorder(100);
+        this.maskGroup = createMollweideMask(this.frustumSize, aspect, 100);
+        this.scene.add(this.maskGroup);
       this.scene.add(border);
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
@@ -1049,6 +1086,14 @@ class MapManager {
       this.points.material.uniforms.cameraZoom.value = zoomVal;
     }
     this.renderer.setSize(w, h);
+    if (this.mapType === "Mollweide") {
+      if (this.maskGroup) {
+        this.scene.remove(this.maskGroup);
+      }
+      const aspect = w / h;
+      this.maskGroup = createMollweideMask(this.frustumSize, aspect, 100);
+      this.scene.add(this.maskGroup);
+    }
     if (window.requestRender) window.requestRender();
   }
 
