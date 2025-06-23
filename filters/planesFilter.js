@@ -144,28 +144,103 @@ function createWideLineMaterial(color) {
   });
 }
 
-function buildWideLineGeometry(points, width) {
-  const vertices = [];
+// build thick polyline geometry that supports curves and fading
+function buildWidePolylineGeometry(points, width) {
+  if (points.length < 2) return new THREE.BufferGeometry();
+  const half = width / 2;
+  const positions = [];
   const sides = [];
-  for (let i = 0; i < points.length; i += 2) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const dir = new THREE.Vector2(p2.x - p1.x, p2.y - p1.y).normalize();
-    const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(width / 2);
-    const a1 = new THREE.Vector3(p1.x + perp.x, p1.y + perp.y, p1.z);
-    const a2 = new THREE.Vector3(p1.x - perp.x, p1.y - perp.y, p1.z);
-    const b1 = new THREE.Vector3(p2.x + perp.x, p2.y + perp.y, p2.z);
-    const b2 = new THREE.Vector3(p2.x - perp.x, p2.y - perp.y, p2.z);
+  const indices = [];
 
-    vertices.push(a1.x, a1.y, a1.z, a2.x, a2.y, a2.z, b2.x, b2.y, b2.z);
-    sides.push(1, -1, -1);
-    vertices.push(a1.x, a1.y, a1.z, b2.x, b2.y, b2.z, b1.x, b1.y, b1.z);
-    sides.push(1, -1, 1);
+  const offsets = [];
+  const perp = (v) => new THREE.Vector2(-v.y, v.x);
+
+  for (let i = 0; i < points.length; i++) {
+    const pPrev = points[i - 1] || points[i];
+    const pCurr = points[i];
+    const pNext = points[i + 1] || points[i];
+    const dirA = new THREE.Vector2(pCurr.x - pPrev.x, pCurr.y - pPrev.y).normalize();
+    const dirB = new THREE.Vector2(pNext.x - pCurr.x, pNext.y - pCurr.y).normalize();
+    const perpA = perp(dirA);
+    const perpB = perp(dirB);
+    let normal;
+    if (i === 0) {
+      normal = perpB;
+    } else if (i === points.length - 1) {
+      normal = perpA;
+    } else {
+      const miter = perpA.clone().add(perpB);
+      if (miter.lengthSq() === 0) {
+        normal = perpA;
+      } else {
+        const miterNorm = miter.normalize();
+        const scale = 1 / miterNorm.dot(perpA);
+        normal = miterNorm.multiplyScalar(scale);
+      }
+    }
+    normal.normalize().multiplyScalar(half);
+    offsets.push(normal);
   }
+
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const off = offsets[i];
+    positions.push(p.x + off.x, p.y + off.y, p.z);
+    sides.push(1);
+    positions.push(p.x - off.x, p.y - off.y, p.z);
+    sides.push(-1);
+  }
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const idx = i * 2;
+    indices.push(idx, idx + 1, idx + 2);
+    indices.push(idx + 1, idx + 3, idx + 2);
+  }
+
   const geom = new THREE.BufferGeometry();
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geom.setAttribute('side', new THREE.Float32BufferAttribute(sides, 1));
+  geom.setIndex(indices);
   return geom;
+}
+
+// combine multiple polyline geometries
+function mergeGeometries(geoms) {
+  if (geoms.length === 1) return geoms[0];
+  const positions = [];
+  const sides = [];
+  const indices = [];
+  let offset = 0;
+  geoms.forEach(g => {
+    const pos = g.getAttribute('position').array;
+    const sid = g.getAttribute('side').array;
+    const idx = g.index.array;
+    for (let i = 0; i < pos.length; i++) positions.push(pos[i]);
+    for (let i = 0; i < sid.length; i++) sides.push(sid[i]);
+    for (let i = 0; i < idx.length; i++) indices.push(idx[i] + offset);
+    offset += g.getAttribute('position').count;
+  });
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute('side', new THREE.Float32BufferAttribute(sides, 1));
+  geom.setIndex(indices);
+  return geom;
+}
+
+function buildWideLineGeometry(points, width) {
+  const geoms = [];
+  let segment = [];
+  points.forEach(p => {
+    if (p === null) {
+      if (segment.length > 1) geoms.push(buildWidePolylineGeometry(segment, width));
+      segment = [];
+    } else {
+      segment.push(p);
+    }
+  });
+  if (segment.length > 1) geoms.push(buildWidePolylineGeometry(segment, width));
+  if (geoms.length === 0) return new THREE.BufferGeometry();
+  return mergeGeometries(geoms);
 }
 
 export function createGalacticPlaneGlobe(R = 100, segments = 180, opacity = 0.5) {
@@ -219,11 +294,19 @@ export function updateGalacticPlaneMollweide(line) {
     pts.push(radToMollweide(ra, dec, 100, lambda0));
   }
   const points = [];
+  let startNew = true;
   for (let i = 0; i < pts.length - 1; i++) {
     const splits = splitMollweideWrap(pts[i], pts[i + 1]);
-    splits.forEach(pair => {
-      points.push(new THREE.Vector3(pair[0].x, pair[0].y, 0));
+    splits.forEach((pair, idx) => {
+      if (startNew) {
+        points.push(new THREE.Vector3(pair[0].x, pair[0].y, 0));
+        startNew = false;
+      }
       points.push(new THREE.Vector3(pair[1].x, pair[1].y, 0));
+      if (idx < splits.length - 1) {
+        points.push(null);
+        startNew = true;
+      }
     });
   }
   const geom = buildWideLineGeometry(points, width);
@@ -262,11 +345,19 @@ export function updateEclipticPlaneMollweide(line) {
     pts.push(radToMollweide(ra, dec, 100, lambda0));
   }
   const points = [];
+  let startNew = true;
   for (let i = 0; i < pts.length - 1; i++) {
     const splits = splitMollweideWrap(pts[i], pts[i + 1]);
-    splits.forEach(pair => {
-      points.push(new THREE.Vector3(pair[0].x, pair[0].y, 0));
+    splits.forEach((pair, idx) => {
+      if (startNew) {
+        points.push(new THREE.Vector3(pair[0].x, pair[0].y, 0));
+        startNew = false;
+      }
       points.push(new THREE.Vector3(pair[1].x, pair[1].y, 0));
+      if (idx < splits.length - 1) {
+        points.push(null);
+        startNew = true;
+      }
     });
   }
   const geom = buildWideLineGeometry(points, width);
@@ -284,11 +375,19 @@ export function updateCelestialEquatorMollweide(line) {
     pts.push(radToMollweide(ra, 0, 100, lambda0));
   }
   const points = [];
+  let startNew = true;
   for (let i = 0; i < pts.length - 1; i++) {
     const splits = splitMollweideWrap(pts[i], pts[i + 1]);
-    splits.forEach(pair => {
-      points.push(new THREE.Vector3(pair[0].x, pair[0].y, 0));
+    splits.forEach((pair, idx) => {
+      if (startNew) {
+        points.push(new THREE.Vector3(pair[0].x, pair[0].y, 0));
+        startNew = false;
+      }
       points.push(new THREE.Vector3(pair[1].x, pair[1].y, 0));
+      if (idx < splits.length - 1) {
+        points.push(null);
+        startNew = true;
+      }
     });
   }
   const geom = buildWideLineGeometry(points, width);
