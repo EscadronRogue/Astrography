@@ -2,10 +2,7 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/thr
 import {
   getGreatCirclePoints,
   cachedRadToMollweide,
-  getMollweideLambda0,
-  splitMollweideWrap,
-  vectorToRaDecRad,
-  radToMollweide
+  getMollweideLambda0
 } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
@@ -41,29 +38,32 @@ function createWideLineMaterial(color) {
   });
 }
 
-function buildWideLineGeometry(points, width) {
-  const vertices = [];
-  const sides = [];
-  for (let i = 0; i < points.length; i += 2) {
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const dir = new THREE.Vector2(p2.x - p1.x, p2.y - p1.y).normalize();
-    const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(width / 2);
-    const a1 = new THREE.Vector3(p1.x + perp.x, p1.y + perp.y, p1.z);
-    const a2 = new THREE.Vector3(p1.x - perp.x, p1.y - perp.y, p1.z);
-    const b1 = new THREE.Vector3(p2.x + perp.x, p2.y + perp.y, p2.z);
-    const b2 = new THREE.Vector3(p2.x - perp.x, p2.y - perp.y, p2.z);
-
-    vertices.push(a1.x, a1.y, a1.z, a2.x, a2.y, a2.z, b2.x, b2.y, b2.z);
-    sides.push(1, -1, -1);
-    vertices.push(a1.x, a1.y, a1.z, b2.x, b2.y, b2.z, b1.x, b1.y, b1.z);
-    sides.push(1, -1, 1);
-  }
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  geom.setAttribute('side', new THREE.Float32BufferAttribute(sides, 1));
-  return geom;
+function createRadialSprite(color = 0xffffff, size = 60) {
+  const dim = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = dim;
+  canvas.height = dim;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createRadialGradient(dim / 2, dim / 2, 0, dim / 2, dim / 2, dim / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, dim, dim);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    color,
+    transparent: true,
+    depthWrite: false,
+    opacity: 1.0
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(size, size, 1);
+  return sprite;
 }
+
 
 class DensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2) {
@@ -74,6 +74,7 @@ class DensityGridOverlay {
     this.adjacentLines = [];
     this.maxDensity = 0;
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
+    this.mollPointSize = 80; // diameter of highlight circles on Mollweide map
     this.opacityFactor = 1.0;
   }
 
@@ -212,17 +213,6 @@ class DensityGridOverlay {
           const neighbor = cellMap.get(neighborKey);
           const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
           const positions = [];
-          const mollPts = getGreatCirclePoints(cell.globeMesh.position,
-            neighbor.globeMesh.position, 100, 16).map(v => {
-              const { ra, dec } = vectorToRaDecRad(v, 100);
-              return radToMollweide(ra, dec, 100, getMollweideLambda0());
-            });
-          const pointsM = [];
-          for (let m = 0; m < mollPts.length - 1; m++) {
-            const segsM = splitMollweideWrap(mollPts[m], mollPts[m + 1]);
-            segsM.forEach(([s,e]) => { pointsM.push(s, e); });
-          }
-          const geomM = buildWideLineGeometry(pointsM, this.mollLineWidth);
           for (let i = 0; i < points.length; i++) {
             positions.push(points[i].x, points[i].y, points[i].z);
           }
@@ -236,10 +226,11 @@ class DensityGridOverlay {
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
-          const mollMat = createWideLineMaterial(0xff0000);
-          const lineM = new THREE.Mesh(geomM, mollMat);
-          lineM.renderOrder = 1;
-          this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
+          const sprite1 = createRadialSprite(0xff0000, this.mollPointSize);
+          const sprite2 = createRadialSprite(0xff0000, this.mollPointSize);
+          sprite1.position.copy(cell.mollweideMesh.position);
+          sprite2.position.copy(neighbor.mollweideMesh.position);
+          this.adjacentLines.push({ line, sprite1, sprite2, cell1: cell, cell2: neighbor });
         }
       });
     });
@@ -309,10 +300,11 @@ class DensityGridOverlay {
       cell.mollweideMesh.scale.set(scale, scale, 1);
     });
     this.adjacentLines.forEach(obj => {
-      const { line, lineM, cell1, cell2 } = obj;
+      const { line, sprite1, sprite2, cell1, cell2 } = obj;
       const visible = cell1.active && cell2.active;
       line.visible = visible;
-      lineM.visible = visible;
+      sprite1.visible = visible;
+      sprite2.visible = visible;
       if (visible) {
         const c1 = cell1.tcMesh.material.color;
         const c2 = cell2.tcMesh.material.color;
@@ -322,9 +314,12 @@ class DensityGridOverlay {
         line.material.opacity = avgOpacity;
         line.material.vertexColors = false;
         line.material.needsUpdate = true;
-        lineM.material.uniforms.color.value.copy(avgColor);
-        lineM.material.uniforms.opacityFactor.value = this.opacityFactor;
-        lineM.material.needsUpdate = true;
+        sprite1.material.color.copy(c1);
+        sprite2.material.color.copy(c2);
+        sprite1.material.opacity = this.opacityFactor;
+        sprite2.material.opacity = this.opacityFactor;
+        sprite1.material.needsUpdate = true;
+        sprite2.material.needsUpdate = true;
       }
     });
     if (sceneTC) {
@@ -334,7 +329,10 @@ class DensityGridOverlay {
       this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
     }
     if (sceneMoll) {
-      this.adjacentLines.forEach(o => { sceneMoll.add(o.lineM); });
+      this.adjacentLines.forEach(o => {
+        sceneMoll.add(o.sprite1);
+        sceneMoll.add(o.sprite2);
+      });
     }
   }
 
@@ -348,18 +346,8 @@ class DensityGridOverlay {
       );
     });
     this.adjacentLines.forEach(obj => {
-      const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
-        obj.cell2.globeMesh.position, 100, 16).map(v => {
-          const { ra, dec } = vectorToRaDecRad(v, 100);
-          return radToMollweide(ra, dec, 100, lambda0);
-        });
-      const pts = [];
-      for (let i = 0; i < gcPts.length - 1; i++) {
-        const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
-        segs.forEach(([s,e]) => { pts.push(s, e); });
-      }
-      obj.lineM.geometry.dispose();
-      obj.lineM.geometry = buildWideLineGeometry(pts, this.mollLineWidth);
+      obj.sprite1.position.copy(obj.cell1.mollweideMesh.position);
+      obj.sprite2.position.copy(obj.cell2.mollweideMesh.position);
     });
   }
 }
