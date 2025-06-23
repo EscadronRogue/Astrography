@@ -45,8 +45,11 @@ function createRadialSprite(color = 0xffffff, size = 60) {
   canvas.height = dim;
   const ctx = canvas.getContext('2d');
   const gradient = ctx.createRadialGradient(dim / 2, dim / 2, 0, dim / 2, dim / 2, dim / 2);
-  gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  gradient.addColorStop(0.0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(0.2, 'rgba(255,255,255,0.5)');
+  gradient.addColorStop(0.4, 'rgba(255,255,255,0.25)');
+  gradient.addColorStop(0.6, 'rgba(255,255,255,0.1)');
+  gradient.addColorStop(1.0, 'rgba(255,255,255,0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, dim, dim);
   const texture = new THREE.CanvasTexture(canvas);
@@ -74,7 +77,7 @@ class DensityGridOverlay {
     this.adjacentLines = [];
     this.maxDensity = 0;
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
-    this.mollPointSize = 80; // diameter of highlight circles on Mollweide map
+    this.mollPointSize = 160; // diameter of highlight circles on Mollweide map
     this.opacityFactor = 1.0;
   }
 
