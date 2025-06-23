@@ -1321,7 +1321,7 @@ function exportMollweideMap(format = 'png', rect = null) {
       ctx.drawImage(
         exportRenderer.domElement,
         x - cropX,
-        cropH - (y - cropY) - tileH,
+        y - cropY,
         tileW,
         tileH
       );
