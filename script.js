@@ -108,6 +108,16 @@ let rotateInitialRotation = 0;
 let rotateCurrentRotation = 0;
 let scaleStart = null;
 
+// --- Export Selection ---
+let exportSelectMode = false;
+let exportOverlay = null;
+let exportRectElem = null;
+let exportPngBtn = null;
+let exportPdfBtn = null;
+let exportStart = null;
+let exportCurrentRect = null;
+let isSelecting = false;
+
 const ROTATE_SENSITIVITY = 0.3;
 
 const PRESET_KEY = 'astrography-presets';
@@ -1270,21 +1280,33 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
-function exportMollweideMap() {
+function exportMollweideMap(format = 'png', rect = null) {
   const width = 7680;
   const height = 3840;
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
   exportRenderer.setPixelRatio(1);
+  let cropX = 0;
+  let cropY = 0;
+  let cropW = width;
+  let cropH = height;
+  if (rect) {
+    const scaleX = width / mollweideMap.canvas.clientWidth;
+    const scaleY = height / mollweideMap.canvas.clientHeight;
+    cropX = Math.round(rect.x * scaleX);
+    cropY = Math.round(rect.y * scaleY);
+    cropW = Math.round(rect.width * scaleX);
+    cropH = Math.round(rect.height * scaleY);
+  }
   const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = width;
-  finalCanvas.height = height;
+  finalCanvas.width = cropW;
+  finalCanvas.height = cropH;
   const ctx = finalCanvas.getContext('2d');
   const maxSize = exportRenderer.capabilities.maxTextureSize;
   const tile = Math.min(maxSize, 8192);
-  for (let y = 0; y < height; y += tile) {
-    for (let x = 0; x < width; x += tile) {
-      const tileW = Math.min(tile, width - x);
-      const tileH = Math.min(tile, height - y);
+  for (let y = cropY; y < cropY + cropH; y += tile) {
+    for (let x = cropX; x < cropX + cropW; x += tile) {
+      const tileW = Math.min(tile, cropW - (x - cropX));
+      const tileH = Math.min(tile, cropH - (y - cropY));
       exportRenderer.setSize(tileW, tileH);
       const cam = mollweideMap.camera.clone();
       const aspect = width / height;
@@ -1296,25 +1318,126 @@ function exportMollweideMap() {
       cam.setViewOffset(width, height, x, y, tileW, tileH);
       exportRenderer.render(mollweideMap.scene, cam);
       cam.clearViewOffset();
-      ctx.drawImage(exportRenderer.domElement, x, height - y - tileH, tileW, tileH);
+      ctx.drawImage(
+        exportRenderer.domElement,
+        x - cropX,
+        cropH - (y - cropY) - tileH,
+        tileW,
+        tileH
+      );
     }
   }
   exportRenderer.dispose();
+  if (format === 'pdf') {
+    const imgData = finalCanvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({
+      orientation: cropW >= cropH ? 'landscape' : 'portrait',
+      unit: 'px',
+      format: [cropW, cropH]
+    });
+    pdf.addImage(imgData, 'PNG', 0, 0, cropW, cropH);
+    pdf.save('mollweide_map.pdf');
+  } else {
+    finalCanvas.toBlob(b => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(b);
+      link.download = 'mollweide_map.png';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }, 'image/png');
+  }
+}
 
-  finalCanvas.toBlob(b => {
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(b);
-    link.download = 'mollweide_map.png';
-    link.click();
-    URL.revokeObjectURL(link.href);
-  }, 'image/png');
+function exitExportSelection() {
+  exportSelectMode = false;
+  if (exportOverlay) exportOverlay.style.display = 'none';
+  if (exportRectElem) {
+    exportRectElem.style.display = 'none';
+    exportRectElem.style.width = '0px';
+    exportRectElem.style.height = '0px';
+  }
+  if (exportPngBtn) exportPngBtn.style.display = 'none';
+  if (exportPdfBtn) exportPdfBtn.style.display = 'none';
+  const btn = document.getElementById('export-mollweide');
+  if (btn) btn.classList.remove('active');
+  exportCurrentRect = null;
+  isSelecting = false;
+}
+
+function getCanvasPos(event) {
+  const rect = mollweideMap.canvas.getBoundingClientRect();
+  const x = Math.min(Math.max(event.clientX, rect.left), rect.right) - rect.left;
+  const y = Math.min(Math.max(event.clientY, rect.top), rect.bottom) - rect.top;
+  return { x, y, rect };
+}
+
+function onExportPointerDown(e) {
+  if (!exportSelectMode) return;
+  const pos = getCanvasPos(e);
+  exportStart = { x: pos.x, y: pos.y };
+  exportCurrentRect = { x: pos.x, y: pos.y, width: 0, height: 0 };
+  exportRectElem.style.display = 'block';
+  exportRectElem.style.left = `${pos.rect.left + pos.x}px`;
+  exportRectElem.style.top = `${pos.rect.top + pos.y}px`;
+  exportRectElem.style.width = '0px';
+  exportRectElem.style.height = '0px';
+  isSelecting = true;
+}
+
+function onExportPointerMove(e) {
+  if (!isSelecting) return;
+  const pos = getCanvasPos(e);
+  const x = Math.min(exportStart.x, pos.x);
+  const y = Math.min(exportStart.y, pos.y);
+  const w = Math.abs(pos.x - exportStart.x);
+  const h = Math.abs(pos.y - exportStart.y);
+  exportCurrentRect = { x, y, width: w, height: h };
+  exportRectElem.style.left = `${pos.rect.left + x}px`;
+  exportRectElem.style.top = `${pos.rect.top + y}px`;
+  exportRectElem.style.width = `${w}px`;
+  exportRectElem.style.height = `${h}px`;
+}
+
+function onExportPointerUp(e) {
+  if (!isSelecting) return;
+  onExportPointerMove(e);
+  isSelecting = false;
 }
 
 function setupExportControls() {
   const btn = document.getElementById('export-mollweide');
-  if (!btn) return;
+  exportPngBtn = document.getElementById('export-png');
+  exportPdfBtn = document.getElementById('export-pdf');
+  exportOverlay = document.getElementById('export-selection-overlay');
+  exportRectElem = document.getElementById('export-selection-rect');
+  if (!btn || !exportOverlay || !exportRectElem || !exportPngBtn || !exportPdfBtn) return;
+
+  exportPngBtn.addEventListener('click', () => {
+    if (exportCurrentRect) exportMollweideMap('png', exportCurrentRect);
+    exitExportSelection();
+  });
+  exportPdfBtn.addEventListener('click', () => {
+    if (exportCurrentRect) exportMollweideMap('pdf', exportCurrentRect);
+    exitExportSelection();
+  });
+
+  exportOverlay.addEventListener('pointerdown', onExportPointerDown);
+  exportOverlay.addEventListener('pointermove', onExportPointerMove);
+  window.addEventListener('pointerup', onExportPointerUp);
+
   btn.addEventListener('click', () => {
-    exportMollweideMap();
+    exportSelectMode = !exportSelectMode;
+    btn.classList.toggle('active', exportSelectMode);
+    if (exportSelectMode) {
+      exportOverlay.style.display = 'block';
+      exportPngBtn.style.display = 'inline-block';
+      exportPdfBtn.style.display = 'inline-block';
+      exportRectElem.style.display = 'none';
+      exportCurrentRect = null;
+    } else {
+      exitExportSelection();
+    }
   });
 }
 
