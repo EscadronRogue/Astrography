@@ -341,17 +341,27 @@ function createGlobeGrid(R = 100, options = {}) {
 }
 
 function createMollweideBorder(R = 100) {
-  const segments = 256;
-  const curve = new THREE.EllipseCurve(0, 0, 2 * R, R, 0, Math.PI * 2);
-  const points = curve.getPoints(segments);
-  const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({
+  const segments = 512;
+  const borderWidth = R * 0.05; // 5% of radius for a thick outline
+
+  const shape = new THREE.Shape();
+  shape.absellipse(0, 0, 2 * R + borderWidth, R + borderWidth, 0, Math.PI * 2, false, 0);
+  const hole = new THREE.Path();
+  hole.absellipse(0, 0, 2 * R - borderWidth, R - borderWidth, 0, Math.PI * 2, true, 0);
+  shape.holes.push(hole);
+
+  const geom = new THREE.ShapeGeometry(shape, segments);
+  const mat = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa,
     opacity: 0.5,
     transparent: true,
-    linewidth: 2
+    depthTest: false,
+    depthWrite: false
   });
-  return new THREE.LineLoop(geom, mat);
+
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.renderOrder = 1001; // ensure border draws above the mask
+  return mesh;
 }
 
 function createMollweideMask(R = 100) {
@@ -363,7 +373,7 @@ function createMollweideMask(R = 100) {
   shape.lineTo(-outer / 2, outer / 2);
   shape.lineTo(-outer / 2, -outer / 2);
 
-  const segments = 256;
+  const segments = 512;
   const hole = new THREE.Path();
   hole.absellipse(0, 0, 2 * R, R, 0, Math.PI * 2, false, 0);
   shape.holes.push(hole);
@@ -847,10 +857,10 @@ class MapManager {
         panCameraLeft: true,
         panCameraRight: false
       });
-      const border = createMollweideBorder(100);
-      this.scene.add(border);
       const mask = createMollweideMask(100);
       this.scene.add(mask);
+      const border = createMollweideBorder(100);
+      this.scene.add(border);
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
