@@ -353,6 +353,20 @@ function createMollweideBorder(R = 100) {
   return new THREE.LineLoop(geom, mat);
 }
 
+function adjustMollweideMask() {
+  const canvas = document.getElementById('mollweideMap');
+  const mask = document.getElementById('mollweide-mask');
+  if (!canvas || !mask) return;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  const d = Math.min(w, h);
+  const maskW = d;
+  const maskH = d / 2;
+  mask.style.width = `${maskW}px`;
+  mask.style.height = `${maskH}px`;
+  mask.style.borderRadius = `${maskW / 2}px / ${maskH / 2}px`;
+}
+
 async function loadStarData() {
   const manifestUrl = 'data/manifest.json';
   try {
@@ -822,6 +836,7 @@ class MapManager {
       });
       const border = createMollweideBorder(100);
       this.scene.add(border);
+      adjustMollweideMask();
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
@@ -1049,6 +1064,9 @@ class MapManager {
       this.points.material.uniforms.cameraZoom.value = zoomVal;
     }
     this.renderer.setSize(w, h);
+    if (this.mapType === 'Mollweide') {
+      adjustMollweideMask();
+    }
     if (window.requestRender) window.requestRender();
   }
 
