@@ -349,7 +349,7 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   bottom: 0;
   cursor: crosshair;
   display: none;
-  z-index: 1500;
+  z-index: 1000;
 }
 #export-selection-rect {
   position: absolute;
@@ -383,7 +383,7 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   background: rgba(20, 20, 20, 0.7);
   padding: 5px;
   border-radius: 4px;
-  z-index: 10;
+  z-index: 1100;
 }
 .export-controls select,
 .export-controls button {

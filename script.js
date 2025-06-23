@@ -1374,6 +1374,7 @@ function getCanvasPos(event) {
 
 function onExportPointerDown(e) {
   if (!exportSelectMode) return;
+  if (e.target !== exportOverlay) return;
   const pos = getCanvasPos(e);
   exportStart = { x: pos.x, y: pos.y };
   exportCurrentRect = { x: pos.x, y: pos.y, width: 0, height: 0 };
