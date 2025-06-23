@@ -341,15 +341,16 @@ function createGlobeGrid(R = 100, options = {}) {
 }
 
 function createMollweideBorder(R = 100) {
-  const points = [];
-  for (let i = 0; i <= 64; i++) {
-    const theta = (i / 64) * 2 * Math.PI;
-    const x = 2 * R * Math.cos(theta);
-    const y = R * Math.sin(theta);
-    points.push(new THREE.Vector3(x, y, 0));
-  }
+  const segments = 256;
+  const curve = new THREE.EllipseCurve(0, 0, 2 * R, R, 0, Math.PI * 2);
+  const points = curve.getPoints(segments);
   const geom = new THREE.BufferGeometry().setFromPoints(points);
-  const mat = new THREE.LineBasicMaterial({ color: 0xaaaaaa, opacity: 0.5, transparent: true });
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xaaaaaa,
+    opacity: 0.5,
+    transparent: true,
+    linewidth: 2
+  });
   return new THREE.LineLoop(geom, mat);
 }
 
@@ -362,16 +363,11 @@ function createMollweideMask(R = 100) {
   shape.lineTo(-outer / 2, outer / 2);
   shape.lineTo(-outer / 2, -outer / 2);
 
+  const segments = 256;
   const hole = new THREE.Path();
-  for (let i = 0; i <= 64; i++) {
-    const theta = (i / 64) * 2 * Math.PI;
-    const x = 2 * R * Math.cos(theta);
-    const y = R * Math.sin(theta);
-    if (i === 0) hole.moveTo(x, y);
-    else hole.lineTo(x, y);
-  }
+  hole.absellipse(0, 0, 2 * R, R, 0, Math.PI * 2, false, 0);
   shape.holes.push(hole);
-  const geom = new THREE.ShapeGeometry(shape);
+  const geom = new THREE.ShapeGeometry(shape, segments);
   const mat = new THREE.MeshBasicMaterial({
     color: 0x000000,
     side: THREE.DoubleSide,
