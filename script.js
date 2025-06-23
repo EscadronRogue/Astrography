@@ -342,7 +342,7 @@ function createGlobeGrid(R = 100, options = {}) {
 
 function createMollweideBorder(R = 100) {
   const segments = 512;
-  const borderWidth = R * 0.05; // 5% of radius for a thick outline
+  const borderWidth = R * 0.05 / 3; // thinner outline
 
   const shape = new THREE.Shape();
   shape.absellipse(0, 0, 2 * R + borderWidth, R + borderWidth, 0, Math.PI * 2, false, 0);
@@ -353,8 +353,8 @@ function createMollweideBorder(R = 100) {
   const geom = new THREE.ShapeGeometry(shape, segments);
   const mat = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa,
-    opacity: 0.5,
-    transparent: true,
+    opacity: 1,
+    transparent: false,
     depthTest: false,
     depthWrite: false
   });
