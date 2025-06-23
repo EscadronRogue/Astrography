@@ -376,7 +376,8 @@ function createMollweideMask(R = 100) {
     color: 0x000000,
     side: THREE.DoubleSide,
     depthTest: false,
-    depthWrite: false
+    depthWrite: false,
+    transparent: true // ensure mask renders with transparent objects
   });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.renderOrder = 1000;
