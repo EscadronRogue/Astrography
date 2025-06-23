@@ -340,21 +340,68 @@ function createGlobeGrid(R = 100, options = {}) {
   return gridGroup;
 }
 
+function createBorderAlphaTexture() {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const gradient = ctx.createLinearGradient(0, 0, 0, size);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 1, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
+}
+
 function createMollweideBorder(R = 100) {
   const segments = 512;
-  const borderWidth = R * 0.05 / 6; // half as thick
+  const borderWidth = R * 0.05; // thicker outline
 
-  const shape = new THREE.Shape();
-  shape.absellipse(0, 0, 2 * R + borderWidth, R + borderWidth, 0, Math.PI * 2, false, 0);
-  const hole = new THREE.Path();
-  hole.absellipse(0, 0, 2 * R - borderWidth, R - borderWidth, 0, Math.PI * 2, true, 0);
-  shape.holes.push(hole);
+  const innerA = 2 * R - borderWidth;
+  const innerB = R - borderWidth;
+  const outerA = 2 * R + borderWidth;
+  const outerB = R + borderWidth;
 
-  const geom = new THREE.ShapeGeometry(shape, segments);
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+
+  for (let i = 0; i <= segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    const cos = Math.cos(t);
+    const sin = Math.sin(t);
+
+    positions.push(innerA * cos, innerB * sin, 0);
+    uvs.push(i / segments, 0);
+
+    positions.push(outerA * cos, outerB * sin, 0);
+    uvs.push(i / segments, 1);
+
+    if (i < segments) {
+      const a = i * 2;
+      const b = a + 1;
+      const c = a + 2;
+      const d = a + 3;
+      indices.push(a, b, c);
+      indices.push(b, d, c);
+    }
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setIndex(indices);
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geom.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+
+  const alphaMap = createBorderAlphaTexture();
   const mat = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa,
+    alphaMap,
     opacity: 1,
-    transparent: false,
+    transparent: true,
     depthTest: false,
     depthWrite: false
   });
