@@ -27,7 +27,11 @@ import {
   createGalacticDirectionLabelsGlobe,
   createGalacticDirectionLabelsMollweide,
   updateGalacticDirectionLabelsMollweide,
-  createGalacticDirectionLabelsTrue
+  createGalacticDirectionLabelsTrue,
+  createPlaneLabelTrue,
+  createPlaneLabelGlobe,
+  createPlaneLabelMollweide,
+  updatePlaneLabelMollweide
 } from './filters/planesFilter.js';
 import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
@@ -67,6 +71,15 @@ let celestialEquatorGlobe = null;
 let galacticPlaneMoll = null;
 let eclipticPlaneMoll = null;
 let celestialEquatorMoll = null;
+let galacticPlaneLabelTrue = null;
+let galacticPlaneLabelGlobe = null;
+let galacticPlaneLabelMoll = null;
+let eclipticPlaneLabelTrue = null;
+let eclipticPlaneLabelGlobe = null;
+let eclipticPlaneLabelMoll = null;
+let celestialEquatorLabelTrue = null;
+let celestialEquatorLabelGlobe = null;
+let celestialEquatorLabelMoll = null;
 let galacticDirectionLabelsTrue = [];
 let galacticDirectionLabelsGlobe = [];
 let galacticDirectionLabelsMoll = [];
@@ -87,6 +100,7 @@ const starLabelRotations = new Map();
 const starLabelScales = new Map();
 const constellationLabelOffsets = new Map();
 const galacticLabelOffsets = new Map();
+const planeLabelOffsets = new Map();
 let editableLabels = [];
 let selectedLabel = null;
 const dragOffset = new THREE.Vector3();
@@ -147,7 +161,8 @@ function savePresets() {
     starRotations: Array.from(starLabelRotations.entries()),
     starScales: Array.from(starLabelScales.entries()),
     constellationOffsets: Array.from(constellationLabelOffsets.entries()),
-    galacticOffsets: Array.from(galacticLabelOffsets.entries())
+    galacticOffsets: Array.from(galacticLabelOffsets.entries()),
+    planeOffsets: Array.from(planeLabelOffsets.entries())
   };
   const obj = { remember: true, form: data, edits };
   localStorage.setItem(PRESET_KEY, JSON.stringify(obj));
@@ -203,6 +218,10 @@ function loadPresets() {
     obj.edits.constellationOffsets.forEach(([id, off]) => constellationLabelOffsets.set(id, off));
     galacticLabelOffsets.clear();
     obj.edits.galacticOffsets.forEach(([id, off]) => galacticLabelOffsets.set(id, off));
+    planeLabelOffsets.clear();
+    if (obj.edits.planeOffsets) {
+      obj.edits.planeOffsets.forEach(([id, off]) => planeLabelOffsets.set(id, off));
+    }
   }
 }
 
@@ -625,10 +644,29 @@ function applyPlanes(showGal, showEcl, showEq, opacity = 0.5) {
       mollweideMap.scene.add(galacticPlaneMoll);
     } else {
       updateGalacticPlaneMollweide(galacticPlaneMoll);
-      galacticPlaneMoll.material.opacity = opacity;
+      galacticPlaneMoll.material.uniforms.opacityFactor.value = opacity;
     }
     galacticPlaneTrue.material.opacity = opacity;
     galacticPlaneGlobe.material.opacity = opacity;
+    if (!galacticPlaneLabelTrue) {
+      galacticPlaneLabelTrue = createPlaneLabelTrue('galactic', undefined, opacity);
+      trueCoordinatesMap.scene.add(galacticPlaneLabelTrue);
+    } else {
+      galacticPlaneLabelTrue.material.opacity = opacity;
+    }
+    if (!galacticPlaneLabelGlobe) {
+      galacticPlaneLabelGlobe = createPlaneLabelGlobe('galactic', undefined, opacity);
+      globeMap.scene.add(galacticPlaneLabelGlobe);
+    } else {
+      galacticPlaneLabelGlobe.material.uniforms.opacity.value = opacity;
+    }
+    if (!galacticPlaneLabelMoll) {
+      galacticPlaneLabelMoll = createPlaneLabelMollweide('galactic', undefined, opacity);
+      mollweideMap.scene.add(galacticPlaneLabelMoll);
+    } else {
+      updatePlaneLabelMollweide(galacticPlaneLabelMoll);
+      galacticPlaneLabelMoll.material.opacity = opacity;
+    }
     if (galacticDirectionLabelsTrue.length === 0) {
       galacticDirectionLabelsTrue = createGalacticDirectionLabelsTrue( undefined, opacity);
       galacticDirectionLabelsTrue.forEach(lbl => trueCoordinatesMap.scene.add(lbl));
@@ -654,6 +692,9 @@ function applyPlanes(showGal, showEcl, showEq, opacity = 0.5) {
     galacticDirectionLabelsGlobe = [];
     galacticDirectionLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
     galacticDirectionLabelsMoll = [];
+    if (galacticPlaneLabelTrue) { trueCoordinatesMap.scene.remove(galacticPlaneLabelTrue); galacticPlaneLabelTrue = null; }
+    if (galacticPlaneLabelGlobe) { globeMap.scene.remove(galacticPlaneLabelGlobe); galacticPlaneLabelGlobe = null; }
+    if (galacticPlaneLabelMoll) { mollweideMap.scene.remove(galacticPlaneLabelMoll); galacticPlaneLabelMoll = null; }
   }
 
   if (showEcl) {
@@ -670,14 +711,36 @@ function applyPlanes(showGal, showEcl, showEq, opacity = 0.5) {
       mollweideMap.scene.add(eclipticPlaneMoll);
     } else {
       updateEclipticPlaneMollweide(eclipticPlaneMoll);
-      eclipticPlaneMoll.material.opacity = opacity;
+      eclipticPlaneMoll.material.uniforms.opacityFactor.value = opacity;
     }
     eclipticPlaneTrue.material.opacity = opacity;
     eclipticPlaneGlobe.material.opacity = opacity;
+    if (!eclipticPlaneLabelTrue) {
+      eclipticPlaneLabelTrue = createPlaneLabelTrue('ecliptic', undefined, opacity);
+      trueCoordinatesMap.scene.add(eclipticPlaneLabelTrue);
+    } else {
+      eclipticPlaneLabelTrue.material.opacity = opacity;
+    }
+    if (!eclipticPlaneLabelGlobe) {
+      eclipticPlaneLabelGlobe = createPlaneLabelGlobe('ecliptic', undefined, opacity);
+      globeMap.scene.add(eclipticPlaneLabelGlobe);
+    } else {
+      eclipticPlaneLabelGlobe.material.uniforms.opacity.value = opacity;
+    }
+    if (!eclipticPlaneLabelMoll) {
+      eclipticPlaneLabelMoll = createPlaneLabelMollweide('ecliptic', undefined, opacity);
+      mollweideMap.scene.add(eclipticPlaneLabelMoll);
+    } else {
+      updatePlaneLabelMollweide(eclipticPlaneLabelMoll);
+      eclipticPlaneLabelMoll.material.opacity = opacity;
+    }
   } else {
     if (eclipticPlaneTrue) { trueCoordinatesMap.scene.remove(eclipticPlaneTrue); eclipticPlaneTrue.geometry.dispose(); eclipticPlaneTrue.material.dispose(); eclipticPlaneTrue = null; }
     if (eclipticPlaneGlobe) { globeMap.scene.remove(eclipticPlaneGlobe); eclipticPlaneGlobe.geometry.dispose(); eclipticPlaneGlobe.material.dispose(); eclipticPlaneGlobe = null; }
     if (eclipticPlaneMoll) { mollweideMap.scene.remove(eclipticPlaneMoll); eclipticPlaneMoll.geometry.dispose(); eclipticPlaneMoll.material.dispose(); eclipticPlaneMoll = null; }
+    if (eclipticPlaneLabelTrue) { trueCoordinatesMap.scene.remove(eclipticPlaneLabelTrue); eclipticPlaneLabelTrue = null; }
+    if (eclipticPlaneLabelGlobe) { globeMap.scene.remove(eclipticPlaneLabelGlobe); eclipticPlaneLabelGlobe = null; }
+    if (eclipticPlaneLabelMoll) { mollweideMap.scene.remove(eclipticPlaneLabelMoll); eclipticPlaneLabelMoll = null; }
   }
 
   if (showEq) {
@@ -694,14 +757,36 @@ function applyPlanes(showGal, showEcl, showEq, opacity = 0.5) {
       mollweideMap.scene.add(celestialEquatorMoll);
     } else {
       updateCelestialEquatorMollweide(celestialEquatorMoll);
-      celestialEquatorMoll.material.opacity = opacity;
+      celestialEquatorMoll.material.uniforms.opacityFactor.value = opacity;
     }
     celestialEquatorTrue.material.opacity = opacity;
     celestialEquatorGlobe.material.opacity = opacity;
+    if (!celestialEquatorLabelTrue) {
+      celestialEquatorLabelTrue = createPlaneLabelTrue('equator', undefined, opacity);
+      trueCoordinatesMap.scene.add(celestialEquatorLabelTrue);
+    } else {
+      celestialEquatorLabelTrue.material.opacity = opacity;
+    }
+    if (!celestialEquatorLabelGlobe) {
+      celestialEquatorLabelGlobe = createPlaneLabelGlobe('equator', undefined, opacity);
+      globeMap.scene.add(celestialEquatorLabelGlobe);
+    } else {
+      celestialEquatorLabelGlobe.material.uniforms.opacity.value = opacity;
+    }
+    if (!celestialEquatorLabelMoll) {
+      celestialEquatorLabelMoll = createPlaneLabelMollweide('equator', undefined, opacity);
+      mollweideMap.scene.add(celestialEquatorLabelMoll);
+    } else {
+      updatePlaneLabelMollweide(celestialEquatorLabelMoll);
+      celestialEquatorLabelMoll.material.opacity = opacity;
+    }
   } else {
     if (celestialEquatorTrue) { trueCoordinatesMap.scene.remove(celestialEquatorTrue); celestialEquatorTrue.geometry.dispose(); celestialEquatorTrue.material.dispose(); celestialEquatorTrue = null; }
     if (celestialEquatorGlobe) { globeMap.scene.remove(celestialEquatorGlobe); celestialEquatorGlobe.geometry.dispose(); celestialEquatorGlobe.material.dispose(); celestialEquatorGlobe = null; }
     if (celestialEquatorMoll) { mollweideMap.scene.remove(celestialEquatorMoll); celestialEquatorMoll.geometry.dispose(); celestialEquatorMoll.material.dispose(); celestialEquatorMoll = null; }
+    if (celestialEquatorLabelTrue) { trueCoordinatesMap.scene.remove(celestialEquatorLabelTrue); celestialEquatorLabelTrue = null; }
+    if (celestialEquatorLabelGlobe) { globeMap.scene.remove(celestialEquatorLabelGlobe); celestialEquatorLabelGlobe = null; }
+    if (celestialEquatorLabelMoll) { mollweideMap.scene.remove(celestialEquatorLabelMoll); celestialEquatorLabelMoll = null; }
   }
 }
 
@@ -1302,12 +1387,15 @@ async function updateMollweideView() {
     if (galacticDirectionLabelsMoll.length > 0) {
       updateGalacticDirectionLabelsMollweide(galacticDirectionLabelsMoll);
     }
+    if (galacticPlaneLabelMoll) updatePlaneLabelMollweide(galacticPlaneLabelMoll);
   }
   if (showEclipticPlaneFlag && eclipticPlaneMoll) {
     updateEclipticPlaneMollweide(eclipticPlaneMoll);
+    if (eclipticPlaneLabelMoll) updatePlaneLabelMollweide(eclipticPlaneLabelMoll);
   }
   if (showCelestialEquatorFlag && celestialEquatorMoll) {
     updateCelestialEquatorMollweide(celestialEquatorMoll);
+    if (celestialEquatorLabelMoll) updatePlaneLabelMollweide(celestialEquatorLabelMoll);
   }
   if (window.requestRender) window.requestRender();
 }
@@ -1685,6 +1773,33 @@ function registerMollweideEditableLabels() {
       sprite.scale.set(sc.x, sc.y, 1);
     }
   });
+  [galacticPlaneLabelMoll, eclipticPlaneLabelMoll, celestialEquatorLabelMoll].forEach(lbl => {
+    if (!lbl) return;
+    lbl.userData = lbl.userData || {};
+    lbl.userData.editType = 'plane';
+    lbl.userData.editId = lbl.userData.name;
+    lbl.userData.anchorFunc = () => {
+      const p = cachedRadToMollweide(lbl.userData.ra, lbl.userData.dec, 100, getMollweideLambda0());
+      return new THREE.Vector3(p.x, p.y, 0);
+    };
+    editableLabels.push(lbl);
+    const anchor = lbl.userData.anchorFunc();
+    lbl.position.copy(anchor);
+    if (planeLabelOffsets.has(lbl.userData.name)) {
+      const off = planeLabelOffsets.get(lbl.userData.name);
+      const offsetVec = new THREE.Vector3(off.x, off.y, 0);
+      lbl.position.add(offsetVec);
+      lbl.userData.offset = offsetVec.clone();
+    }
+    if (starLabelRotations.has(lbl.userData.name)) {
+      const rot = starLabelRotations.get(lbl.userData.name);
+      lbl.material.rotation = rot;
+    }
+    if (starLabelScales.has(lbl.userData.name)) {
+      const sc = starLabelScales.get(lbl.userData.name);
+      lbl.scale.set(sc.x, sc.y, 1);
+    }
+  });
 }
 
 function registerMollweideEditableLines() {
@@ -1847,6 +1962,9 @@ function onEditPointerUp() {
   } else if (selectedLabel.userData.editType === 'galactic') {
     galacticLabelOffsets.set(selectedLabel.userData.editId, { x: offsetVec.x, y: offsetVec.y });
     selectedLabel.userData.offset = offsetVec.clone();
+  } else if (selectedLabel.userData.editType === 'plane') {
+    planeLabelOffsets.set(selectedLabel.userData.editId, { x: offsetVec.x, y: offsetVec.y });
+    selectedLabel.userData.offset = offsetVec.clone();
   }
   if (selectedLabel.userData._origScale) {
     selectedLabel.scale.copy(selectedLabel.userData._origScale);
@@ -1951,6 +2069,9 @@ function setupUndoButton() {
         label.userData.offset = action.prevOffset.clone();
       } else if (label.userData.editType === 'galactic') {
         galacticLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
+        label.userData.offset = action.prevOffset.clone();
+      } else if (label.userData.editType === 'plane') {
+        planeLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
         label.userData.offset = action.prevOffset.clone();
       }
       updateEditOverlay();
