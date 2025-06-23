@@ -342,7 +342,7 @@ function createGlobeGrid(R = 100, options = {}) {
 
 function createMollweideBorder(R = 100) {
   const segments = 512;
-  const borderWidth = R * 0.05 / 3; // thinner outline
+  const borderWidth = R * 0.05 / 6; // half as thick
 
   const shape = new THREE.Shape();
   shape.absellipse(0, 0, 2 * R + borderWidth, R + borderWidth, 0, Math.PI * 2, false, 0);
