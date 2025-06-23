@@ -299,7 +299,8 @@ class DensityGridOverlay {
       const finalAlpha = alpha * this.opacityFactor;
       cell.tcMesh.material.opacity = finalAlpha;
       cell.globeMesh.material.opacity = finalAlpha;
-      cell.mollweideMesh.material.opacity = finalAlpha;
+      const mollAlpha = cell.active ? this.opacityFactor : 0;
+      cell.mollweideMesh.material.opacity = mollAlpha;
       cell.tcMesh.material.color.copy(color);
       cell.globeMesh.material.color.copy(color);
       cell.mollweideMesh.material.color.copy(color);
@@ -322,7 +323,7 @@ class DensityGridOverlay {
         line.material.vertexColors = false;
         line.material.needsUpdate = true;
         lineM.material.uniforms.color.value.copy(avgColor);
-        lineM.material.uniforms.opacityFactor.value = avgOpacity;
+        lineM.material.uniforms.opacityFactor.value = this.opacityFactor;
         lineM.material.needsUpdate = true;
       }
     });
