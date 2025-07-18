@@ -15,9 +15,12 @@ function createWideLineMaterial(color) {
     side: THREE.DoubleSide,
     vertexShader: `
       attribute float side;
+      attribute float along;
       varying float vSide;
+      varying float vAlong;
       void main() {
         vSide = side;
+        vAlong = along;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
@@ -25,8 +28,10 @@ function createWideLineMaterial(color) {
       uniform vec3 color;
       uniform float opacityFactor;
       varying float vSide;
+      varying float vAlong;
       void main() {
-        float alpha = 0.5 * (1.0 - abs(vSide)) * opacityFactor;
+        float dist = length(vec2(vSide, vAlong));
+        float alpha = (1.0 - smoothstep(1.0, 1.05, dist)) * opacityFactor;
         if(alpha <= 0.0) discard;
         gl_FragColor = vec4(color, alpha);
       }
@@ -37,6 +42,7 @@ function createWideLineMaterial(color) {
 function buildWideLineGeometry(points, width) {
   const vertices = [];
   const sides = [];
+  const along = [];
   for (let i = 0; i < points.length; i += 2) {
     const p1 = points[i];
     const p2 = points[i + 1];
@@ -49,12 +55,15 @@ function buildWideLineGeometry(points, width) {
 
     vertices.push(a1.x, a1.y, a1.z, a2.x, a2.y, a2.z, b2.x, b2.y, b2.z);
     sides.push(1, -1, -1);
+    along.push(-1, -1, 1);
     vertices.push(a1.x, a1.y, a1.z, b2.x, b2.y, b2.z, b1.x, b1.y, b1.z);
     sides.push(1, -1, 1);
+    along.push(-1, 1, 1);
   }
   const geom = new THREE.BufferGeometry();
   geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geom.setAttribute('side', new THREE.Float32BufferAttribute(sides, 1));
+  geom.setAttribute('along', new THREE.Float32BufferAttribute(along, 1));
   return geom;
 }
 
@@ -266,7 +275,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     } else if (mapType === 'Mollweide') {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
       const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
-      const width = THREE.MathUtils.lerp(10, 1, normDist);
+      const width = THREE.MathUtils.lerp(5, 1, normDist);
       const opacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
       const segments = splitMollweideWrap(
         starA.mollweidePosition,
