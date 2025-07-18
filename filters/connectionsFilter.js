@@ -219,7 +219,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
           color: c1.clone().lerp(c2, 0.5),
           transparent: true,
           opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)),
-          linewidth: THREE.MathUtils.lerp(5, 1, distance / (largestPairDistance || distance))
+          linewidth: THREE.MathUtils.lerp(12, 1, distance / (largestPairDistance || distance))
         });
         const line = new THREE.Line(geometryLine, materialLine);
         lines.push(line);
