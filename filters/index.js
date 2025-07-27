@@ -388,10 +388,18 @@ export function applyFilters(allStars) {
     showGalacticPlane: (formData.get('show-galactic-plane') !== null),
     showEclipticPlane: (formData.get('show-ecliptic-plane') !== null),
     showCelestialEquator: (formData.get('show-celestial-equator') !== null),
-    stellarClassSizes: (() => {
+    stellarClassStarSizes: (() => {
       const out = {};
       ['O','B','A','F','G','K','M','L','T','Y','Other'].forEach(cls => {
-        const val = parseFloat(formData.get(`class-${cls}-size`));
+        const val = parseFloat(formData.get(`class-${cls}-star-size`));
+        out[cls] = isNaN(val) ? 1 : val;
+      });
+      return out;
+    })(),
+    stellarClassLabelSizes: (() => {
+      const out = {};
+      ['O','B','A','F','G','K','M','L','T','Y','Other'].forEach(cls => {
+        const val = parseFloat(formData.get(`class-${cls}-label-size`));
         out[cls] = isNaN(val) ? 1 : val;
       });
       return out;

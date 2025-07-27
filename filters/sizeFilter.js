@@ -48,12 +48,17 @@ export function applySizeFilter(stars, filters) {
     if (star.Stellar_class && typeof star.Stellar_class === 'string') {
       primaryClass = star.Stellar_class.charAt(0).toUpperCase();
     }
-    const mult = filters.stellarClassSizes && filters.stellarClassSizes[primaryClass];
-    if (mult) {
-      star.displaySize *= mult;
+    const starMult =
+      filters.stellarClassStarSizes && filters.stellarClassStarSizes[primaryClass];
+    if (starMult) {
+      star.displaySize *= starMult;
     }
-    // Ensure labels scale with the same size multiplier
     star.displayLabelSize = star.displaySize;
+    const labelMult =
+      filters.stellarClassLabelSizes && filters.stellarClassLabelSizes[primaryClass];
+    if (labelMult) {
+      star.displayLabelSize *= labelMult;
+    }
   });
 
   return stars;
