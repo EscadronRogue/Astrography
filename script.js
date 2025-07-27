@@ -486,6 +486,7 @@ async function buildAndApplyFilters() {
     showClouds,
     showCloudDensity,
     cloudDensityRadius,
+    cloudDensityOpacity,
     cloudOpacity,
     starOpacity,
     starNameOpacity,
@@ -516,7 +517,6 @@ async function buildAndApplyFilters() {
   // store overlay references for external refresh calls
   isolationOverlay = returnedIsolationOverlay;
   densityOverlay = returnedDensityOverlay;
-  cloudDensityOverlays = filters.cloudDensityOverlays || [];
 
   currentFilteredStars = filteredStars;
   currentConnections = connections;
@@ -621,7 +621,14 @@ async function buildAndApplyFilters() {
     cloudDensityOverlays = [];
     for (const f of files) {
       const ov = await createCloudDensityOverlay(minDistance, maxDistance, 2, f, cachedStars);
-      updateCloudDensityOverlay(ov, trueCoordinatesMap.scene, globeMap.scene, mollweideMap.scene, cloudDensityRadius);
+      updateCloudDensityOverlay(
+        ov,
+        trueCoordinatesMap.scene,
+        globeMap.scene,
+        mollweideMap.scene,
+        cloudDensityRadius,
+        cloudDensityOpacity / 100
+      );
       cloudDensityOverlays.push(ov);
     }
   } else {

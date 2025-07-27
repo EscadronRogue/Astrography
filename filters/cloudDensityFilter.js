@@ -186,6 +186,14 @@ export async function createCloudDensityOverlay(minD, maxD, gridSize, cloudFile,
   return overlay;
 }
 
-export function updateCloudDensityOverlay(overlay, sceneTC, sceneGlobe, sceneMoll, radius) {
+export function updateCloudDensityOverlay(
+  overlay,
+  sceneTC,
+  sceneGlobe,
+  sceneMoll,
+  radius,
+  opacity = 1.0
+) {
+  overlay.opacityFactor = opacity;
   overlay.update(overlay.cloudPositions, sceneTC, sceneGlobe, sceneMoll, radius);
 }

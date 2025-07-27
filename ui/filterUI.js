@@ -454,6 +454,37 @@ function addCloudDensityFieldset() {
   rDiv.appendChild(document.createTextNode(' LY'));
   contentDiv.appendChild(rDiv);
 
+  const opDiv = document.createElement('div');
+  opDiv.classList.add('filter-item');
+  const opLabel = document.createElement('label');
+  opLabel.htmlFor = 'cloud-density-opacity-slider';
+  opLabel.textContent = 'Overlay Opacity:';
+  const opSlider = document.createElement('input');
+  opSlider.type = 'range';
+  opSlider.id = 'cloud-density-opacity-slider';
+  opSlider.name = 'cloud-density-opacity';
+  opSlider.min = '0';
+  opSlider.max = '100';
+  opSlider.value = '100';
+  opSlider.step = '1';
+  const opNumber = document.createElement('input');
+  opNumber.type = 'number';
+  opNumber.id = 'cloud-density-opacity-number';
+  opNumber.name = 'cloud-density-opacity';
+  opNumber.min = '0';
+  opNumber.max = '100';
+  opNumber.value = '100';
+  opNumber.step = '1';
+  const opSpan = document.createElement('span');
+  opSpan.id = 'cloud-density-opacity-value';
+  opSpan.textContent = '100';
+  opDiv.appendChild(opLabel);
+  opDiv.appendChild(opSlider);
+  opDiv.appendChild(opNumber);
+  opDiv.appendChild(opSpan);
+  opDiv.appendChild(document.createTextNode('%'));
+  contentDiv.appendChild(opDiv);
+
   rSlider.addEventListener('input', () => {
     rNumber.value = rSlider.value;
     rSpan.textContent = rSlider.value;
@@ -461,6 +492,14 @@ function addCloudDensityFieldset() {
   rNumber.addEventListener('input', () => {
     rSlider.value = rNumber.value;
     rSpan.textContent = rNumber.value;
+  });
+  opSlider.addEventListener('input', () => {
+    opNumber.value = opSlider.value;
+    opSpan.textContent = opSlider.value;
+  });
+  opNumber.addEventListener('input', () => {
+    opSlider.value = opNumber.value;
+    opSpan.textContent = opNumber.value;
   });
 
   fs.appendChild(contentDiv);
