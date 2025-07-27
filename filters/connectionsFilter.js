@@ -5,6 +5,35 @@ import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMol
 
 const GC_SEGMENTS = 32;
 
+function createFadingLineMaterial(opacity = 1.0, lineWidth = 1) {
+  return new THREE.ShaderMaterial({
+    uniforms: { opacity: { value: opacity } },
+    transparent: true,
+    vertexColors: true,
+    linewidth: lineWidth,
+    vertexShader: `
+      attribute float linePos;
+      varying float vPos;
+      varying vec3 vColor;
+      void main() {
+        vPos = linePos;
+        vColor = color;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float opacity;
+      varying float vPos;
+      varying vec3 vColor;
+      void main() {
+        float fade = smoothstep(0.0, 0.1, vPos) * smoothstep(1.0, 0.9, vPos);
+        gl_FragColor = vec4(vColor, opacity * fade);
+        if(gl_FragColor.a <= 0.0) discard;
+      }
+    `
+  });
+}
+
 /**
  * Helper: Returns a THREE.Vector3 for a star’s position.
  *  - If star.truePosition is available, it is returned.
@@ -75,6 +104,7 @@ export function computeConnectionPairs(stars, maxDistance) {
 export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates', opacity = 0.5) {
   const positions = [];
   const colors = [];
+  const linePositions = [];
 
   connectionObjs.forEach(pair => {
     const { starA, starB } = pair;
@@ -94,6 +124,7 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
         const cA = new THREE.Color(starA.displayColor || '#ffffff');
         const cB = new THREE.Color(starB.displayColor || '#ffffff');
         colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
+          linePositions.push(0, 1);
       });
       return; // continue to next pair
     } else {
@@ -103,21 +134,18 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
     positions.push(posA.x, posA.y, posA.z);
     positions.push(posB.x, posB.y, posB.z);
 
+    linePositions.push(0, 1);
     const cA = new THREE.Color(starA.displayColor || '#ffffff');
     const cB = new THREE.Color(starB.displayColor || '#ffffff');
     colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
   });
   
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  
-  const material = new THREE.LineBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity,
-    linewidth: 1
-  });
+  geometry.setAttribute('linePos', new THREE.Float32BufferAttribute(linePositions,1));
+
+  const material = createFadingLineMaterial(opacity, 1);
   
   const mergedLines = new THREE.LineSegments(geometry, material);
   return mergedLines;
@@ -127,15 +155,12 @@ export function createMollweideConnectionSegments(pairs, opacity = 0.5) {
   const segCount = pairs.length * GC_SEGMENTS * 2; // each GC segment may wrap
   const positions = new Float32Array(segCount * 2 * 3);
   const colors = new Float32Array(segCount * 2 * 3);
+  const linePosArr = new Float32Array(segCount * 2);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const material = new THREE.LineBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity,
-    linewidth: 1
-  });
+  geometry.setAttribute('linePos', new THREE.BufferAttribute(linePosArr, 1));
+  const material = createFadingLineMaterial(opacity, 1);
   const lineSegs = new THREE.LineSegments(geometry, material);
   lineSegs.userData = { pairs, segments: GC_SEGMENTS };
   updateMollweideConnectionSegments(lineSegs);
@@ -147,6 +172,7 @@ export function updateMollweideConnectionSegments(lineSegs) {
   const segsCount = lineSegs.userData.segments || GC_SEGMENTS;
   const posAttr = lineSegs.geometry.getAttribute('position');
   const colorAttr = lineSegs.geometry.getAttribute('color');
+  const linePosAttr = lineSegs.geometry.getAttribute('linePos');
   let idx = 0;
   pairs.forEach(pair => {
     const p1 = pair.starA.spherePosition;
@@ -169,6 +195,8 @@ export function updateMollweideConnectionSegments(lineSegs) {
         colorAttr.array[idx+3] = THREE.MathUtils.lerp(cA.r, cB.r, t2);
         colorAttr.array[idx+4] = THREE.MathUtils.lerp(cA.g, cB.g, t2);
         colorAttr.array[idx+5] = THREE.MathUtils.lerp(cA.b, cB.b, t2);
+        linePosAttr.array[idx/3] = t1;
+        linePosAttr.array[idx/3 + 1] = t2;
         idx += 6;
       });
     }
@@ -177,7 +205,9 @@ export function updateMollweideConnectionSegments(lineSegs) {
   for (; idx < posAttr.array.length; idx++) {
     posAttr.array[idx] = 0;
     colorAttr.array[idx] = 0;
+    linePosAttr.array[idx/3] = 0;
   }
+  linePosAttr.needsUpdate = true;
   posAttr.needsUpdate = true;
   colorAttr.needsUpdate = true;
   lineSegs.computeLineDistances();
@@ -215,12 +245,12 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       segments.forEach(([s1, s2]) => {
         const points = [s1, s2];
         const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
-        const materialLine = new THREE.LineBasicMaterial({
-          color: c1.clone().lerp(c2, 0.5),
-          transparent: true,
-          opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)),
-          linewidth: THREE.MathUtils.lerp(5, 1, distance / (largestPairDistance || distance))
-        });
+        geometryLine.setAttribute("linePos", new THREE.Float32BufferAttribute([0,1],1));
+        const col = c1.clone().lerp(c2, 0.5);
+        geometryLine.setAttribute("color", new THREE.Float32BufferAttribute([col.r,col.g,col.b,col.r,col.g,col.b],3));
+        const op = THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)) * opacityFactor;
+        const width = THREE.MathUtils.lerp(10, 1, distance / (largestPairDistance || distance));
+        const materialLine = createFadingLineMaterial(op, width);
         const line = new THREE.Line(geometryLine, materialLine);
         lines.push(line);
       });
@@ -234,7 +264,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     const gradientColor = c1.clone().lerp(c2, 0.5);
     
     const normDist = distance / (largestPairDistance || distance);
-    const lineThickness = THREE.MathUtils.lerp(5, 1, normDist);
+    const lineThickness = THREE.MathUtils.lerp(10, 1, normDist);
     const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
     
     let points;
@@ -245,14 +275,13 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     } else {
       points = [posA, posB];
     }
-
     const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
-    const materialLine = new THREE.LineBasicMaterial({
-      color: gradientColor,
-      transparent: true,
-      opacity: lineOpacity,
-      linewidth: lineThickness
-    });
+    const tArray = points.map((p,i)=> i/(points.length-1));
+    geometryLine.setAttribute("linePos", new THREE.Float32BufferAttribute(tArray,1));
+    const colorArr = [];
+    for(let i=0;i<points.length;i++){ colorArr.push(gradientColor.r, gradientColor.g, gradientColor.b); }
+    geometryLine.setAttribute("color", new THREE.Float32BufferAttribute(colorArr,3));
+    const materialLine = createFadingLineMaterial(lineOpacity, lineThickness);
     const line = new THREE.Line(geometryLine, materialLine);
     if (mapType === 'Globe') {
       line.renderOrder = 1;
