@@ -11,11 +11,12 @@ import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
 
 // Helper material and geometry builders for wide fading lines on the Mollweide map
-function createWideLineMaterial(color) {
+function createWideLineMaterial(color, fadePower = 1.0) {
   return new THREE.ShaderMaterial({
     uniforms: {
       color: { value: new THREE.Color(color) },
-      opacityFactor: { value: 1.0 }
+      opacityFactor: { value: 1.0 },
+      fadePower: { value: fadePower }
     },
     transparent: true,
     depthWrite: false,
@@ -34,11 +35,12 @@ function createWideLineMaterial(color) {
     fragmentShader: `
       uniform vec3 color;
       uniform float opacityFactor;
+      uniform float fadePower;
       varying float vSide;
       varying float vAlong;
       void main() {
         float dist = length(vec2(vSide, vAlong));
-        float alpha = max(0.0, 1.0 - dist) * opacityFactor;
+        float alpha = pow(max(0.0, 1.0 - dist), fadePower) * opacityFactor;
         if(alpha <= 0.0) discard;
         gl_FragColor = vec4(color, alpha);
       }
@@ -84,6 +86,7 @@ class DensityGridOverlay {
     this.maxDensity = 0;
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
     this.opacityFactor = 1.0;
+    this.fadePower = 1.0;
   }
 
   createGrid(stars) {
@@ -245,7 +248,7 @@ class DensityGridOverlay {
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
-          const mollMat = createWideLineMaterial(0xff0000);
+          const mollMat = createWideLineMaterial(0xff0000, this.fadePower);
           const lineM = new THREE.Mesh(geomM, mollMat);
           lineM.renderOrder = 1;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
@@ -260,11 +263,15 @@ class DensityGridOverlay {
     const bottomSlider = document.getElementById('density-bottom-slider');
     const topSlider = document.getElementById('density-top-slider');
     const opacitySlider = document.getElementById('density-opacity-slider');
+    const widthSlider = document.getElementById('density-line-width-slider');
+    const fadeSlider = document.getElementById('density-fade-slider');
     const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
     const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
     const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
     const topPct = topSlider ? parseFloat(topSlider.value) : 10;
     this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
+    if (widthSlider) this.mollLineWidth = parseFloat(widthSlider.value);
+    if (fadeSlider) this.fadePower = parseFloat(fadeSlider.value);
 
     const extendedStars = stars.filter(star => {
       const d = star.Distance_from_the_Sun;
@@ -332,6 +339,7 @@ class DensityGridOverlay {
         line.material.needsUpdate = true;
         lineM.material.uniforms.color.value.copy(avgColor);
         lineM.material.uniforms.opacityFactor.value = avgOpacity;
+        lineM.material.uniforms.fadePower.value = this.fadePower;
         lineM.material.needsUpdate = true;
       }
     });
@@ -368,6 +376,9 @@ class DensityGridOverlay {
       }
       obj.lineM.geometry.dispose();
       obj.lineM.geometry = buildWideLineGeometry(pts, this.mollLineWidth);
+      if (obj.lineM.material.uniforms.fadePower) {
+        obj.lineM.material.uniforms.fadePower.value = this.fadePower;
+      }
     });
   }
 }

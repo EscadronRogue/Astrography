@@ -3,12 +3,22 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 
+// Tunable parameters for the connections lines
+let connectionMaxWidth = 5;
+let connectionFadePower = 1.0;
+
+export function setConnectionLineParams(maxWidth, fadePower) {
+  connectionMaxWidth = maxWidth;
+  connectionFadePower = fadePower;
+}
+
 // Helper material and geometry builders for wide fading lines on the Mollweide map
 function createWideLineMaterial(color) {
   return new THREE.ShaderMaterial({
     uniforms: {
       color: { value: new THREE.Color(color) },
-      opacityFactor: { value: 1.0 }
+      opacityFactor: { value: 1.0 },
+      fadePower: { value: connectionFadePower }
     },
     transparent: true,
     depthWrite: false,
@@ -27,11 +37,12 @@ function createWideLineMaterial(color) {
     fragmentShader: `
       uniform vec3 color;
       uniform float opacityFactor;
+      uniform float fadePower;
       varying float vSide;
       varying float vAlong;
       void main() {
         float dist = length(vec2(vSide, vAlong));
-        float alpha = max(0.0, 1.0 - dist) * opacityFactor;
+        float alpha = pow(max(0.0, 1.0 - dist), fadePower) * opacityFactor;
         if(alpha <= 0.0) discard;
         gl_FragColor = vec4(color, alpha);
       }
@@ -275,7 +286,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     } else if (mapType === 'Mollweide') {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
       const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
-      const width = THREE.MathUtils.lerp(5, 1, normDist);
+      const width = THREE.MathUtils.lerp(connectionMaxWidth, 1, normDist);
       const opacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
       const segments = splitMollweideWrap(
         starA.mollweidePosition,
@@ -286,6 +297,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         const geom = buildWideLineGeometry(pts, width);
         const mat = createWideLineMaterial(c1.clone().lerp(c2, 0.5));
         mat.uniforms.opacityFactor.value = opacity;
+        mat.uniforms.fadePower.value = connectionFadePower;
         const mesh = new THREE.Mesh(geom, mat);
         mesh.renderOrder = 1;
         lines.push(mesh);
@@ -300,7 +312,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     const gradientColor = c1.clone().lerp(c2, 0.5);
 
     const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
-    const lineThickness = THREE.MathUtils.lerp(5, 1, normDist);
+    const lineThickness = THREE.MathUtils.lerp(connectionMaxWidth, 1, normDist);
     const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
     
     let points;

@@ -1,7 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI, generateStellarClassFilters } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines } from './filters/connectionsFilter.js';
+import { createConnectionLines, mergeConnectionLines, setConnectionLineParams } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
@@ -478,11 +478,15 @@ async function buildAndApplyFilters() {
     maxDistance,
     isolationGridSize,
     densityGridSize,
+    densityLineWidth,
+    densityFade,
     showClouds,
     cloudOpacity,
     starOpacity,
     starNameOpacity,
     connectionOpacity,
+    connectionWidth,
+    connectionFade,
     constellationLineOpacity,
     constellationNameOpacity,
     planeOpacity,
@@ -534,6 +538,7 @@ async function buildAndApplyFilters() {
   trueCoordinatesMap.setConnectionOpacity(connectionOpacity / 100);
   globeMap.setConnectionOpacity(connectionOpacity / 100);
   mollweideMap.setConnectionOpacity(connectionOpacity / 100);
+  setConnectionLineParams(connectionWidth, connectionFade);
 
   trueCoordinatesMap.connectionOpacity = connectionOpacity / 100;
   globeMap.connectionOpacity = connectionOpacity / 100;
