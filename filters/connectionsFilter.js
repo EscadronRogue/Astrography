@@ -212,17 +212,25 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         starA.mollweidePosition,
         starB.mollweidePosition
       );
+      const smoothstep = (edge0, edge1, x) => {
+        const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+        return t * t * (3 - 2 * t);
+      };
       segments.forEach(([s1, s2]) => {
         const points = [s1, s2];
-        const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
-        const materialLine = new THREE.LineBasicMaterial({
-          color: c1.clone().lerp(c2, 0.5),
-          transparent: true,
-          opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)),
-          linewidth: THREE.MathUtils.lerp(5, 1, distance / (largestPairDistance || distance))
-        });
-        const line = new THREE.Line(geometryLine, materialLine);
-        lines.push(line);
+        for (let i = 0; i < points.length - 1; i++) {
+          const segGeom = new THREE.BufferGeometry().setFromPoints([points[i], points[i + 1]]);
+          const tMid = 0.5; // only two points
+          const fade = smoothstep(0.0, 0.1, tMid) * smoothstep(1.0, 0.9, tMid);
+          const segMat = new THREE.LineBasicMaterial({
+            color: c1.clone().lerp(c2, 0.5),
+            transparent: true,
+            opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)) * fade,
+            linewidth: THREE.MathUtils.lerp(10, 1, distance / (largestPairDistance || distance))
+          });
+          const seg = new THREE.Line(segGeom, segMat);
+          lines.push(seg);
+        }
       });
       return;
     } else {
@@ -234,7 +242,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     const gradientColor = c1.clone().lerp(c2, 0.5);
     
     const normDist = distance / (largestPairDistance || distance);
-    const lineThickness = THREE.MathUtils.lerp(5, 1, normDist);
+    const lineThickness = THREE.MathUtils.lerp(10, 1, normDist);
     const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
     
     let points;
@@ -246,18 +254,27 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       points = [posA, posB];
     }
 
-    const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
-    const materialLine = new THREE.LineBasicMaterial({
-      color: gradientColor,
-      transparent: true,
-      opacity: lineOpacity,
-      linewidth: lineThickness
-    });
-    const line = new THREE.Line(geometryLine, materialLine);
-    if (mapType === 'Globe') {
-      line.renderOrder = 1;
+    const smoothstep = (edge0, edge1, x) => {
+      const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+      return t * t * (3 - 2 * t);
+    };
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const segGeom = new THREE.BufferGeometry().setFromPoints([points[i], points[i + 1]]);
+      const tMid = (i + 0.5) / (points.length - 1);
+      const fade = smoothstep(0.0, 0.1, tMid) * smoothstep(1.0, 0.9, tMid);
+      const segMat = new THREE.LineBasicMaterial({
+        color: gradientColor,
+        transparent: true,
+        opacity: lineOpacity * fade,
+        linewidth: lineThickness
+      });
+      const seg = new THREE.Line(segGeom, segMat);
+      if (mapType === 'Globe') {
+        seg.renderOrder = 1;
+      }
+      lines.push(seg);
     }
-    lines.push(line);
   });
   return lines;
 }
