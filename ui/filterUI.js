@@ -219,6 +219,7 @@ export function initFilterUI() {
 
   // Add Dust Clouds fieldset.
   addCloudsFieldset();
+  addCloudDensityFieldset();
 
   // Fullscreen button listeners.
   document.querySelectorAll('.fullscreen-btn').forEach(btn => {
@@ -356,6 +357,112 @@ function addCloudsFieldset() {
     opSpan.textContent = opNumber.value;
   });
   
+  fs.appendChild(contentDiv);
+  filterForm.appendChild(fs);
+}
+
+function addCloudDensityFieldset() {
+  const filterForm = document.getElementById('filters-form');
+  const fs = document.createElement('fieldset');
+  const legend = document.createElement('legend');
+  legend.classList.add('collapsible');
+  legend.textContent = 'Dust Cloud Density';
+  fs.appendChild(legend);
+
+  const contentDiv = document.createElement('div');
+  contentDiv.classList.add('filter-content', 'scrollable-category');
+  contentDiv.style.maxHeight = '0px';
+
+  legend.addEventListener('click', () => {
+    legend.classList.toggle('active');
+    const isActive = legend.classList.contains('active');
+    legend.setAttribute('aria-expanded', isActive);
+    if (isActive) {
+      setTimeout(() => {
+        contentDiv.style.maxHeight = contentDiv.scrollHeight + 'px';
+      }, 0);
+      contentDiv.style.overflowY = 'auto';
+    } else {
+      contentDiv.style.maxHeight = '0px';
+      contentDiv.style.overflowY = 'hidden';
+    }
+  });
+
+  const dustClouds = [
+    { name: 'Aquila', file: 'data/Aquila_cloud_data.json' },
+    { name: 'Auriga', file: 'data/Auriga_cloud_data.json' },
+    { name: 'Blue', file: 'data/Blue_cloud_data.json' },
+    { name: 'Ceti', file: 'data/Ceti_cloud_data.json' },
+    { name: 'Dorado', file: 'data/Dorado_cloud_data.json' },
+    { name: 'Eridani', file: 'data/Eridani_cloud_data.json' },
+    { name: 'Galactic', file: 'data/Galactic_cloud_data.json' },
+    { name: 'Gemini', file: 'data/Gemini_cloud_data.json' },
+    { name: 'Hyades', file: 'data/Hyades_cloud_data.json' },
+    { name: 'Leo', file: 'data/Leo_cloud_data.json' },
+    { name: 'Local Interstellar', file: 'data/Local_interstellar_cloud.json' },
+    { name: 'Microscopi', file: 'data/Microscopi_cloud_data.json' },
+    { name: 'North Galactic Pole', file: 'data/North_Galactic_Pole_cloud_data.json' },
+    { name: 'Ophiucus', file: 'data/Ophiucus_cloud_data.json' },
+    { name: 'Vela', file: 'data/Vela_cloud_data.json' }
+  ];
+
+  dustClouds.forEach(cloud => {
+    const div = document.createElement('div');
+    div.classList.add('filter-item');
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.id = 'dust-density-' + cloud.name.replace(/\s+/g, '-').toLowerCase();
+    chk.name = 'dust-density-clouds';
+    chk.value = cloud.file;
+    chk.checked = false;
+    const lbl = document.createElement('label');
+    lbl.htmlFor = chk.id;
+    lbl.textContent = cloud.name;
+    div.appendChild(chk);
+    div.appendChild(lbl);
+    contentDiv.appendChild(div);
+  });
+
+  const rDiv = document.createElement('div');
+  rDiv.classList.add('filter-item');
+  const rLabel = document.createElement('label');
+  rLabel.htmlFor = 'cloud-density-radius-slider';
+  rLabel.textContent = 'Radius:';
+  const rSlider = document.createElement('input');
+  rSlider.type = 'range';
+  rSlider.id = 'cloud-density-radius-slider';
+  rSlider.name = 'cloud-density-radius';
+  rSlider.min = '1';
+  rSlider.max = '20';
+  rSlider.value = '5';
+  rSlider.step = '1';
+  const rNumber = document.createElement('input');
+  rNumber.type = 'number';
+  rNumber.id = 'cloud-density-radius-number';
+  rNumber.name = 'cloud-density-radius';
+  rNumber.min = '1';
+  rNumber.max = '20';
+  rNumber.value = '5';
+  rNumber.step = '1';
+  const rSpan = document.createElement('span');
+  rSpan.id = 'cloud-density-radius-value';
+  rSpan.textContent = '5';
+  rDiv.appendChild(rLabel);
+  rDiv.appendChild(rSlider);
+  rDiv.appendChild(rNumber);
+  rDiv.appendChild(rSpan);
+  rDiv.appendChild(document.createTextNode(' LY'));
+  contentDiv.appendChild(rDiv);
+
+  rSlider.addEventListener('input', () => {
+    rNumber.value = rSlider.value;
+    rSpan.textContent = rSlider.value;
+  });
+  rNumber.addEventListener('input', () => {
+    rSlider.value = rNumber.value;
+    rSpan.textContent = rNumber.value;
+  });
+
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }

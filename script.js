@@ -11,6 +11,7 @@ import {
   updateCloudsOverlay,
   updateMollweideCloudSegments
 } from './filters/cloudsFilter.js';
+import { createCloudDensityOverlay, updateCloudDensityOverlay } from './filters/cloudDensityFilter.js';
 import {
   createGalacticPlaneMesh,
   createEclipticPlaneMesh,
@@ -58,6 +59,7 @@ let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
 let isolationOverlay = null;
 let densityOverlay = null;
+let cloudDensityOverlays = [];
 let galacticPlaneTrue = null;
 let eclipticPlaneTrue = null;
 let celestialEquatorTrue = null;
@@ -76,6 +78,7 @@ let showConstellationOverlayFlag = false;
 let enableIsolationFilterFlag = false;
 let enableDensityFilterFlag = false;
 let showCloudsFlag = false;
+let showCloudDensityFlag = false;
 let showGalacticPlaneFlag = false;
 let showEclipticPlaneFlag = false;
 let showCelestialEquatorFlag = false;
@@ -481,6 +484,8 @@ async function buildAndApplyFilters() {
     densityLineWidth,
     densityFade,
     showClouds,
+    showCloudDensity,
+    cloudDensityRadius,
     cloudOpacity,
     starOpacity,
     starNameOpacity,
@@ -503,6 +508,7 @@ async function buildAndApplyFilters() {
   enableIsolationFilterFlag = enableIsolationFilter;
   enableDensityFilterFlag = enableDensityFilter;
   showCloudsFlag = showClouds;
+  showCloudDensityFlag = showCloudDensity;
   showGalacticPlaneFlag = showGalacticPlane;
   showEclipticPlaneFlag = showEclipticPlane;
   showCelestialEquatorFlag = showCelestialEquator;
@@ -510,6 +516,7 @@ async function buildAndApplyFilters() {
   // store overlay references for external refresh calls
   isolationOverlay = returnedIsolationOverlay;
   densityOverlay = returnedDensityOverlay;
+  cloudDensityOverlays = filters.cloudDensityOverlays || [];
 
   currentFilteredStars = filteredStars;
   currentConnections = connections;
@@ -598,6 +605,34 @@ async function buildAndApplyFilters() {
     await updateCloudsOverlay(cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, globeMap.scene, 'Globe', [], cloudOpacity / 100);
     await updateCloudsOverlay(cachedStars, mollweideMap.scene, 'Mollweide', [], cloudOpacity / 100);
+  }
+
+  // --- Dust Cloud Density Overlay ---
+  if (showCloudDensityFlag) {
+    const form = document.getElementById('filters-form');
+    const files = new FormData(form).getAll('dust-density-clouds');
+    cloudDensityOverlays.forEach(ov => {
+      ov.cubesData.forEach(c => {
+        trueCoordinatesMap.scene.remove(c.tcMesh);
+        globeMap.scene.remove(c.globeMesh);
+        mollweideMap.scene.remove(c.mollweideMesh);
+      });
+    });
+    cloudDensityOverlays = [];
+    for (const f of files) {
+      const ov = await createCloudDensityOverlay(minDistance, maxDistance, 2, f, cachedStars);
+      updateCloudDensityOverlay(ov, trueCoordinatesMap.scene, globeMap.scene, mollweideMap.scene, cloudDensityRadius);
+      cloudDensityOverlays.push(ov);
+    }
+  } else {
+    cloudDensityOverlays.forEach(ov => {
+      ov.cubesData.forEach(c => {
+        trueCoordinatesMap.scene.remove(c.tcMesh);
+        globeMap.scene.remove(c.globeMesh);
+        mollweideMap.scene.remove(c.mollweideMesh);
+      });
+    });
+    cloudDensityOverlays = [];
   }
 
   applyPlanes(showGalacticPlane, showEclipticPlane, showCelestialEquator, planeOpacity / 100);
