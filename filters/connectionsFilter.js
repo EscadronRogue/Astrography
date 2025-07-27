@@ -276,7 +276,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
       const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
       const width = THREE.MathUtils.lerp(5, 1, normDist);
-      const opacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
+      const opacity = THREE.MathUtils.lerp(1.0, 0.0, normDist) * opacityFactor;
       const segments = splitMollweideWrap(
         starA.mollweidePosition,
         starB.mollweidePosition
@@ -301,7 +301,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
 
     const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
     const lineThickness = THREE.MathUtils.lerp(5, 1, normDist);
-    const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
+    const lineOpacity = THREE.MathUtils.lerp(1.0, 0.0, normDist) * opacityFactor;
     
     let points;
     if (mapType === 'Globe') {

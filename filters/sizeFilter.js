@@ -32,7 +32,7 @@ export function applySizeFilter(stars, filters) {
       }
 
       const classData = stellarClassData[primaryClass];
-      star.displaySize = classData ? classData.size : 1; // fallback to 1 if not found
+      star.displaySize = classData ? classData.size : 8; // fallback to 8 if not found
     });
   } else {
     // Default if no recognized size filter
