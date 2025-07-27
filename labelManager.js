@@ -88,8 +88,8 @@ export class LabelManager {
       // overwhelmingly large. Map the typical size range (1–8) to a more
       // moderate label scale.
       const scaleFactor = THREE.MathUtils.clamp(
-        THREE.MathUtils.mapLinear(labelSize, 1, 8, 1, 5),
-        1,
+        THREE.MathUtils.mapLinear(labelSize, 0.1, 8, 0.1, 5),
+        0.1,
         5
       );
       const fontSize = baseFontSize * scaleFactor;
@@ -225,13 +225,13 @@ export class LabelManager {
     const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
     if (this.mapType === 'TrueCoordinates') {
       // Simple screen space offset scaled by star size
-      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 1, 5);
+      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
       const dist = 0.5 * scaleFactor;
       return new THREE.Vector3(1, 1, 0).multiplyScalar(dist);
     } else if (this.mapType === 'Mollweide') {
       // Offset labels randomly around the star. Ensure labels from the same
       // system are separated by at least 90 degrees and at most 270 degrees.
-      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 1, 5);
+      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
       const dist = 1 * scaleFactor * 2; // double the offset
 
       const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
@@ -273,7 +273,7 @@ export class LabelManager {
       // Random angle around the star
       const angle = Math.random() * Math.PI * 2;
       const baseDistance = 2;
-      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 1, 5);
+      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
       return tangent.clone().multiplyScalar(Math.cos(angle))
         .add(bitangent.clone().multiplyScalar(Math.sin(angle)))
         .multiplyScalar(baseDistance * scaleFactor);
