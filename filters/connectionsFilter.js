@@ -73,114 +73,21 @@ export function computeConnectionPairs(stars, maxDistance) {
  * @returns {THREE.LineSegments} - The merged connection lines.
  */
 export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates', opacity = 0.5) {
-  const positions = [];
-  const colors = [];
-
-  connectionObjs.forEach(pair => {
-    const { starA, starB } = pair;
-    let posA, posB;
-    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
-    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
-    if (mapType === 'Globe') {
-      posA = starA.spherePosition;
-      posB = starB.spherePosition;
-    } else if (mapType === 'Mollweide') {
-      const segments = splitMollweideWrap(
-        starA.mollweidePosition,
-        starB.mollweidePosition
-      );
-      segments.forEach(([s1, s2]) => {
-        positions.push(s1.x, s1.y, s1.z, s2.x, s2.y, s2.z);
-        const cA = new THREE.Color(starA.displayColor || '#ffffff');
-        const cB = new THREE.Color(starB.displayColor || '#ffffff');
-        colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
-      });
-      return; // continue to next pair
-    } else {
-      posA = getPosition(starA);
-      posB = getPosition(starB);
-    }
-    positions.push(posA.x, posA.y, posA.z);
-    positions.push(posB.x, posB.y, posB.z);
-
-    const cA = new THREE.Color(starA.displayColor || '#ffffff');
-    const cB = new THREE.Color(starB.displayColor || '#ffffff');
-    colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
-  });
-  
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  
-  const material = new THREE.LineBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity,
-    linewidth: 1
-  });
-  
-  const mergedLines = new THREE.LineSegments(geometry, material);
-  return mergedLines;
+  const group = new THREE.Group();
+  const lines = createConnectionLines([], connectionObjs, mapType, opacity);
+  lines.forEach(l => group.add(l));
+  return group;
 }
 
 export function createMollweideConnectionSegments(pairs, opacity = 0.5) {
-  const segCount = pairs.length * GC_SEGMENTS * 2; // each GC segment may wrap
-  const positions = new Float32Array(segCount * 2 * 3);
-  const colors = new Float32Array(segCount * 2 * 3);
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const material = new THREE.LineBasicMaterial({
-    vertexColors: true,
-    transparent: true,
-    opacity,
-    linewidth: 1
-  });
-  const lineSegs = new THREE.LineSegments(geometry, material);
-  lineSegs.userData = { pairs, segments: GC_SEGMENTS };
-  updateMollweideConnectionSegments(lineSegs);
-  return lineSegs;
+  const group = new THREE.Group();
+  const lines = createConnectionLines([], pairs, 'Mollweide', opacity);
+  lines.forEach(l => group.add(l));
+  return group;
 }
 
-export function updateMollweideConnectionSegments(lineSegs) {
-  const pairs = lineSegs.userData.pairs || [];
-  const segsCount = lineSegs.userData.segments || GC_SEGMENTS;
-  const posAttr = lineSegs.geometry.getAttribute('position');
-  const colorAttr = lineSegs.geometry.getAttribute('color');
-  let idx = 0;
-  pairs.forEach(pair => {
-    const p1 = pair.starA.spherePosition;
-    const p2 = pair.starB.spherePosition;
-    if (!p1 || !p2) return;
-    const pts = greatCircleToMollweide(p1, p2, 100, segsCount, getMollweideLambda0());
-    const cA = new THREE.Color(pair.starA.displayColor || '#ffffff');
-    const cB = new THREE.Color(pair.starB.displayColor || '#ffffff');
-    for (let j = 0; j < pts.length - 1; j++) {
-      const segs = splitMollweideWrap(pts[j], pts[j + 1]);
-      segs.forEach(([s, e]) => {
-        if (idx + 6 > posAttr.array.length) return;
-        posAttr.array[idx] = s.x; posAttr.array[idx+1] = s.y; posAttr.array[idx+2] = s.z;
-        posAttr.array[idx+3] = e.x; posAttr.array[idx+4] = e.y; posAttr.array[idx+5] = e.z;
-        const t1 = j / (pts.length - 1);
-        const t2 = (j + 1) / (pts.length - 1);
-        colorAttr.array[idx]   = THREE.MathUtils.lerp(cA.r, cB.r, t1);
-        colorAttr.array[idx+1] = THREE.MathUtils.lerp(cA.g, cB.g, t1);
-        colorAttr.array[idx+2] = THREE.MathUtils.lerp(cA.b, cB.b, t1);
-        colorAttr.array[idx+3] = THREE.MathUtils.lerp(cA.r, cB.r, t2);
-        colorAttr.array[idx+4] = THREE.MathUtils.lerp(cA.g, cB.g, t2);
-        colorAttr.array[idx+5] = THREE.MathUtils.lerp(cA.b, cB.b, t2);
-        idx += 6;
-      });
-    }
-  });
-  // zero out remaining
-  for (; idx < posAttr.array.length; idx++) {
-    posAttr.array[idx] = 0;
-    colorAttr.array[idx] = 0;
-  }
-  posAttr.needsUpdate = true;
-  colorAttr.needsUpdate = true;
-  lineSegs.computeLineDistances();
+export function updateMollweideConnectionSegments() {
+  /* no-op retained for backward compatibility */
 }
 
 /**

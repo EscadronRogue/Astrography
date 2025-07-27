@@ -84,10 +84,10 @@ export class LabelManager {
         : (this.mapType === 'Mollweide' ? 72 : 24));
       // Scale label size with the star's display size but cap the extremes
       // so small star labels remain readable and huge stars aren't
-      // overwhelmingly large. Map the typical size range (1–8) to a more
-      // moderate label scale.
+      // overwhelmingly large. Map the size range (1–12) to a more
+      // moderate label scale so values beyond this still cap at 5.
       const scaleFactor = THREE.MathUtils.clamp(
-        THREE.MathUtils.mapLinear(star.displaySize, 1, 8, 1, 5),
+        THREE.MathUtils.mapLinear(star.displaySize, 1, 12, 1, 5),
         1,
         5
       );

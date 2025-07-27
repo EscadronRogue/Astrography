@@ -1,7 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
+import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
@@ -1024,12 +1024,7 @@ class MapManager {
 
   updateConnectionPositions(stars, connectionObjs) {
     if (!this.connectionGroup) return;
-    if (this.mapType === 'Mollweide') {
-      const segs = this.connectionGroup.children[0];
-      if (segs) updateMollweideConnectionSegments(segs);
-    } else {
-      this.updateConnections(stars, connectionObjs, this.connectionOpacity);
-    }
+    this.updateConnections(stars, connectionObjs, this.connectionOpacity);
     if (window.requestRender) window.requestRender();
   }
 
