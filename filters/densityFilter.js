@@ -270,8 +270,14 @@ class DensityGridOverlay {
     const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
     const topPct = topSlider ? parseFloat(topSlider.value) : 10;
     this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
-    if (widthSlider) this.mollLineWidth = parseFloat(widthSlider.value);
+    let newWidth = this.mollLineWidth;
+    if (widthSlider) newWidth = parseFloat(widthSlider.value);
     if (fadeSlider) this.fadePower = parseFloat(fadeSlider.value);
+
+    if (newWidth !== this.mollLineWidth) {
+      this.mollLineWidth = newWidth;
+      this.refreshMollweide();
+    }
 
     const extendedStars = stars.filter(star => {
       const d = star.Distance_from_the_Sun;
