@@ -205,6 +205,47 @@ export function generateStellarClassFilters(stars) {
     showStarDiv.appendChild(showStarLabel);
     classCheckboxesDiv.appendChild(showStarDiv);
 
+    // Size slider for the entire class
+    const sizeDiv = document.createElement('div');
+    sizeDiv.classList.add('filter-item');
+    const sizeLabel = document.createElement('label');
+    sizeLabel.htmlFor = `class-${cls}-size-slider`;
+    sizeLabel.textContent = 'Size:';
+    const sizeSlider = document.createElement('input');
+    sizeSlider.type = 'range';
+    sizeSlider.id = `class-${cls}-size-slider`;
+    sizeSlider.name = `class-${cls}-size`;
+    sizeSlider.min = '0.5';
+    sizeSlider.max = '2';
+    sizeSlider.step = '0.1';
+    sizeSlider.value = '1';
+    const sizeNumber = document.createElement('input');
+    sizeNumber.type = 'number';
+    sizeNumber.id = `class-${cls}-size-number`;
+    sizeNumber.name = `class-${cls}-size`;
+    sizeNumber.min = '0.5';
+    sizeNumber.max = '2';
+    sizeNumber.step = '0.1';
+    sizeNumber.value = '1';
+    const sizeSpan = document.createElement('span');
+    sizeSpan.id = `class-${cls}-size-value`;
+    sizeSpan.textContent = '1';
+    sizeDiv.appendChild(sizeLabel);
+    sizeDiv.appendChild(sizeSlider);
+    sizeDiv.appendChild(sizeNumber);
+    sizeDiv.appendChild(sizeSpan);
+    sizeDiv.appendChild(document.createTextNode('x'));
+    classCheckboxesDiv.appendChild(sizeDiv);
+
+    sizeSlider.addEventListener('input', () => {
+      sizeNumber.value = sizeSlider.value;
+      sizeSpan.textContent = sizeSlider.value;
+    });
+    sizeNumber.addEventListener('input', () => {
+      sizeSlider.value = sizeNumber.value;
+      sizeSpan.textContent = sizeNumber.value;
+    });
+
     subcatDiv.appendChild(classCheckboxesDiv);
 
     // 3) The star list subcontent (initially closed)
@@ -345,6 +386,46 @@ export function generateStellarClassFilters(stars) {
     showStarDiv.appendChild(showStarCheckbox);
     showStarDiv.appendChild(showStarLabel);
     classCheckboxesDiv.appendChild(showStarDiv);
+
+    const sizeDiv = document.createElement('div');
+    sizeDiv.classList.add('filter-item');
+    const sizeLabel = document.createElement('label');
+    sizeLabel.htmlFor = `class-${cls}-size-slider`;
+    sizeLabel.textContent = 'Size:';
+    const sizeSlider = document.createElement('input');
+    sizeSlider.type = 'range';
+    sizeSlider.id = `class-${cls}-size-slider`;
+    sizeSlider.name = `class-${cls}-size`;
+    sizeSlider.min = '0.5';
+    sizeSlider.max = '2';
+    sizeSlider.step = '0.1';
+    sizeSlider.value = '1';
+    const sizeNumber = document.createElement('input');
+    sizeNumber.type = 'number';
+    sizeNumber.id = `class-${cls}-size-number`;
+    sizeNumber.name = `class-${cls}-size`;
+    sizeNumber.min = '0.5';
+    sizeNumber.max = '2';
+    sizeNumber.step = '0.1';
+    sizeNumber.value = '1';
+    const sizeSpan = document.createElement('span');
+    sizeSpan.id = `class-${cls}-size-value`;
+    sizeSpan.textContent = '1';
+    sizeDiv.appendChild(sizeLabel);
+    sizeDiv.appendChild(sizeSlider);
+    sizeDiv.appendChild(sizeNumber);
+    sizeDiv.appendChild(sizeSpan);
+    sizeDiv.appendChild(document.createTextNode('x'));
+    classCheckboxesDiv.appendChild(sizeDiv);
+
+    sizeSlider.addEventListener('input', () => {
+      sizeNumber.value = sizeSlider.value;
+      sizeSpan.textContent = sizeSlider.value;
+    });
+    sizeNumber.addEventListener('input', () => {
+      sizeSlider.value = sizeNumber.value;
+      sizeSpan.textContent = sizeNumber.value;
+    });
 
     subcatDiv.appendChild(classCheckboxesDiv);
 

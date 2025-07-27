@@ -25,14 +25,13 @@ export function applySizeFilter(stars, filters) {
   } else if (filters.size === 'stellar-class') {
     // Map class to size from stellarClassData
     stars.forEach(star => {
-      // Check if star.Stellar_class exists and is not empty
-      let primaryClass = 'G'; // Default fallback
+      let primaryClass = 'G';
       if (star.Stellar_class && typeof star.Stellar_class === 'string') {
         primaryClass = star.Stellar_class.charAt(0).toUpperCase();
       }
 
       const classData = stellarClassData[primaryClass];
-      star.displaySize = classData ? classData.size : 1; // fallback to 1 if not found
+      star.displaySize = classData ? classData.size : 1;
     });
   } else {
     // Default if no recognized size filter
@@ -42,6 +41,18 @@ export function applySizeFilter(stars, filters) {
       }
     });
   }
+
+  // Apply class size multipliers
+  stars.forEach(star => {
+    let primaryClass = 'G';
+    if (star.Stellar_class && typeof star.Stellar_class === 'string') {
+      primaryClass = star.Stellar_class.charAt(0).toUpperCase();
+    }
+    const mult = filters.stellarClassSizes && filters.stellarClassSizes[primaryClass];
+    if (mult) {
+      star.displaySize *= mult;
+    }
+  });
 
   return stars;
 }

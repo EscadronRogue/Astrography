@@ -387,7 +387,15 @@ export function applyFilters(allStars) {
     showClouds: (formData.getAll('dust-clouds').length > 0),
     showGalacticPlane: (formData.get('show-galactic-plane') !== null),
     showEclipticPlane: (formData.get('show-ecliptic-plane') !== null),
-    showCelestialEquator: (formData.get('show-celestial-equator') !== null)
+    showCelestialEquator: (formData.get('show-celestial-equator') !== null),
+    stellarClassSizes: (() => {
+      const out = {};
+      ['O','B','A','F','G','K','M','L','T','Y','Other'].forEach(cls => {
+        const val = parseFloat(formData.get(`class-${cls}-size`));
+        out[cls] = isNaN(val) ? 1 : val;
+      });
+      return out;
+    })()
   };
 
   let filteredStars = applyDistanceFilter(allStars, filters);

@@ -1,6 +1,6 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { applyFilters, setupFilterUI } from './filters/index.js';
+import { applyFilters, setupFilterUI, generateStellarClassFilters } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
@@ -133,15 +133,14 @@ function savePresets() {
   const form = document.getElementById('filters-form');
   if (!form) return;
   const data = {};
-  const fd = new FormData(form);
-  for (const [k, v] of fd.entries()) {
-    if (data[k]) {
-      if (!Array.isArray(data[k])) data[k] = [data[k]];
-      data[k].push(v);
+  form.querySelectorAll('input, select, textarea').forEach(el => {
+    if (!el.id) return;
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      data[el.id] = el.checked;
     } else {
-      data[k] = v;
+      data[el.id] = el.value;
     }
-  }
+  });
   const edits = {
     starOffsets: Array.from(starLabelOffsets.entries()),
     starRotations: Array.from(starLabelRotations.entries()),
@@ -169,27 +168,15 @@ function loadPresets() {
   }
   if (form && obj.form) {
     const data = obj.form;
-    for (const [k, v] of Object.entries(data)) {
-      const els = form.querySelectorAll(`[name='${k}']`);
-      els.forEach(el => {
-        if (el.type === 'checkbox') {
-          el.checked = Array.isArray(v) ? v.includes(el.value) : v === 'on' || v === el.value || v === true;
-        } else if (el.type === 'radio') {
-          el.checked = v === el.value;
-        } else {
-          el.value = v;
-        }
-      });
-      if (k === 'min-distance') document.getElementById('min-distance-slider').value = v;
-      if (k === 'max-distance') document.getElementById('max-distance-slider').value = v;
-      if (k === 'isolation') document.getElementById('isolation-slider').value = v;
-      if (k === 'isolation-grid-size') document.getElementById('isolation-grid-slider').value = v;
-      if (k === 'isolation-tolerance') document.getElementById('isolation-tolerance-slider').value = v;
-      if (k === 'density') document.getElementById('density-slider').value = v;
-      if (k === 'density-bottom-percent') document.getElementById('density-bottom-slider').value = v;
-      if (k === 'density-top-percent') document.getElementById('density-top-slider').value = v;
-      if (k === 'density-grid-size') document.getElementById('density-grid-slider').value = v;
-      if (k === 'density-tolerance') document.getElementById('density-tolerance-slider').value = v;
+    for (const [id, val] of Object.entries(data)) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (el.type === 'checkbox' || el.type === 'radio') {
+        el.checked = val;
+      } else {
+        el.value = val;
+      }
+      el.dispatchEvent(new Event('input'));
     }
   }
   if (obj.edits) {
@@ -204,6 +191,31 @@ function loadPresets() {
     galacticLabelOffsets.clear();
     obj.edits.galacticOffsets.forEach(([id, off]) => galacticLabelOffsets.set(id, off));
   }
+}
+
+function captureStellarClassState() {
+  const state = {};
+  const container = document.getElementById('stellar-class-container');
+  if (!container) return state;
+  container.querySelectorAll('input').forEach(el => {
+    state[el.id] = el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value;
+  });
+  return state;
+}
+
+function restoreStellarClassState(state) {
+  const container = document.getElementById('stellar-class-container');
+  if (!container) return;
+  Object.entries(state).forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox' || el.type === 'radio') {
+      el.checked = val;
+    } else {
+      el.value = val;
+    }
+    el.dispatchEvent(new Event('input'));
+  });
 }
 
 function angleDiff(a, b) {
@@ -437,6 +449,11 @@ function scheduleMollweideUpdate() {
 async function buildAndApplyFilters() {
   if (!cachedStars) return;
   const filters = applyFilters(cachedStars);
+
+  const prevState = captureStellarClassState();
+  generateStellarClassFilters(filters.filteredStars);
+  restoreStellarClassState(prevState);
+
   const {
     filteredStars,
     connections,
