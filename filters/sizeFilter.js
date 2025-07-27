@@ -52,6 +52,8 @@ export function applySizeFilter(stars, filters) {
     if (mult) {
       star.displaySize *= mult;
     }
+    // Ensure labels scale with the same size multiplier
+    star.displayLabelSize = star.displaySize;
   });
 
   return stars;
