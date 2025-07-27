@@ -15,7 +15,8 @@ function createWideLineMaterial(color) {
   return new THREE.ShaderMaterial({
     uniforms: {
       color: { value: new THREE.Color(color) },
-      opacityFactor: { value: 1.0 }
+      opacityFactor: { value: 1.0 },
+      fadePower: { value: 1.0 }
     },
     transparent: true,
     depthWrite: false,
@@ -31,9 +32,10 @@ function createWideLineMaterial(color) {
     fragmentShader: `
       uniform vec3 color;
       uniform float opacityFactor;
+      uniform float fadePower;
       varying float vSide;
       void main() {
-        float alpha = 0.5 * (1.0 - abs(vSide)) * opacityFactor;
+        float alpha = pow(0.5 * (1.0 - abs(vSide)), fadePower) * opacityFactor;
         if(alpha <= 0.0) discard;
         gl_FragColor = vec4(color, alpha);
       }
@@ -75,6 +77,7 @@ class DensityGridOverlay {
     this.maxDensity = 0;
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
     this.opacityFactor = 1.0;
+    this.fadePower = 1.0;
   }
 
   createGrid(stars) {
@@ -237,6 +240,7 @@ class DensityGridOverlay {
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 1;
           const mollMat = createWideLineMaterial(0xff0000);
+          mollMat.uniforms.fadePower.value = this.fadePower;
           const lineM = new THREE.Mesh(geomM, mollMat);
           lineM.renderOrder = 1;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
@@ -251,11 +255,15 @@ class DensityGridOverlay {
     const bottomSlider = document.getElementById('density-bottom-slider');
     const topSlider = document.getElementById('density-top-slider');
     const opacitySlider = document.getElementById('density-opacity-slider');
+    const widthSlider = document.getElementById('density-line-width-slider');
+    const fadeSlider = document.getElementById('density-fade-slider');
     const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
     const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
     const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
     const topPct = topSlider ? parseFloat(topSlider.value) : 10;
     this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
+    this.mollLineWidth = widthSlider ? parseFloat(widthSlider.value) : this.mollLineWidth;
+    this.fadePower = fadeSlider ? parseFloat(fadeSlider.value) : this.fadePower;
 
     const extendedStars = stars.filter(star => {
       const d = star.Distance_from_the_Sun;
@@ -317,12 +325,25 @@ class DensityGridOverlay {
         const c2 = cell2.tcMesh.material.color;
         const avgColor = c1.clone().lerp(c2, 0.5);
         const avgOpacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
+        const gcPts = getGreatCirclePoints(cell1.globeMesh.position,
+          cell2.globeMesh.position, 100, 16).map(v => {
+            const { ra, dec } = vectorToRaDecRad(v, 100);
+            return radToMollweide(ra, dec, 100, getMollweideLambda0());
+          });
+        const pts = [];
+        for (let i = 0; i < gcPts.length - 1; i++) {
+          const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
+          segs.forEach(([s,e]) => { pts.push(s, e); });
+        }
+        lineM.geometry.dispose();
+        lineM.geometry = buildWideLineGeometry(pts, this.mollLineWidth);
         line.material.color.copy(avgColor);
         line.material.opacity = avgOpacity;
         line.material.vertexColors = false;
         line.material.needsUpdate = true;
         lineM.material.uniforms.color.value.copy(avgColor);
         lineM.material.uniforms.opacityFactor.value = avgOpacity;
+        lineM.material.uniforms.fadePower.value = this.fadePower;
         lineM.material.needsUpdate = true;
       }
     });
@@ -359,6 +380,7 @@ class DensityGridOverlay {
       }
       obj.lineM.geometry.dispose();
       obj.lineM.geometry = buildWideLineGeometry(pts, this.mollLineWidth);
+      obj.lineM.material.uniforms.fadePower.value = this.fadePower;
     });
   }
 }
@@ -366,6 +388,10 @@ class DensityGridOverlay {
 export function initDensityFilter(minDistance, maxDistance, starArray, gridSize = 2) {
   const overlay = new DensityGridOverlay(minDistance, maxDistance, gridSize);
   overlay.createGrid(starArray);
+  const w = document.getElementById('density-line-width-slider');
+  if (w) overlay.mollLineWidth = parseFloat(w.value);
+  const f = document.getElementById('density-fade-slider');
+  if (f) overlay.fadePower = parseFloat(f.value);
   return overlay;
 }
 

@@ -334,6 +334,8 @@ export function applyFilters(allStars) {
         starOpacity: 100,
         starNameOpacity: 100,
         connectionOpacity: 50,
+        connectionLineWidth: 5,
+        connectionFade: 1,
         constellationLineOpacity: 40,
         constellationNameOpacity: 80,
         planeOpacity: 50,
@@ -343,6 +345,8 @@ export function applyFilters(allStars) {
         maxDistance: 20,
         isolationGridSize: 1,
         densityGridSize: 1,
+        densityLineWidth: 30,
+        densityFade: 1,
         showClouds: false,
         showGalacticPlane: false,
         showEclipticPlane: false,
@@ -381,13 +385,17 @@ export function applyFilters(allStars) {
     starOpacity: parseFloat(formData.get('star-opacity')) || 100,
     starNameOpacity: parseFloat(formData.get('star-name-opacity')) || 100,
     connectionOpacity: parseFloat(formData.get('connection-opacity')) || 50,
+    connectionLineWidth: parseFloat(formData.get('connection-width')) || 5,
+    connectionFade: parseFloat(formData.get('connection-fade')) || 1,
     constellationLineOpacity: parseFloat(formData.get('constellation-line-opacity')) || 40,
     constellationNameOpacity: parseFloat(formData.get('constellation-name-opacity')) || 80,
     planeOpacity: parseFloat(formData.get('plane-opacity')) || 50,
     showClouds: (formData.getAll('dust-clouds').length > 0),
     showGalacticPlane: (formData.get('show-galactic-plane') !== null),
     showEclipticPlane: (formData.get('show-ecliptic-plane') !== null),
-    showCelestialEquator: (formData.get('show-celestial-equator') !== null)
+    showCelestialEquator: (formData.get('show-celestial-equator') !== null),
+    densityLineWidth: parseFloat(formData.get('density-line-width')) || 30,
+    densityFade: parseFloat(formData.get('density-fade')) || 1
   };
 
   let filteredStars = applyDistanceFilter(allStars, filters);
@@ -544,6 +552,8 @@ export function applyFilters(allStars) {
     starOpacity: filters.starOpacity,
     starNameOpacity: filters.starNameOpacity,
     connectionOpacity: filters.connectionOpacity,
+    connectionLineWidth: filters.connectionLineWidth,
+    connectionFade: filters.connectionFade,
     constellationLineOpacity: filters.constellationLineOpacity,
     constellationNameOpacity: filters.constellationNameOpacity,
     planeOpacity: filters.planeOpacity,
@@ -551,6 +561,8 @@ export function applyFilters(allStars) {
     showGalacticPlane: filters.showGalacticPlane,
     showEclipticPlane: filters.showEclipticPlane,
     showCelestialEquator: filters.showCelestialEquator,
+    densityLineWidth: filters.densityLineWidth,
+    densityFade: filters.densityFade,
     isolationOverlay,
     densityOverlay
   };

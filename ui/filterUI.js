@@ -13,12 +13,22 @@ export function initFilterUI() {
   const connectionNumber = document.getElementById('connection-number');
   const connectionOpacitySlider = document.getElementById('connection-opacity-slider');
   const connectionOpacityNumber = document.getElementById('connection-opacity-number');
+  const connectionWidthSlider = document.getElementById('connection-width-slider');
+  const connectionWidthNumber = document.getElementById('connection-width-number');
+  const connectionWidthSpan = document.getElementById('connection-width-value');
+  const connectionFadeSlider = document.getElementById('connection-fade-slider');
+  const connectionFadeNumber = document.getElementById('connection-fade-number');
+  const connectionFadeSpan = document.getElementById('connection-fade-value');
   enableConnectionsChk.addEventListener('change', function () {
     const enabled = this.checked;
     connectionSlider.disabled = !enabled;
     connectionNumber.disabled = !enabled;
     connectionOpacitySlider.disabled = !enabled;
     connectionOpacityNumber.disabled = !enabled;
+    if (connectionWidthSlider) connectionWidthSlider.disabled = !enabled;
+    if (connectionWidthNumber) connectionWidthNumber.disabled = !enabled;
+    if (connectionFadeSlider) connectionFadeSlider.disabled = !enabled;
+    if (connectionFadeNumber) connectionFadeNumber.disabled = !enabled;
   });
   connectionSlider.addEventListener('input', function () {
     connectionNumber.value = this.value;
@@ -34,6 +44,26 @@ export function initFilterUI() {
     connectionOpacitySlider.value = this.value;
     document.getElementById('connection-opacity-value').textContent = this.value;
   });
+  if (connectionWidthSlider && connectionWidthNumber && connectionWidthSpan) {
+    connectionWidthSlider.addEventListener('input', function () {
+      connectionWidthNumber.value = this.value;
+      connectionWidthSpan.textContent = this.value;
+    });
+    connectionWidthNumber.addEventListener('input', function () {
+      connectionWidthSlider.value = this.value;
+      connectionWidthSpan.textContent = this.value;
+    });
+  }
+  if (connectionFadeSlider && connectionFadeNumber && connectionFadeSpan) {
+    connectionFadeSlider.addEventListener('input', function () {
+      connectionFadeNumber.value = this.value;
+      connectionFadeSpan.textContent = this.value;
+    });
+    connectionFadeNumber.addEventListener('input', function () {
+      connectionFadeSlider.value = this.value;
+      connectionFadeSpan.textContent = this.value;
+    });
+  }
 
   // Isolation Filter UI controls.
   const enableIsolationChk = document.getElementById('enable-isolation-filter');
@@ -81,6 +111,12 @@ export function initFilterUI() {
   const densityGridNumber = document.getElementById('density-grid-number');
   const densityOpacitySlider = document.getElementById('density-opacity-slider');
   const densityOpacityNumber = document.getElementById('density-opacity-number');
+  const densityLineWidthSlider = document.getElementById('density-line-width-slider');
+  const densityLineWidthNumber = document.getElementById('density-line-width-number');
+  const densityLineWidthSpan = document.getElementById('density-line-width-value');
+  const densityFadeSlider = document.getElementById('density-fade-slider');
+  const densityFadeNumber = document.getElementById('density-fade-number');
+  const densityFadeSpan = document.getElementById('density-fade-value');
   const starOpacitySlider = document.getElementById('star-opacity-slider');
   const starOpacityNumber = document.getElementById('star-opacity-number');
   const starNameOpacitySlider = document.getElementById('star-name-opacity-slider');
@@ -98,6 +134,10 @@ export function initFilterUI() {
     densityGridNumber.disabled = !enabled;
     densityOpacitySlider.disabled = !enabled;
     densityOpacityNumber.disabled = !enabled;
+    if (densityLineWidthSlider) densityLineWidthSlider.disabled = !enabled;
+    if (densityLineWidthNumber) densityLineWidthNumber.disabled = !enabled;
+    if (densityFadeSlider) densityFadeSlider.disabled = !enabled;
+    if (densityFadeNumber) densityFadeNumber.disabled = !enabled;
   });
   densitySlider.addEventListener('input', function () {
     densityNumber.value = this.value;
@@ -140,6 +180,26 @@ export function initFilterUI() {
     densityOpacitySlider.value = this.value;
     document.getElementById('density-opacity-value').textContent = this.value;
   });
+  if (densityLineWidthSlider && densityLineWidthNumber && densityLineWidthSpan) {
+    densityLineWidthSlider.addEventListener('input', function () {
+      densityLineWidthNumber.value = this.value;
+      densityLineWidthSpan.textContent = this.value;
+    });
+    densityLineWidthNumber.addEventListener('input', function () {
+      densityLineWidthSlider.value = this.value;
+      densityLineWidthSpan.textContent = this.value;
+    });
+  }
+  if (densityFadeSlider && densityFadeNumber && densityFadeSpan) {
+    densityFadeSlider.addEventListener('input', function () {
+      densityFadeNumber.value = this.value;
+      densityFadeSpan.textContent = this.value;
+    });
+    densityFadeNumber.addEventListener('input', function () {
+      densityFadeSlider.value = this.value;
+      densityFadeSpan.textContent = this.value;
+    });
+  }
 
   starOpacitySlider.addEventListener('input', function () {
     starOpacityNumber.value = this.value;

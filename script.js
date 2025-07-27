@@ -466,6 +466,8 @@ async function buildAndApplyFilters() {
     starOpacity,
     starNameOpacity,
     connectionOpacity,
+    connectionLineWidth,
+    connectionFade,
     constellationLineOpacity,
     constellationNameOpacity,
     planeOpacity,
@@ -473,7 +475,9 @@ async function buildAndApplyFilters() {
     showEclipticPlane,
     showCelestialEquator,
     isolationOverlay: returnedIsolationOverlay,
-    densityOverlay: returnedDensityOverlay
+    densityOverlay: returnedDensityOverlay,
+    densityLineWidth,
+    densityFade
   } = filters;
 
   showConstellationBoundariesFlag = showConstellationBoundaries;
@@ -517,6 +521,12 @@ async function buildAndApplyFilters() {
   trueCoordinatesMap.setConnectionOpacity(connectionOpacity / 100);
   globeMap.setConnectionOpacity(connectionOpacity / 100);
   mollweideMap.setConnectionOpacity(connectionOpacity / 100);
+  trueCoordinatesMap.connectionLineWidth = connectionLineWidth;
+  globeMap.connectionLineWidth = connectionLineWidth;
+  mollweideMap.connectionLineWidth = connectionLineWidth;
+  trueCoordinatesMap.connectionFade = connectionFade;
+  globeMap.connectionFade = connectionFade;
+  mollweideMap.connectionFade = connectionFade;
 
   trueCoordinatesMap.connectionOpacity = connectionOpacity / 100;
   globeMap.connectionOpacity = connectionOpacity / 100;
@@ -803,6 +813,8 @@ class MapManager {
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
     this.starOpacity = 1.0;
     this.connectionOpacity = 0.5;
+    this.connectionLineWidth = 5;
+    this.connectionFade = 1;
     this.labelOpacity = 1.0;
     this.points = null;
     this.instancedMesh = null;
@@ -1009,13 +1021,13 @@ class MapManager {
     if (!connectionObjs || connectionObjs.length === 0) return;
     this.connectionGroup = new THREE.Group();
     if (this.mapType === 'Globe') {
-      const linesArray = createConnectionLines(stars, connectionObjs, 'Globe', opacity);
+      const linesArray = createConnectionLines(stars, connectionObjs, 'Globe', opacity, this.connectionLineWidth, this.connectionFade);
       linesArray.forEach(line => this.connectionGroup.add(line));
     } else if (this.mapType === 'Mollweide') {
-      const merged = createMollweideConnectionSegments(connectionObjs, opacity);
+      const merged = createMollweideConnectionSegments(connectionObjs, opacity, this.connectionLineWidth);
       this.connectionGroup.add(merged);
     } else {
-      const merged = mergeConnectionLines(connectionObjs, this.mapType, opacity);
+      const merged = mergeConnectionLines(connectionObjs, this.mapType, opacity, this.connectionLineWidth);
       this.connectionGroup.add(merged);
     }
     this.scene.add(this.connectionGroup);
