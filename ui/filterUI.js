@@ -13,12 +13,20 @@ export function initFilterUI() {
   const connectionNumber = document.getElementById('connection-number');
   const connectionOpacitySlider = document.getElementById('connection-opacity-slider');
   const connectionOpacityNumber = document.getElementById('connection-opacity-number');
+  const connectionWidthSlider = document.getElementById('connection-width-slider');
+  const connectionWidthNumber = document.getElementById('connection-width-number');
+  const connectionFadeSlider = document.getElementById('connection-fade-slider');
+  const connectionFadeNumber = document.getElementById('connection-fade-number');
   enableConnectionsChk.addEventListener('change', function () {
     const enabled = this.checked;
     connectionSlider.disabled = !enabled;
     connectionNumber.disabled = !enabled;
     connectionOpacitySlider.disabled = !enabled;
     connectionOpacityNumber.disabled = !enabled;
+    connectionWidthSlider.disabled = !enabled;
+    connectionWidthNumber.disabled = !enabled;
+    connectionFadeSlider.disabled = !enabled;
+    connectionFadeNumber.disabled = !enabled;
   });
   connectionSlider.addEventListener('input', function () {
     connectionNumber.value = this.value;
@@ -33,6 +41,18 @@ export function initFilterUI() {
   connectionOpacityNumber.addEventListener('input', function () {
     connectionOpacitySlider.value = this.value;
     document.getElementById('connection-opacity-value').textContent = this.value;
+  });
+  connectionWidthSlider.addEventListener('input', function () {
+    connectionWidthNumber.value = this.value;
+  });
+  connectionWidthNumber.addEventListener('input', function () {
+    connectionWidthSlider.value = this.value;
+  });
+  connectionFadeSlider.addEventListener('input', function () {
+    connectionFadeNumber.value = this.value;
+  });
+  connectionFadeNumber.addEventListener('input', function () {
+    connectionFadeSlider.value = this.value;
   });
 
   // Isolation Filter UI controls.
@@ -81,6 +101,10 @@ export function initFilterUI() {
   const densityGridNumber = document.getElementById('density-grid-number');
   const densityOpacitySlider = document.getElementById('density-opacity-slider');
   const densityOpacityNumber = document.getElementById('density-opacity-number');
+  const densityLineWidthSlider = document.getElementById('density-line-width-slider');
+  const densityLineWidthNumber = document.getElementById('density-line-width-number');
+  const densityFadeSlider = document.getElementById('density-fade-slider');
+  const densityFadeNumber = document.getElementById('density-fade-number');
   const starOpacitySlider = document.getElementById('star-opacity-slider');
   const starOpacityNumber = document.getElementById('star-opacity-number');
   const starNameOpacitySlider = document.getElementById('star-name-opacity-slider');
@@ -98,6 +122,10 @@ export function initFilterUI() {
     densityGridNumber.disabled = !enabled;
     densityOpacitySlider.disabled = !enabled;
     densityOpacityNumber.disabled = !enabled;
+    densityLineWidthSlider.disabled = !enabled;
+    densityLineWidthNumber.disabled = !enabled;
+    densityFadeSlider.disabled = !enabled;
+    densityFadeNumber.disabled = !enabled;
   });
   densitySlider.addEventListener('input', function () {
     densityNumber.value = this.value;
@@ -139,6 +167,18 @@ export function initFilterUI() {
   densityOpacityNumber.addEventListener('input', function () {
     densityOpacitySlider.value = this.value;
     document.getElementById('density-opacity-value').textContent = this.value;
+  });
+  densityLineWidthSlider.addEventListener('input', function () {
+    densityLineWidthNumber.value = this.value;
+  });
+  densityLineWidthNumber.addEventListener('input', function () {
+    densityLineWidthSlider.value = this.value;
+  });
+  densityFadeSlider.addEventListener('input', function () {
+    densityFadeNumber.value = this.value;
+  });
+  densityFadeNumber.addEventListener('input', function () {
+    densityFadeSlider.value = this.value;
   });
 
   starOpacitySlider.addEventListener('input', function () {
