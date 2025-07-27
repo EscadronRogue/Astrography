@@ -219,10 +219,10 @@ class DensityGridOverlay {
         const neighborKey = `${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`;
         if (cellMap.has(neighborKey)) {
           const neighbor = cellMap.get(neighborKey);
-          const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
+          const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 8);
           const positions = [];
           const mollPts = getGreatCirclePoints(cell.globeMesh.position,
-            neighbor.globeMesh.position, 100, 16).map(v => {
+            neighbor.globeMesh.position, 100, 8).map(v => {
               const { ra, dec } = vectorToRaDecRad(v, 100);
               return radToMollweide(ra, dec, 100, getMollweideLambda0());
             });
@@ -357,7 +357,7 @@ class DensityGridOverlay {
     });
     this.adjacentLines.forEach(obj => {
       const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
-        obj.cell2.globeMesh.position, 100, 16).map(v => {
+        obj.cell2.globeMesh.position, 100, 8).map(v => {
           const { ra, dec } = vectorToRaDecRad(v, 100);
           return radToMollweide(ra, dec, 100, lambda0);
         });

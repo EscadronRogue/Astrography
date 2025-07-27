@@ -216,7 +216,7 @@ export function updateMollweideConnectionSegments(lineSegs) {
     const p1 = pair.starA.spherePosition;
     const p2 = pair.starB.spherePosition;
     if (!p1 || !p2) return;
-    const pts = greatCircleToMollweide(p1, p2, 100, segsCount, getMollweideLambda0());
+    const pts = greatCircleToMollweide(p1, p2, 50, segsCount, getMollweideLambda0());
     const cA = new THREE.Color(pair.starA.displayColor || '#ffffff');
     const cB = new THREE.Color(pair.starB.displayColor || '#ffffff');
     for (let j = 0; j < pts.length - 1; j++) {
@@ -276,7 +276,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
       const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
       const width = THREE.MathUtils.lerp(5, 1, normDist);
-      const opacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
+      const opacity = THREE.MathUtils.lerp(1.0, 0.0, normDist) * opacityFactor;
       const segments = splitMollweideWrap(
         starA.mollweidePosition,
         starB.mollweidePosition
@@ -301,13 +301,12 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
 
     const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
     const lineThickness = THREE.MathUtils.lerp(5, 1, normDist);
-    const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
+    const lineOpacity = THREE.MathUtils.lerp(1.0, 0.0, normDist) * opacityFactor;
     
     let points;
     if (mapType === 'Globe') {
       const R = 100;
-      const curve = new THREE.CatmullRomCurve3(getGreatCirclePoints(posA, posB, R, 32));
-      points = curve.getPoints(32);
+      points = getGreatCirclePoints(posA, posB, R, 16);
     } else {
       points = [posA, posB];
     }
