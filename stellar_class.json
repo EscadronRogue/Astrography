@@ -1,22 +1,22 @@
 {
   "O": {
     "color": "#4E8CFF",
-    "size": 16,
+    "size": 12,
     "hierarchy": 1
   },
   "B": {
     "color": "#80AFFF",
-    "size": 14,
+    "size": 10,
     "hierarchy": 2
   },
   "A": {
     "color": "#CAD8FF",
-    "size": 12,
+    "size": 9,
     "hierarchy": 3
   },
   "F": {
     "color": "#F5F8E7",
-    "size": 10,
+    "size": 8.5,
     "hierarchy": 4
   },
   "G": {
@@ -26,27 +26,27 @@
   },
   "K": {
     "color": "#FFC074",
-    "size": 7,
+    "size": 7.5,
     "hierarchy": 6
   },
   "M": {
     "color": "#FF7259",
-    "size": 6,
+    "size": 7,
     "hierarchy": 7
   },
   "L": {
     "color": "#B34747",
-    "size": 5,
+    "size": 6.5,
     "hierarchy": 8
   },
   "T": {
     "color": "#6A4FC9",
-    "size": 4,
+    "size": 6,
     "hierarchy": 9
   },
   "Y": {
     "color": "#3B2717",
-    "size": 4,
+    "size": 6,
     "hierarchy": 10
   }
 }
