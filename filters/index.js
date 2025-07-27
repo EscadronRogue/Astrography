@@ -543,6 +543,7 @@ export function applyFilters(allStars) {
     cloudOpacity: filters.cloudOpacity,
     starOpacity: filters.starOpacity,
     starNameOpacity: filters.starNameOpacity,
+    connectionDistance: filters.connections,
     connectionOpacity: filters.connectionOpacity,
     constellationLineOpacity: filters.constellationLineOpacity,
     constellationNameOpacity: filters.constellationNameOpacity,

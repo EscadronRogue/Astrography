@@ -191,10 +191,11 @@ export function updateMollweideConnectionSegments(lineSegs) {
  * @param {string} mapType - 'Globe' or other.
  * @returns {Array} - Array of THREE.Line objects.
  */
-export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5) {
+export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5, maxAllowedDistance = null) {
   if (!pairs || pairs.length === 0) return [];
-  
+
   const largestPairDistance = pairs.reduce((max, p) => Math.max(max, p.distance), 0);
+  const maxDist = maxAllowedDistance !== null ? maxAllowedDistance : largestPairDistance;
   const lines = [];
   
   pairs.forEach(pair => {
@@ -208,18 +209,21 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       posB = new THREE.Vector3(starB.spherePosition.x, starB.spherePosition.y, starB.spherePosition.z);
     } else if (mapType === 'Mollweide') {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
-      const segments = splitMollweideWrap(
-        starA.mollweidePosition,
-        starB.mollweidePosition
-      );
+      const baseScale = 0.4;
+      const offsetA = starA.displaySize * baseScale;
+      const offsetB = starB.displaySize * baseScale;
+      const dir = starB.mollweidePosition.clone().sub(starA.mollweidePosition).normalize();
+      const start = starA.mollweidePosition.clone().add(dir.clone().multiplyScalar(offsetA));
+      const end = starB.mollweidePosition.clone().add(dir.clone().multiplyScalar(-offsetB));
+      const segments = splitMollweideWrap(start, end);
       segments.forEach(([s1, s2]) => {
         const points = [s1, s2];
         const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
         const materialLine = new THREE.LineBasicMaterial({
           color: c1.clone().lerp(c2, 0.5),
           transparent: true,
-          opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / (largestPairDistance || distance)),
-          linewidth: THREE.MathUtils.lerp(5, 1, distance / (largestPairDistance || distance))
+          opacity: THREE.MathUtils.lerp(1.0, 0.3, distance / maxDist),
+          linewidth: THREE.MathUtils.lerp(10, 1, distance / maxDist)
         });
         const line = new THREE.Line(geometryLine, materialLine);
         lines.push(line);
@@ -231,10 +235,17 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       posB = getPosition(starB).clone();
     }
     
+    const baseScale = mapType === 'Mollweide' ? 0.4 : 0.2;
+    const offsetA = starA.displaySize * baseScale;
+    const offsetB = starB.displaySize * baseScale;
+    const dir = posB.clone().sub(posA).normalize();
+    posA.add(dir.clone().multiplyScalar(offsetA));
+    posB.add(dir.clone().multiplyScalar(-offsetB));
+
     const gradientColor = c1.clone().lerp(c2, 0.5);
-    
-    const normDist = distance / (largestPairDistance || distance);
-    const lineThickness = THREE.MathUtils.lerp(5, 1, normDist);
+
+    const normDist = distance / maxDist;
+    const lineThickness = THREE.MathUtils.lerp(10, 1, normDist);
     const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
     
     let points;
