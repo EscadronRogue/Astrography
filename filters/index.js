@@ -37,7 +37,7 @@ export async function setupFilterUI(allStars) {
     console.warn('[setupFilterUI] No #filters-form found in DOM!');
     return;
   }
-  loadStellarClassData();
+  await loadStellarClassData();
   scGenerate(allStars);
   const mainLegends = filterForm.querySelectorAll('legend.collapsible');
   mainLegends.forEach(legend => {

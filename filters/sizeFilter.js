@@ -25,10 +25,11 @@ export function applySizeFilter(stars, filters) {
   } else if (filters.size === 'stellar-class') {
     // Map class to size from stellarClassData
     stars.forEach(star => {
-      // Check if star.Stellar_class exists and is not empty
+      // Extract the first recognized spectral class letter anywhere in the string
       let primaryClass = 'G'; // Default fallback
       if (star.Stellar_class && typeof star.Stellar_class === 'string') {
-        primaryClass = star.Stellar_class.charAt(0).toUpperCase();
+        const match = star.Stellar_class.toUpperCase().match(/[OBAFGKMLTY]/);
+        if (match) primaryClass = match[0];
       }
 
       const classData = stellarClassData[primaryClass];
