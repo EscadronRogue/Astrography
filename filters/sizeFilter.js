@@ -18,9 +18,10 @@ export function applySizeFilter(stars, filters) {
     const maxDistance = Math.max(...stars.map(s => s.Distance_from_the_Sun));
 
     stars.forEach(star => {
-      // Invert distance: closer stars are larger
-      star.displaySize =
+      const val =
         5 * (maxDistance - star.Distance_from_the_Sun) / (maxDistance - minDistance + 1) + 1;
+      star.displaySize = val;
+      star.displaySizeMoll = val;
     });
   } else if (filters.size === 'stellar-class') {
     // Map class to size from stellarClassData
@@ -32,13 +33,23 @@ export function applySizeFilter(stars, filters) {
       }
 
       const classData = stellarClassData[primaryClass];
-      star.displaySize = classData ? classData.size : 1; // fallback to 1 if not found
+      if (classData) {
+        star.displaySize = classData.size;
+        star.displaySizeMoll =
+          typeof classData.mollweideSize !== 'undefined'
+            ? classData.mollweideSize
+            : classData.size;
+      } else {
+        star.displaySize = 8;
+        star.displaySizeMoll = 8;
+      }
     });
   } else {
     // Default if no recognized size filter
     stars.forEach(star => {
       if (typeof star.displaySize === 'undefined') {
         star.displaySize = 2;
+        star.displaySizeMoll = 2;
       }
     });
   }

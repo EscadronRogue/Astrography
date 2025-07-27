@@ -1,7 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines, createMollweideConnectionSegments, updateMollweideConnectionSegments } from './filters/connectionsFilter.js';
+import { createConnectionLines } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
@@ -42,6 +42,7 @@ let currentGlobeFilteredStars = [];
 let currentGlobeConnections = [];
 let currentMollweideFilteredStars = [];
 let currentMollweideConnections = [];
+let currentConnectionMaxDistance = 7;
 let selectedStarData = null;
 let selectedHighlightTrue = null;
 let selectedHighlightGlobe = null;
@@ -472,6 +473,7 @@ async function buildAndApplyFilters() {
     showGalacticPlane,
     showEclipticPlane,
     showCelestialEquator,
+    connectionDistance,
     isolationOverlay: returnedIsolationOverlay,
     densityOverlay: returnedDensityOverlay
   } = filters;
@@ -496,6 +498,7 @@ async function buildAndApplyFilters() {
   currentGlobeConnections = globeConnections;
   currentMollweideFilteredStars = mollweideFilteredStars;
   currentMollweideConnections = mollweideConnections;
+  currentConnectionMaxDistance = connectionDistance;
 
   currentGlobeFilteredStars.forEach(star => {
     star.spherePosition = projectStarGlobe(star);
@@ -522,16 +525,22 @@ async function buildAndApplyFilters() {
   globeMap.connectionOpacity = connectionOpacity / 100;
   mollweideMap.connectionOpacity = connectionOpacity / 100;
 
-  trueCoordinatesMap.updateMap(currentFilteredStars, currentConnections);
+  trueCoordinatesMap.updateMap(
+    currentFilteredStars,
+    currentConnections,
+    currentConnectionMaxDistance
+  );
   trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
-  globeMap.updateMap(currentGlobeFilteredStars, currentGlobeConnections);
+  globeMap.updateMap(
+    currentGlobeFilteredStars,
+    currentGlobeConnections,
+    currentConnectionMaxDistance
+  );
   globeMap.labelManager.refreshLabels(currentGlobeFilteredStars);
-  mollweideMap.addStars(currentMollweideFilteredStars);
-  mollweideMap.updateStarPositions(currentMollweideFilteredStars);
-  mollweideMap.updateConnections(
+  mollweideMap.updateMap(
     currentMollweideFilteredStars,
     currentMollweideConnections,
-    mollweideMap.connectionOpacity
+    currentConnectionMaxDistance
   );
   mollweideMap.labelManager.refreshLabels(currentMollweideFilteredStars);
   registerMollweideEditableLabels();
@@ -803,6 +812,7 @@ class MapManager {
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
     this.starOpacity = 1.0;
     this.connectionOpacity = 0.5;
+    this.connectionMaxDistance = 7;
     this.labelOpacity = 1.0;
     this.points = null;
     this.instancedMesh = null;
@@ -953,7 +963,9 @@ class MapManager {
         } else {
           pos = star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0);
         }
-        const size = star.displaySize !== undefined ? star.displaySize : 1;
+        const size = this.mapType === 'Mollweide'
+          ? (star.displaySizeMoll !== undefined ? star.displaySizeMoll : (star.displaySize || 1))
+          : (star.displaySize !== undefined ? star.displaySize : 1);
         const baseScale = this.mapType === 'Mollweide' ? 0.4 : 0.2;
         const scale = size * baseScale * 25.0;
         positions[i * 3] = pos.x;
@@ -982,7 +994,9 @@ class MapManager {
         } else {
           pos = star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0);
         }
-        const size = star.displaySize !== undefined ? star.displaySize : 1;
+        const size = this.mapType === 'Mollweide'
+          ? (star.displaySizeMoll !== undefined ? star.displaySizeMoll : (star.displaySize || 1))
+          : (star.displaySize !== undefined ? star.displaySize : 1);
         const baseScale = 0.2;
         const scale = size * baseScale;
         dummy.position.copy(pos);
@@ -1001,35 +1015,29 @@ class MapManager {
     if (window.requestRender) window.requestRender();
   }
 
-  updateConnections(stars, connectionObjs, opacity = 0.5) {
+  updateConnections(stars, connectionObjs, opacity = 0.5, maxDist = null) {
+    if (maxDist !== null) this.connectionMaxDistance = maxDist;
     if (this.connectionGroup) {
       this.scene.remove(this.connectionGroup);
       this.connectionGroup = null;
     }
     if (!connectionObjs || connectionObjs.length === 0) return;
     this.connectionGroup = new THREE.Group();
-    if (this.mapType === 'Globe') {
-      const linesArray = createConnectionLines(stars, connectionObjs, 'Globe', opacity);
-      linesArray.forEach(line => this.connectionGroup.add(line));
-    } else if (this.mapType === 'Mollweide') {
-      const merged = createMollweideConnectionSegments(connectionObjs, opacity);
-      this.connectionGroup.add(merged);
-    } else {
-      const merged = mergeConnectionLines(connectionObjs, this.mapType, opacity);
-      this.connectionGroup.add(merged);
-    }
+    const linesArray = createConnectionLines(
+      stars,
+      connectionObjs,
+      this.mapType,
+      opacity,
+      this.connectionMaxDistance
+    );
+    linesArray.forEach(line => this.connectionGroup.add(line));
     this.scene.add(this.connectionGroup);
     if (window.requestRender) window.requestRender();
   }
 
-  updateConnectionPositions(stars, connectionObjs) {
+  updateConnectionPositions(stars, connectionObjs, maxDist = null) {
     if (!this.connectionGroup) return;
-    if (this.mapType === 'Mollweide') {
-      const segs = this.connectionGroup.children[0];
-      if (segs) updateMollweideConnectionSegments(segs);
-    } else {
-      this.updateConnections(stars, connectionObjs, this.connectionOpacity);
-    }
+    this.updateConnections(stars, connectionObjs, this.connectionOpacity, maxDist !== null ? maxDist : this.connectionMaxDistance);
     if (window.requestRender) window.requestRender();
   }
 
@@ -1063,9 +1071,9 @@ class MapManager {
     this.labelManager.setLabelOpacity(opacity);
   }
 
-  updateMap(stars, connectionObjs) {
+  updateMap(stars, connectionObjs, maxDist = null) {
     this.addStars(stars);
-    this.updateConnections(stars, connectionObjs, this.connectionOpacity);
+    this.updateConnections(stars, connectionObjs, this.connectionOpacity, maxDist);
   }
 
   onResize() {
@@ -1244,7 +1252,7 @@ function updateSelectedStarHighlight() {
   globeMap.scene.add(selectedHighlightGlobe);
 
   let posMoll = selectedStarData.mollweidePosition ? selectedStarData.mollweidePosition : projectStarMollweide(selectedStarData);
-  let radiusMoll = (selectedStarData.displaySize || 2) * 0.4 * 1.2;
+  let radiusMoll = (selectedStarData.displaySizeMoll || selectedStarData.displaySize || 2) * 0.4 * 1.2;
   const highlightGeomMoll = new THREE.SphereGeometry(radiusMoll, 16, 16);
   const highlightMatMoll = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
   selectedHighlightMollweide = new THREE.Mesh(highlightGeomMoll, highlightMatMoll);
@@ -1261,7 +1269,11 @@ async function updateMollweideView() {
 
   mollweideMap.addStars(currentMollweideFilteredStars);
   mollweideMap.updateStarPositions(currentMollweideFilteredStars);
-  mollweideMap.updateConnectionPositions(currentMollweideFilteredStars, currentMollweideConnections);
+  mollweideMap.updateConnectionPositions(
+    currentMollweideFilteredStars,
+    currentMollweideConnections,
+    currentConnectionMaxDistance
+  );
   mollweideMap.labelManager.refreshLabels(currentMollweideFilteredStars);
   registerMollweideEditableLabels();
 

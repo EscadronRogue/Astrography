@@ -210,10 +210,15 @@ class DensityGridOverlay {
         const neighborKey = `${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`;
         if (cellMap.has(neighborKey)) {
           const neighbor = cellMap.get(neighborKey);
-          const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
+          const start = cell.globeMesh.position.clone();
+          const end = neighbor.globeMesh.position.clone();
+          const dirVec = end.clone().sub(start).normalize();
+          const off = this.gridSize * 0.1;
+          const startOff = start.clone().add(dirVec.clone().multiplyScalar(off));
+          const endOff = end.clone().add(dirVec.clone().multiplyScalar(-off));
+          const points = getGreatCirclePoints(startOff, endOff, 100, 16);
           const positions = [];
-          const mollPts = getGreatCirclePoints(cell.globeMesh.position,
-            neighbor.globeMesh.position, 100, 16).map(v => {
+          const mollPts = getGreatCirclePoints(startOff, endOff, 100, 16).map(v => {
               const { ra, dec } = vectorToRaDecRad(v, 100);
               return radToMollweide(ra, dec, 100, getMollweideLambda0());
             });
@@ -347,11 +352,16 @@ class DensityGridOverlay {
       );
     });
     this.adjacentLines.forEach(obj => {
-      const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
-        obj.cell2.globeMesh.position, 100, 16).map(v => {
-          const { ra, dec } = vectorToRaDecRad(v, 100);
-          return radToMollweide(ra, dec, 100, lambda0);
-        });
+      const start = obj.cell1.globeMesh.position.clone();
+      const end = obj.cell2.globeMesh.position.clone();
+      const dirVec = end.clone().sub(start).normalize();
+      const off = this.gridSize * 0.1;
+      const sOff = start.clone().add(dirVec.clone().multiplyScalar(off));
+      const eOff = end.clone().add(dirVec.clone().multiplyScalar(-off));
+      const gcPts = getGreatCirclePoints(sOff, eOff, 100, 16).map(v => {
+        const { ra, dec } = vectorToRaDecRad(v, 100);
+        return radToMollweide(ra, dec, 100, lambda0);
+      });
       const pts = [];
       for (let i = 0; i < gcPts.length - 1; i++) {
         const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);

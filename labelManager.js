@@ -66,7 +66,8 @@ export class LabelManager {
     const cached = this.labelCache.get(star) || {};
     const textChanged = (cached.lastText !== displayName);
     const colorChanged = (cached.lastColor !== starColor);
-    const sizeChanged = (cached.lastSize !== star.displaySize);
+    const sizeKey = this.mapType === 'Mollweide' ? star.displaySizeMoll : star.displaySize;
+    const sizeChanged = (cached.lastSize !== sizeKey);
 
     // If label already exists but something changed, remove from scene and rebuild.
     let labelObj = this.sprites.get(star);
@@ -86,8 +87,9 @@ export class LabelManager {
       // so small star labels remain readable and huge stars aren't
       // overwhelmingly large. Map the typical size range (1–8) to a more
       // moderate label scale.
+      const sz = this.mapType === 'Mollweide' ? star.displaySizeMoll : star.displaySize;
       const scaleFactor = THREE.MathUtils.clamp(
-        THREE.MathUtils.mapLinear(star.displaySize, 1, 8, 1, 5),
+        THREE.MathUtils.mapLinear(sz, 1, 8, 1, 5),
         1,
         5
       );
@@ -159,7 +161,7 @@ export class LabelManager {
       this.labelCache.set(star, {
         lastText: displayName,
         lastColor: starColor,
-        lastSize: star.displaySize
+        lastSize: sizeKey
       });
     }
 
@@ -223,13 +225,14 @@ export class LabelManager {
   computeLabelOffset(star, starPos) {
     if (this.mapType === 'TrueCoordinates') {
       // Simple screen space offset scaled by star size
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
+      const baseSize = this.mapType === 'Mollweide' ? star.displaySizeMoll : star.displaySize;
+      const scaleFactor = THREE.MathUtils.clamp(baseSize / 2, 1, 5);
       const dist = 0.5 * scaleFactor;
       return new THREE.Vector3(1, 1, 0).multiplyScalar(dist);
     } else if (this.mapType === 'Mollweide') {
       // Offset labels randomly around the star. Ensure labels from the same
       // system are separated by at least 90 degrees and at most 270 degrees.
-      const scaleFactor = THREE.MathUtils.clamp(star.displaySize / 2, 1, 5);
+      const scaleFactor = THREE.MathUtils.clamp((star.displaySizeMoll ?? star.displaySize) / 2, 1, 5);
       const dist = 1 * scaleFactor * 2; // double the offset
 
       const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
