@@ -216,7 +216,7 @@ export function createConstellationOverlayForGlobe() {
       depthWrite: false
     });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.renderOrder = 1;
+    mesh.renderOrder = 2;
     mesh.userData.constellation = constellation;
     overlays.push(mesh);
   }
@@ -310,7 +310,7 @@ export function createConstellationOverlayForMollweide() {
       depthWrite: false
     });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.renderOrder = 1;
+    mesh.renderOrder = 2;
     mesh.userData.constellation = constellation;
     overlays.push(mesh);
   }

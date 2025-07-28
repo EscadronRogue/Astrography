@@ -175,7 +175,7 @@ export async function createCloudOverlay(
     depthWrite: false
   });
   const lineSegments = new THREE.LineSegments(geometry, material);
-  lineSegments.renderOrder = 1;
+  lineSegments.renderOrder = 2;
   return lineSegments;
 }
 
@@ -210,7 +210,7 @@ const GC_SEGMENTS = 32;
 export function createMollweideCloudSegments(pairs, color, opacityFactor = 1.0, width = 30) {
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), createWideLineMaterial(color));
   mesh.material.uniforms.opacityFactor.value = opacityFactor;
-  mesh.renderOrder = 1;
+  mesh.renderOrder = 2;
   mesh.userData = { pairs, segments: GC_SEGMENTS, lineWidth: width, isMollweideCloud: true };
   updateMollweideCloudSegments(mesh);
   return mesh;

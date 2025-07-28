@@ -297,7 +297,7 @@ function createTextPlane(text, color = '#ffffff', opacity = 0.8, fontSize = 150)
     new THREE.PlaneGeometry(canvas.width / 100, canvas.height / 100),
     material
   );
-  plane.renderOrder = 1;
+  plane.renderOrder = 2;
   return plane;
 }
 

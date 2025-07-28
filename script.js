@@ -355,6 +355,20 @@ function createGlobeGrid(R = 100, options = {}) {
   return gridGroup;
 }
 
+function createMollweideBackground(R = 100, segments = 1024) {
+  const geometry = new THREE.CircleGeometry(R, segments);
+  geometry.scale(2, 1, 1);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    depthWrite: false
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 0;
+  return mesh;
+}
+
 function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
   const geometry = new THREE.RingGeometry(R, R + thickness, segments);
   geometry.scale(2, 1, 1); // turn the circular ring into an ellipse
@@ -933,6 +947,8 @@ class MapManager {
         panCameraLeft: true,
         panCameraRight: false
       });
+      const background = createMollweideBackground(100);
+      this.scene.add(background);
       const mask = createMollweideMask(100);
       this.scene.add(mask);
       const border = createMollweideBorder(100);
@@ -978,6 +994,7 @@ class MapManager {
           zoomVal
         );
         this.points = new THREE.Points(geometry, material);
+        this.points.renderOrder = 4;
         this.starGroup.add(this.points);
       }
     } else {
@@ -1009,6 +1026,7 @@ class MapManager {
         });
         this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
         this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+        this.instancedMesh.renderOrder = 4;
         this.starGroup.add(this.instancedMesh);
       }
     }

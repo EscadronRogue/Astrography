@@ -299,7 +299,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         mat.uniforms.opacityFactor.value = opacity;
         mat.uniforms.fadePower.value = connectionFadePower;
         const mesh = new THREE.Mesh(geom, mat);
-        mesh.renderOrder = 1;
+        mesh.renderOrder = 3;
         lines.push(mesh);
       });
       return;
@@ -334,6 +334,8 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     const line = new THREE.Line(geometryLine, materialLine);
     if (mapType === 'Globe') {
       line.renderOrder = 1;
+    } else if (mapType === 'Mollweide') {
+      line.renderOrder = 3;
     }
     lines.push(line);
   });

@@ -125,7 +125,7 @@ export class LabelManager {
         );
         const material = getDoubleSidedLabelMaterial(texture, this.labelOpacity);
         labelObj = new THREE.Mesh(planeGeom, material);
-        labelObj.renderOrder = 1;
+        labelObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
       } else {
         const spriteMaterial = new THREE.SpriteMaterial({
           map: texture,
@@ -135,6 +135,7 @@ export class LabelManager {
           opacity: this.labelOpacity,
         });
         labelObj = new THREE.Sprite(spriteMaterial);
+        labelObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
         labelObj.scale.set(
           (canvas.width / 100) * scaleFactor,
           (canvas.height / 100) * scaleFactor,
@@ -153,7 +154,7 @@ export class LabelManager {
         linewidth: 2,
       });
       lineObj = new THREE.Line(lineGeom, lineMat);
-      lineObj.renderOrder = 1;
+      lineObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
       this.lines.set(star, lineObj);
 
       // Update cache
