@@ -9,6 +9,7 @@ import {
   greatCircleToMollweide,
   splitMollweideWrap
 } from '../utils/geometryUtils.js';
+import { getDustCloudColor } from './dustCloudColors.js';
 
 // Helper material and geometry builders for wide fading lines on the Mollweide map
 function createWideLineMaterial(color) {
@@ -185,6 +186,10 @@ export async function createCloudOverlay(
  * @returns {THREE.Color}
  */
 function uniqueColorFromName(name) {
+  const predefined = getDustCloudColor(name);
+  if (predefined) {
+    return new THREE.Color(predefined);
+  }
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -201,8 +206,11 @@ function uniqueColorFromName(name) {
  */
 function getCloudNameFromFileUrl(fileUrl) {
   const parts = fileUrl.split('/');
-  const filename = parts[parts.length - 1];
-  return filename.replace('_cloud_data.json', '').replace('_', ' ');
+  let filename = parts[parts.length - 1];
+  filename = filename
+    .replace(/_cloud_data\.json$/i, '')
+    .replace(/\.json$/i, '');
+  return filename.replace(/_/g, ' ').trim();
 }
 
 const GC_SEGMENTS = 32;
