@@ -183,7 +183,7 @@ class CloudDensityGridOverlay {
   drawHeatmap(lambda0 = getMollweideLambda0()) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-    ctx.filter = 'blur(2px)';
+    ctx.filter = 'blur(4px)';
     const xScale = this.canvasWidth / 400;
     const yScale = this.canvasHeight / 200;
     this.cubesData.forEach(cell => {
@@ -199,8 +199,17 @@ class CloudDensityGridOverlay {
       const py = (100 - y) * yScale;
       const col = cell.mollweideMesh.material.color;
       const alpha = cell.mollweideMesh.material.opacity;
-      ctx.fillStyle = `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},${alpha})`;
-      ctx.fillRect(px - width / 2, py - height / 2, width, height);
+      const r = Math.round(col.r * 255);
+      const g = Math.round(col.g * 255);
+      const b = Math.round(col.b * 255);
+      const radius = Math.max(width, height) * 0.6;
+      const grd = ctx.createRadialGradient(px, py, 0, px, py, radius);
+      grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+      grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      ctx.fill();
     });
     ctx.filter = 'none';
     this.texture.needsUpdate = true;

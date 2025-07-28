@@ -1774,9 +1774,6 @@ function registerMollweideEditableLines() {
     });
   }
   constellationLinesMoll.forEach(l => editableLines.push(l));
-  if (densityOverlay && densityOverlay.adjacentLines) {
-    densityOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
-  }
   if (isolationOverlay && isolationOverlay.adjacentLines) {
     isolationOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
   }
