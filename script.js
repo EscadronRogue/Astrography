@@ -617,6 +617,7 @@ async function buildAndApplyFilters() {
         globeMap.scene.remove(c.globeMesh);
         mollweideMap.scene.remove(c.mollweideMesh);
       });
+      mollweideMap.scene.remove(ov.textureMesh);
     });
     cloudDensityOverlays = [];
     for (const f of files) {
@@ -630,6 +631,7 @@ async function buildAndApplyFilters() {
         cloudDensityOpacity / 100
       );
       cloudDensityOverlays.push(ov);
+      mollweideMap.scene.add(ov.textureMesh);
     }
   } else {
     cloudDensityOverlays.forEach(ov => {
@@ -638,6 +640,7 @@ async function buildAndApplyFilters() {
         globeMap.scene.remove(c.globeMesh);
         mollweideMap.scene.remove(c.mollweideMesh);
       });
+      mollweideMap.scene.remove(ov.textureMesh);
     });
     cloudDensityOverlays = [];
   }

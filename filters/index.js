@@ -518,6 +518,7 @@ export function applyFilters(allStars) {
           window.globeMap.scene.remove(obj.line);
           window.mollweideMap.scene.remove(obj.lineM);
         });
+        window.mollweideMap.scene.remove(densityOverlay.textureMesh);
       }
       densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       densityOverlay.cubesData.forEach(cell => {
@@ -527,6 +528,7 @@ export function applyFilters(allStars) {
         window.globeMap.scene.add(obj.line);
         window.mollweideMap.scene.add(obj.lineM);
       });
+      window.mollweideMap.scene.add(densityOverlay.textureMesh);
     }
     updateDensityFilter(allStars, densityOverlay, window.trueCoordinatesMap.scene, window.globeMap.scene, window.mollweideMap.scene);
   } else {
@@ -538,6 +540,7 @@ export function applyFilters(allStars) {
         window.globeMap.scene.remove(obj.line);
         window.mollweideMap.scene.remove(obj.lineM);
       });
+      window.mollweideMap.scene.remove(densityOverlay.textureMesh);
       densityOverlay = null;
     }
   }

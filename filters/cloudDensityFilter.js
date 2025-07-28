@@ -34,6 +34,23 @@ class CloudDensityGridOverlay {
     this.cubesData = [];
     this.color = uniqueColorFromName(cloudName);
     this.opacityFactor = 1.0;
+
+    this.canvasWidth = 1024;
+    this.canvasHeight = 512;
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = this.canvasWidth;
+    this.canvas.height = this.canvasHeight;
+    this.ctx = this.canvas.getContext('2d');
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.texture,
+      transparent: true,
+      depthWrite: false
+    });
+    this.textureMesh = new THREE.Mesh(new THREE.PlaneGeometry(400, 200), mat);
+    this.textureMesh.renderOrder = 2;
   }
 
   createGrid() {
@@ -155,7 +172,38 @@ class CloudDensityGridOverlay {
     });
     if (sceneTC) this.cubesData.forEach(c => sceneTC.add(c.tcMesh));
     if (sceneGlobe) this.cubesData.forEach(c => sceneGlobe.add(c.globeMesh));
-    if (sceneMoll) this.cubesData.forEach(c => sceneMoll.add(c.mollweideMesh));
+    if (sceneMoll) {
+      if (!sceneMoll.children.includes(this.textureMesh)) {
+        sceneMoll.add(this.textureMesh);
+      }
+    }
+    this.drawHeatmap(getMollweideLambda0());
+  }
+
+  drawHeatmap(lambda0 = getMollweideLambda0()) {
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
+    ctx.filter = 'blur(2px)';
+    const xScale = this.canvasWidth / 400;
+    const yScale = this.canvasHeight / 200;
+    this.cubesData.forEach(cell => {
+      if (!cell.active) return;
+      const lambda = minimalRADifference(cell.raRad - lambda0);
+      const x = cell.mollXFactor * lambda;
+      const y = cell.mollY;
+      const ratio = cell.tcPos.length() / this.maxDistance;
+      const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
+      const width = this.gridSize * scale * xScale;
+      const height = this.gridSize * scale * yScale;
+      const px = (x + 200) * xScale;
+      const py = (100 - y) * yScale;
+      const col = cell.mollweideMesh.material.color;
+      const alpha = cell.mollweideMesh.material.opacity;
+      ctx.fillStyle = `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},${alpha})`;
+      ctx.fillRect(px - width / 2, py - height / 2, width, height);
+    });
+    ctx.filter = 'none';
+    this.texture.needsUpdate = true;
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
@@ -167,6 +215,7 @@ class CloudDensityGridOverlay {
         0
       );
     });
+    this.drawHeatmap(lambda0);
   }
 }
 
