@@ -228,12 +228,14 @@ class CloudDensityGridOverlay {
         const pattern = ctx.createPattern(cell.stripedCanvas, 'repeat');
         ctx.save();
         ctx.translate(px, py);
+        ctx.filter = 'none';
         ctx.beginPath();
         ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.closePath();
         ctx.fillStyle = pattern;
         ctx.globalAlpha = alpha;
         ctx.fill();
+        ctx.filter = 'blur(4px)';
         const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
         grad.addColorStop(0, 'rgba(255,255,255,1)');
         grad.addColorStop(1, 'rgba(255,255,255,0)');
@@ -241,6 +243,7 @@ class CloudDensityGridOverlay {
         ctx.fillStyle = grad;
         ctx.fill();
         ctx.restore();
+        ctx.filter = 'blur(4px)';
         ctx.globalCompositeOperation = 'source-over';
       } else {
         const r = Math.round(col.r * 255);
@@ -337,6 +340,7 @@ export function fuseCloudDensityCells(overlays) {
         mesh.visible = true;
       });
       rest.forEach(c => {
+        c.active = false;
         c.tcMesh.visible = false;
         c.globeMesh.visible = false;
         c.mollweideMesh.visible = false;
@@ -353,5 +357,9 @@ export function fuseCloudDensityCells(overlays) {
         mesh.visible = true;
       });
     }
+  });
+
+  overlays.forEach(ov => {
+    ov.drawHeatmap(getMollweideLambda0());
   });
 }
