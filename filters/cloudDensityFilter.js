@@ -3,13 +3,10 @@ import { cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtil
 import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
 import { getDustCloudColor } from './dustCloudColors.js';
+import { loadCachedCloudData } from './dustCloudDataCache.js';
 
 async function loadCloudData(cloudFileUrl) {
-  const response = await fetch(cloudFileUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to load cloud data from ${cloudFileUrl}`);
-  }
-  return await response.json();
+  return await loadCachedCloudData(cloudFileUrl);
 }
 
 function uniqueColorFromName(name) {

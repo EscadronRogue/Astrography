@@ -10,6 +10,7 @@ import {
   splitMollweideWrap
 } from '../utils/geometryUtils.js';
 import { getDustCloudColor } from './dustCloudColors.js';
+import { loadCachedCloudData } from './dustCloudDataCache.js';
 
 // Helper material and geometry builders for wide fading lines on the Mollweide map
 function createWideLineMaterial(color) {
@@ -81,11 +82,7 @@ function buildWideLineGeometry(points, width) {
  * @returns {Promise<Array>} - Promise resolving to an array of cloud star objects.
  */
 async function loadCloudData(cloudFileUrl) {
-  const response = await fetch(cloudFileUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to load cloud data from ${cloudFileUrl}`);
-  }
-  return await response.json();
+  return await loadCachedCloudData(cloudFileUrl);
 }
 
 /**
