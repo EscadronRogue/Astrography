@@ -225,10 +225,11 @@ class IsolationGridOverlay {
 
           const mat = createGradientLineMaterial();
           const line = new THREE.Line(geom, mat);
-          line.renderOrder = 1;
+          line.renderOrder = 2;
 
           const mollMat = createGradientLineMaterial();
           const lineM = new THREE.LineSegments(geomM, mollMat);
+          lineM.renderOrder = 2;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
         }
       });

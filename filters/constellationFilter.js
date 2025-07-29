@@ -125,6 +125,7 @@ export function createConstellationBoundariesForMollweide(opacity = 0.4) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const lineSegs = new THREE.LineSegments(geometry, material);
+  lineSegs.renderOrder = 1;
   lineSegs.computeLineDistances();
   lineSegs.userData.boundaryData = boundaryData;
   lineSegs.userData.R = R;
@@ -250,6 +251,7 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
     const texture = new THREE.CanvasTexture(canvas);
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
     const sprite = new THREE.Sprite(material);
+    sprite.renderOrder = 1;
     sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
     sprite.position.copy(p);
     sprite.userData = { name: c.name, ra: c.ra, dec: c.dec };

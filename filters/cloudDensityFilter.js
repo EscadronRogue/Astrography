@@ -2,16 +2,18 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/thr
 import { cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
+import { getDustCloudColor } from './dustCloudColors.js';
+import { loadCachedCloudData } from './dustCloudDataCache.js';
 
 async function loadCloudData(cloudFileUrl) {
-  const response = await fetch(cloudFileUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to load cloud data from ${cloudFileUrl}`);
-  }
-  return await response.json();
+  return await loadCachedCloudData(cloudFileUrl);
 }
 
 function uniqueColorFromName(name) {
+  const predefined = getDustCloudColor(name);
+  if (predefined) {
+    return new THREE.Color(predefined);
+  }
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -22,8 +24,11 @@ function uniqueColorFromName(name) {
 
 function getCloudNameFromFileUrl(fileUrl) {
   const parts = fileUrl.split('/');
-  const filename = parts[parts.length - 1];
-  return filename.replace('_cloud_data.json', '').replace('_', ' ');
+  let filename = parts[parts.length - 1];
+  filename = filename
+    .replace(/_cloud_data\.json$/i, '')
+    .replace(/\.json$/i, '');
+  return filename.replace(/_/g, ' ').trim();
 }
 
 class CloudDensityGridOverlay {

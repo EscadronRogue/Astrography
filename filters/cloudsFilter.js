@@ -9,6 +9,8 @@ import {
   greatCircleToMollweide,
   splitMollweideWrap
 } from '../utils/geometryUtils.js';
+import { getDustCloudColor } from './dustCloudColors.js';
+import { loadCachedCloudData } from './dustCloudDataCache.js';
 
 // Helper material and geometry builders for wide fading lines on the Mollweide map
 function createWideLineMaterial(color) {
@@ -80,11 +82,7 @@ function buildWideLineGeometry(points, width) {
  * @returns {Promise<Array>} - Promise resolving to an array of cloud star objects.
  */
 async function loadCloudData(cloudFileUrl) {
-  const response = await fetch(cloudFileUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to load cloud data from ${cloudFileUrl}`);
-  }
-  return await response.json();
+  return await loadCachedCloudData(cloudFileUrl);
 }
 
 /**
@@ -175,7 +173,7 @@ export async function createCloudOverlay(
     depthWrite: false
   });
   const lineSegments = new THREE.LineSegments(geometry, material);
-  lineSegments.renderOrder = 1;
+  lineSegments.renderOrder = 2;
   return lineSegments;
 }
 
@@ -185,6 +183,10 @@ export async function createCloudOverlay(
  * @returns {THREE.Color}
  */
 function uniqueColorFromName(name) {
+  const predefined = getDustCloudColor(name);
+  if (predefined) {
+    return new THREE.Color(predefined);
+  }
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -201,8 +203,11 @@ function uniqueColorFromName(name) {
  */
 function getCloudNameFromFileUrl(fileUrl) {
   const parts = fileUrl.split('/');
-  const filename = parts[parts.length - 1];
-  return filename.replace('_cloud_data.json', '').replace('_', ' ');
+  let filename = parts[parts.length - 1];
+  filename = filename
+    .replace(/_cloud_data\.json$/i, '')
+    .replace(/\.json$/i, '');
+  return filename.replace(/_/g, ' ').trim();
 }
 
 const GC_SEGMENTS = 32;
@@ -210,7 +215,7 @@ const GC_SEGMENTS = 32;
 export function createMollweideCloudSegments(pairs, color, opacityFactor = 1.0, width = 30) {
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), createWideLineMaterial(color));
   mesh.material.uniforms.opacityFactor.value = opacityFactor;
-  mesh.renderOrder = 1;
+  mesh.renderOrder = 2;
   mesh.userData = { pairs, segments: GC_SEGMENTS, lineWidth: width, isMollweideCloud: true };
   updateMollweideCloudSegments(mesh);
   return mesh;
