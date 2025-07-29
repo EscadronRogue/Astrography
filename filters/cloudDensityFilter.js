@@ -5,7 +5,9 @@ import { lightenColor } from './densityColorUtils.js';
 import { getDustCloudColor } from './dustCloudColors.js';
 import { loadCachedCloudData } from './dustCloudDataCache.js';
 
-// Utility to create a striped texture from an array of THREE.Color objects.
+// Utility to create a striped canvas and texture from an array of THREE.Color
+// objects. The returned object contains both the canvas and the THREE texture
+// so the canvas can also be reused for 2D drawing (e.g. the heatmap overlay).
 function createStripedTexture(colors) {
   const canvas = document.createElement('canvas');
   canvas.width = 32;
@@ -19,7 +21,7 @@ function createStripedTexture(colors) {
   const tex = new THREE.CanvasTexture(canvas);
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
-  return tex;
+  return { texture: tex, canvas };
 }
 
 async function loadCloudData(cloudFileUrl) {
@@ -221,17 +223,37 @@ class CloudDensityGridOverlay {
       const py = (100 - y) * yScale;
       const col = cell.mollweideMesh.material.color;
       const alpha = cell.mollweideMesh.material.opacity;
-      const r = Math.round(col.r * 255);
-      const g = Math.round(col.g * 255);
-      const b = Math.round(col.b * 255);
       const radius = Math.max(width, height) * 0.6;
-      const grd = ctx.createRadialGradient(px, py, 0, px, py, radius);
-      grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
-      grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.arc(px, py, radius, 0, Math.PI * 2);
-      ctx.fill();
+      if (cell.isStriped && cell.stripedCanvas) {
+        const pattern = ctx.createPattern(cell.stripedCanvas, 'repeat');
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.fillStyle = pattern;
+        ctx.globalAlpha = alpha;
+        ctx.fill();
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+        grad.addColorStop(0, 'rgba(255,255,255,1)');
+        grad.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.globalCompositeOperation = 'destination-in';
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+        ctx.globalCompositeOperation = 'source-over';
+      } else {
+        const r = Math.round(col.r * 255);
+        const g = Math.round(col.g * 255);
+        const b = Math.round(col.b * 255);
+        const grd = ctx.createRadialGradient(px, py, 0, px, py, radius);
+        grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+        grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
     });
     ctx.filter = 'none';
     this.texture.needsUpdate = true;
@@ -285,6 +307,7 @@ export function fuseCloudDensityCells(overlays) {
   const map = new Map();
   overlays.forEach(ov => {
     ov.cubesData.forEach(cell => {
+      if (!cell.active) return; // Ignore inactive cells
       const key = `${cell.tcPos.x},${cell.tcPos.y},${cell.tcPos.z}`;
       const col = cell.tcMesh.material.color.clone();
       const alpha = cell.tcMesh.material.opacity;
@@ -302,7 +325,9 @@ export function fuseCloudDensityCells(overlays) {
   map.forEach(entry => {
     const [base, ...rest] = entry.cells;
     if (entry.cells.length > 1) {
-      const tex = createStripedTexture(entry.colors);
+      const { texture: tex, canvas } = createStripedTexture(entry.colors);
+      base.isStriped = true;
+      base.stripedCanvas = canvas;
       [base.tcMesh, base.globeMesh, base.mollweideMesh].forEach(mesh => {
         mesh.material.map = tex;
         mesh.material.color.set(0xffffff);
@@ -318,6 +343,8 @@ export function fuseCloudDensityCells(overlays) {
       });
     } else {
       // Ensure single cells keep their color and no texture
+      base.isStriped = false;
+      base.stripedCanvas = null;
       [base.tcMesh, base.globeMesh, base.mollweideMesh].forEach(mesh => {
         mesh.material.map = null;
         mesh.material.color.copy(entry.colors[0]);
