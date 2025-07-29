@@ -5,6 +5,23 @@ import { lightenColor } from './densityColorUtils.js';
 import { getDustCloudColor } from './dustCloudColors.js';
 import { loadCachedCloudData } from './dustCloudDataCache.js';
 
+// Utility to create a striped texture from an array of THREE.Color objects.
+function createStripedTexture(colors) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 32;
+  canvas.height = 32;
+  const ctx = canvas.getContext('2d');
+  const stripeWidth = canvas.width / colors.length;
+  colors.forEach((col, idx) => {
+    ctx.fillStyle = `#${col.getHexString()}`;
+    ctx.fillRect(idx * stripeWidth, 0, stripeWidth, canvas.height);
+  });
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
+}
+
 async function loadCloudData(cloudFileUrl) {
   return await loadCachedCloudData(cloudFileUrl);
 }
@@ -259,4 +276,55 @@ export function updateCloudDensityOverlay(
 ) {
   overlay.opacityFactor = opacity;
   overlay.update(overlay.cloudPositions, sceneTC, sceneGlobe, sceneMoll, radius);
+}
+
+// Merge cells occupying the same position across multiple overlays. When a cell
+// is shared, a striped texture of the contributing colors is applied to a
+// single visible mesh.
+export function fuseCloudDensityCells(overlays) {
+  const map = new Map();
+  overlays.forEach(ov => {
+    ov.cubesData.forEach(cell => {
+      const key = `${cell.tcPos.x},${cell.tcPos.y},${cell.tcPos.z}`;
+      const col = cell.tcMesh.material.color.clone();
+      const alpha = cell.tcMesh.material.opacity;
+      if (!map.has(key)) {
+        map.set(key, { cells: [cell], colors: [col], opacity: alpha });
+      } else {
+        const entry = map.get(key);
+        entry.cells.push(cell);
+        entry.colors.push(col);
+        entry.opacity = Math.max(entry.opacity, alpha);
+      }
+    });
+  });
+
+  map.forEach(entry => {
+    const [base, ...rest] = entry.cells;
+    if (entry.cells.length > 1) {
+      const tex = createStripedTexture(entry.colors);
+      [base.tcMesh, base.globeMesh, base.mollweideMesh].forEach(mesh => {
+        mesh.material.map = tex;
+        mesh.material.color.set(0xffffff);
+        mesh.material.opacity = entry.opacity;
+        mesh.material.transparent = true;
+        mesh.material.needsUpdate = true;
+        mesh.visible = true;
+      });
+      rest.forEach(c => {
+        c.tcMesh.visible = false;
+        c.globeMesh.visible = false;
+        c.mollweideMesh.visible = false;
+      });
+    } else {
+      // Ensure single cells keep their color and no texture
+      [base.tcMesh, base.globeMesh, base.mollweideMesh].forEach(mesh => {
+        mesh.material.map = null;
+        mesh.material.color.copy(entry.colors[0]);
+        mesh.material.opacity = entry.opacity;
+        mesh.material.needsUpdate = true;
+        mesh.visible = true;
+      });
+    }
+  });
 }

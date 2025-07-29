@@ -11,7 +11,11 @@ import {
   updateCloudsOverlay,
   updateMollweideCloudSegments
 } from './filters/cloudsFilter.js';
-import { createCloudDensityOverlay, updateCloudDensityOverlay } from './filters/cloudDensityFilter.js';
+import {
+  createCloudDensityOverlay,
+  updateCloudDensityOverlay,
+  fuseCloudDensityCells
+} from './filters/cloudDensityFilter.js';
 import {
   createGalacticPlaneMesh,
   createEclipticPlaneMesh,
@@ -647,6 +651,7 @@ async function buildAndApplyFilters() {
       cloudDensityOverlays.push(ov);
       mollweideMap.scene.add(ov.textureMesh);
     }
+    fuseCloudDensityCells(cloudDensityOverlays);
   } else {
     cloudDensityOverlays.forEach(ov => {
       ov.cubesData.forEach(c => {
