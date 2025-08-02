@@ -406,6 +406,22 @@ function addCloudDensityFieldset() {
     { name: 'Vela', file: 'data/Vela_cloud_data.json' }
   ];
 
+  const toggleDiv = document.createElement('div');
+  toggleDiv.classList.add('filter-item');
+  const toggleBtn = document.createElement('button');
+  toggleBtn.type = 'button';
+  toggleBtn.textContent = 'Toggle All Clouds';
+  toggleBtn.addEventListener('click', () => {
+    const chks = contentDiv.querySelectorAll("input[name='dust-density-clouds']");
+    const allChecked = Array.from(chks).every(c => c.checked);
+    chks.forEach(c => {
+      c.checked = !allChecked;
+      c.dispatchEvent(new Event('change'));
+    });
+  });
+  toggleDiv.appendChild(toggleBtn);
+  contentDiv.appendChild(toggleDiv);
+
   dustClouds.forEach(cloud => {
     const div = document.createElement('div');
     div.classList.add('filter-item');

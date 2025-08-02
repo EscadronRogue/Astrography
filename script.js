@@ -111,6 +111,9 @@ let rotateInitialRotation = 0;
 let rotateCurrentRotation = 0;
 let scaleStart = null;
 
+const removedLineSegments = new Set();
+const hiddenLineKeys = new Set();
+
 // --- Export Selection ---
 let exportSelectMode = false;
 let exportOverlay = null;
@@ -151,7 +154,11 @@ function savePresets() {
     constellationOffsets: Array.from(constellationLabelOffsets.entries()),
     galacticOffsets: Array.from(galacticLabelOffsets.entries())
   };
-  const obj = { remember: true, form: data, edits };
+  const lineEdits = {
+    removedSegments: Array.from(removedLineSegments),
+    hiddenLines: Array.from(hiddenLineKeys)
+  };
+  const obj = { remember: true, form: data, edits, lineEdits };
   localStorage.setItem(PRESET_KEY, JSON.stringify(obj));
 }
 
@@ -194,6 +201,12 @@ function loadPresets() {
     obj.edits.constellationOffsets.forEach(([id, off]) => constellationLabelOffsets.set(id, off));
     galacticLabelOffsets.clear();
     obj.edits.galacticOffsets.forEach(([id, off]) => galacticLabelOffsets.set(id, off));
+  }
+  if (obj.lineEdits) {
+    removedLineSegments.clear();
+    (obj.lineEdits.removedSegments || []).forEach(k => removedLineSegments.add(k));
+    hiddenLineKeys.clear();
+    (obj.lineEdits.hiddenLines || []).forEach(k => hiddenLineKeys.add(k));
   }
 }
 
@@ -587,7 +600,7 @@ async function buildAndApplyFilters() {
     constellationLinesGlobe = createConstellationBoundariesForGlobe(constellationLineOpacity / 100);
     constellationLinesGlobe.forEach(ln => globeMap.scene.add(ln));
     constellationLinesMoll = createConstellationBoundariesForMollweide(constellationLineOpacity / 100);
-    constellationLinesMoll.forEach(ln => mollweideMap.scene.add(ln));
+    constellationLinesMoll.forEach(ln => { mollweideMap.scene.add(ln); applyStoredLineEdits(ln); });
   }
   if (showConstellationNames) {
     constellationLabelsGlobe = createConstellationLabelsForGlobe(constellationNameOpacity / 100);
@@ -1116,6 +1129,7 @@ class MapManager {
       this.connectionGroup.add(merged);
     }
     this.scene.add(this.connectionGroup);
+    applyStoredLineEdits(this.connectionGroup);
     if (window.requestRender) window.requestRender();
   }
 
@@ -1360,7 +1374,7 @@ async function updateMollweideView() {
   if (showConstellationBoundariesFlag) {
     if (constellationLinesMoll.length === 0) {
       constellationLinesMoll = createConstellationBoundariesForMollweide();
-      constellationLinesMoll.forEach(l => mollweideMap.scene.add(l));
+      constellationLinesMoll.forEach(l => { mollweideMap.scene.add(l); applyStoredLineEdits(l); });
     } else {
       constellationLinesMoll.forEach(l => updateConstellationBoundariesForMollweide(l));
     }
@@ -1797,6 +1811,45 @@ function registerMollweideEditableLabels() {
   });
 }
 
+function getLineKey(obj) {
+  const posAttr = obj.geometry && obj.geometry.getAttribute('position');
+  if (!posAttr || posAttr.array.length < 6) return null;
+  const arr = posAttr.array;
+  return [arr[0], arr[1], arr[2], arr[3], arr[4], arr[5]].join(',');
+}
+
+function applyStoredLineEdits(root) {
+  if (!root) return;
+  root.traverse(obj => {
+    const key = getLineKey(obj);
+    if (key && hiddenLineKeys.has(key)) {
+      obj.visible = false;
+    }
+    const posAttr = obj.geometry && obj.geometry.getAttribute('position');
+    if (!posAttr) return;
+    const array = posAttr.array;
+    const alphaAttr = obj.geometry.getAttribute('alpha');
+    let changed = false;
+    for (let i = 0; i + 5 < array.length; i += 6) {
+      const segKey = [
+        array[i], array[i + 1], array[i + 2],
+        array[i + 3], array[i + 4], array[i + 5]
+      ].join(',');
+      if (removedLineSegments.has(segKey)) {
+        for (let j = 0; j < 6; j++) array[i + j] = NaN;
+        if (alphaAttr) {
+          const idx = (i / 3);
+          alphaAttr.array[idx] = 0;
+          alphaAttr.array[idx + 1] = 0;
+          alphaAttr.needsUpdate = true;
+        }
+        changed = true;
+      }
+    }
+    if (changed) posAttr.needsUpdate = true;
+  });
+}
+
 function registerMollweideEditableLines() {
   editableLines = [];
   if (mollweideMap.connectionGroup) {
@@ -1810,6 +1863,7 @@ function registerMollweideEditableLines() {
   if (isolationOverlay && isolationOverlay.adjacentLines) {
     isolationOverlay.adjacentLines.forEach(o => editableLines.push(o.lineM));
   }
+  editableLines.forEach(applyStoredLineEdits);
 }
 
 function onLinePointerDown(e) {
@@ -1866,6 +1920,7 @@ function onLinePointerDown(e) {
           alphaAttr.array[start + 1] = 0;
           alphaAttr.needsUpdate = true;
         }
+        removedLineSegments.add(prevPos.join(','));
         editHistory.push({
           type: 'removeSegment',
           object: obj,
@@ -1881,6 +1936,8 @@ function onLinePointerDown(e) {
     }
     editHistory.push({ type: 'toggleVisible', object: obj, prevVisible: obj.visible });
     obj.visible = false;
+    const key = getLineKey(obj);
+    if (key) hiddenLineKeys.add(key);
     requestRender();
     e.preventDefault();
     maybeSavePresets();
@@ -1900,15 +1957,13 @@ function onEditPointerDown(e) {
     }
     initialLabelPos = selectedLabel.position.clone();
     dragOffset.copy(pos).sub(selectedLabel.position);
-    selectedLabel.userData._origScale = selectedLabel.scale.clone();
     selectedLabel.userData._origColor = selectedLabel.material.color.clone();
     if (selectedLabel.userData.lineObj) {
       selectedLabel.userData._origLineColor = selectedLabel.userData.lineObj.material.color.clone();
     }
-    selectedLabel.scale.multiplyScalar(1.2);
-    selectedLabel.material.color.set('#ff6f61');
+    selectedLabel.material.color.offsetHSL(0, 0, 0.1);
     if (selectedLabel.userData.lineObj) {
-      selectedLabel.userData.lineObj.material.color.set('#ff6f61');
+      selectedLabel.userData.lineObj.material.color.offsetHSL(0, 0, 0.1);
     }
     mollweideMap.canvas.classList.add('dragging');
     isDragging = true;
@@ -1954,9 +2009,6 @@ function onEditPointerUp() {
   } else if (selectedLabel.userData.editType === 'galactic') {
     galacticLabelOffsets.set(selectedLabel.userData.editId, { x: offsetVec.x, y: offsetVec.y });
     selectedLabel.userData.offset = offsetVec.clone();
-  }
-  if (selectedLabel.userData._origScale) {
-    selectedLabel.scale.copy(selectedLabel.userData._origScale);
   }
   if (selectedLabel.userData._origColor) {
     selectedLabel.material.color.copy(selectedLabel.userData._origColor);
@@ -2176,9 +2228,6 @@ function onScaleUp() {
   document.removeEventListener('pointermove', onScaleMove);
   document.removeEventListener('pointerup', onScaleUp);
   editHistory.push({ type: 'scaleLabel', label: selectedLabel, prevScale: new THREE.Vector3(scaleStart.sx, scaleStart.sy, 1) });
-  if (selectedLabel) {
-    selectedLabel.userData._origScale = selectedLabel.scale.clone();
-  }
   isScaling = false;
   maybeSavePresets();
 }
