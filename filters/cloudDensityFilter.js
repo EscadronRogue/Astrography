@@ -83,15 +83,16 @@ class CloudDensityGridOverlay {
           cubeTC.position.copy(posTC);
 
           const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
+          const circleGeom = new THREE.CircleGeometry(this.gridSize / 2, 32);
           const planeMat = material.clone();
           planeMat.side = THREE.DoubleSide;
           const squareGlobe = new THREE.Mesh(planeGeom, planeMat.clone());
-          const squareMoll = new THREE.Mesh(planeGeom.clone(), planeMat.clone());
+          const circleMoll = new THREE.Mesh(circleGeom, planeMat.clone());
           let projectedPos;
           let ra, dec;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
-            squareMoll.position.set(0, 0, 0);
+            circleMoll.position.set(0, 0, 0);
             ra = 0; dec = 0;
           } else {
             ra = Math.atan2(-posTC.z, -posTC.x);
@@ -103,7 +104,7 @@ class CloudDensityGridOverlay {
               -radius * Math.cos(dec) * Math.sin(ra)
             );
             const projMoll = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
-            squareMoll.position.copy(projMoll);
+            circleMoll.position.copy(projMoll);
           }
           let theta = dec;
           for (let i = 0; i < 10; i++) {
@@ -128,7 +129,7 @@ class CloudDensityGridOverlay {
           const cell = {
             tcMesh: cubeTC,
             globeMesh: squareGlobe,
-            mollweideMesh: squareMoll,
+            mollweideMesh: circleMoll,
             tcPos: posTC,
             active: false,
             raRad: ra,
@@ -163,7 +164,7 @@ class CloudDensityGridOverlay {
         const ratio = cell.tcPos.length() / this.maxDistance;
         const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
         cell.globeMesh.scale.set(scale, scale, 1);
-        cell.mollweideMesh.scale.set(scale, scale, 1);
+        cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
         cell.tcMesh.visible = true;
         cell.globeMesh.visible = true;
         cell.mollweideMesh.visible = true;
@@ -188,7 +189,7 @@ class CloudDensityGridOverlay {
   drawHeatmap(lambda0 = getMollweideLambda0()) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-    ctx.filter = 'blur(4px)';
+    ctx.filter = 'blur(8px)';
     const xScale = this.canvasWidth / 400;
     const yScale = this.canvasHeight / 200;
     this.cubesData.forEach(cell => {
@@ -197,7 +198,7 @@ class CloudDensityGridOverlay {
       const x = cell.mollXFactor * lambda;
       const y = cell.mollY;
       const ratio = cell.tcPos.length() / this.maxDistance;
-      const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
+      const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio)) * 2;
       const width = this.gridSize * scale * xScale;
       const height = this.gridSize * scale * yScale;
       const px = (x + 200) * xScale;
@@ -207,9 +208,10 @@ class CloudDensityGridOverlay {
       const r = Math.round(col.r * 255);
       const g = Math.round(col.g * 255);
       const b = Math.round(col.b * 255);
-      const radius = Math.max(width, height) * 0.6;
+      const radius = Math.max(width, height);
       const grd = ctx.createRadialGradient(px, py, 0, px, py, radius);
       grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+      grd.addColorStop(0.7, `rgba(${r},${g},${b},${alpha * 0.3})`);
       grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
       ctx.fillStyle = grd;
       ctx.beginPath();
