@@ -43,7 +43,7 @@ header {
   left: 0;
   width: 100%;
   height: 60px;
-  background-color: rgba(20, 20, 20, 0.9);
+  background-color: #000;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -448,7 +448,7 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   top: 70px;
   right: 10px;
   width: 220px;
-  background-color: rgba(20, 20, 20, 0.9);
+  background-color: #000;
   border: 1px solid #555;
   padding: 10px 15px;
   border-radius: 8px;

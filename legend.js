@@ -1,5 +1,12 @@
 import { dustCloudColors } from './filters/dustCloudColors.js';
 
+function hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 async function initLegend() {
   const container = document.getElementById('legend-content');
   if (!container) return;
@@ -27,7 +34,8 @@ async function addStarSection(container) {
       li.classList.add('legend-item');
       const icon = document.createElement('span');
       icon.classList.add('legend-icon', 'star-class-icon');
-      icon.style.background = info.color;
+      const gradient = `radial-gradient(circle, ${hexToRgba(info.color, 1)} 0%, ${hexToRgba(info.color, 0.9)} 30%, ${hexToRgba(info.color, 0.4)} 60%, ${hexToRgba(info.color, 0)} 100%)`;
+      icon.style.background = gradient;
       const size = info.size * 2; // scale for visibility
       icon.style.width = `${size}px`;
       icon.style.height = `${size}px`;
