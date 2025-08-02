@@ -447,12 +447,14 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   position: fixed;
   top: 70px;
   right: 10px;
-  width: 180px;
+  width: 220px;
   background-color: rgba(20, 20, 20, 0.9);
   border: 1px solid #555;
   padding: 10px 15px;
   border-radius: 8px;
   z-index: 1100;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .legend h2 {
@@ -462,15 +464,23 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   text-align: center;
 }
 
+.legend-section h3 {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  color: #ffd1c1;
+}
+
 .legend ul {
   list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .legend li {
   display: flex;
   align-items: center;
-  margin-bottom: 6px;
-  font-size: 14px;
+  margin-bottom: 4px;
+  font-size: 12px;
 }
 
 .legend-icon {
@@ -478,24 +488,59 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   margin-right: 8px;
 }
 
-.star-icon {
-  width: 12px;
-  height: 12px;
+.star-class-icon {
   border-radius: 50%;
-  background: #ffffff;
 }
 
 .connection-line-icon {
-  width: 20px;
-  height: 2px;
-  background: #ffffff;
+  width: 40px;
+  height: 4px;
+  background: linear-gradient(to right, #4E8CFF, #FF7259);
+}
+
+.constellation-line-icon {
+  width: 40px;
+  height: 0;
+  border-top: 2px dashed #888;
 }
 
 .dust-cloud-icon {
   width: 16px;
   height: 16px;
-  background: #8888ff;
   border-radius: 4px;
+  background: #8888ff;
+}
+
+.star-label-icon {
+  color: #ffffff;
+  font-size: 12px;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.7);
+}
+
+.constellation-label-icon {
+  color: #888888;
+  font-size: 12px;
+}
+
+.density-overlay-icon {
+  width: 40px;
+  height: 12px;
+  background: linear-gradient(to right, #0000ff, #ff0000);
+}
+
+.isolation-cell-icon {
+  width: 16px;
+  height: 16px;
+  background: #0000ff;
+  opacity: 0.7;
+}
+
+.constellation-overlay-icon {
+  width: 16px;
+  height: 16px;
+  background: #cccccc;
+  opacity: 0.4;
+  border: 1px solid #888888;
 }
 
 /* Label Styles */

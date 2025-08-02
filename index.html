@@ -309,11 +309,7 @@
     </section>
     <div class="legend">
       <h2>Legend</h2>
-      <ul>
-        <li><span class="legend-icon star-icon"></span>Stars</li>
-        <li><span class="legend-icon connection-line-icon"></span>Connection Lines</li>
-        <li><span class="legend-icon dust-cloud-icon"></span>Dust Clouds</li>
-      </ul>
+      <div id="legend-content"></div>
     </div>
   </div>
 
@@ -337,6 +333,7 @@
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script type="module" src="script.js"></script>
+  <script type="module" src="legend.js"></script>
   <script type="module">
     import { initFilterUI } from './ui/filterUI.js';
     window.addEventListener('DOMContentLoaded', () => {
