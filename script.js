@@ -176,10 +176,11 @@ function loadPresets() {
       if (!el) continue;
       if (el.type === 'checkbox' || el.type === 'radio') {
         el.checked = val;
+        el.dispatchEvent(new Event('change'));
       } else {
         el.value = val;
+        el.dispatchEvent(new Event('input'));
       }
-      el.dispatchEvent(new Event('input'));
     }
   }
   if (obj.edits) {
@@ -1409,49 +1410,63 @@ async function updateMollweideView() {
 window.updateMollweideView = updateMollweideView;
 
 function exportMollweideMap(format = 'png', rect = null) {
-  const width = 7680;
-  const height = 3840;
+  const baseWidth = mollweideMap.renderer.domElement.width;
+  const baseHeight = mollweideMap.renderer.domElement.height;
+  const scale = Math.max(1, 3840 / baseWidth, 2160 / baseHeight);
+  const exportWidth = Math.round(baseWidth * scale);
+  const exportHeight = Math.round(baseHeight * scale);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
   exportRenderer.setPixelRatio(1);
   let cropX = 0;
   let cropY = 0;
-  let cropW = width;
-  let cropH = height;
+  let cropW = baseWidth;
+  let cropH = baseHeight;
   if (rect) {
-    const scaleX = width / mollweideMap.canvas.clientWidth;
-    const scaleY = height / mollweideMap.canvas.clientHeight;
+    const scaleX = baseWidth / mollweideMap.canvas.clientWidth;
+    const scaleY = baseHeight / mollweideMap.canvas.clientHeight;
     cropX = Math.round(rect.x * scaleX);
     cropY = Math.round(rect.y * scaleY);
     cropW = Math.round(rect.width * scaleX);
     cropH = Math.round(rect.height * scaleY);
   }
+  const exportCropW = Math.round(cropW * scale);
+  const exportCropH = Math.round(cropH * scale);
   const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = cropW;
-  finalCanvas.height = cropH;
+  finalCanvas.width = exportCropW;
+  finalCanvas.height = exportCropH;
   const ctx = finalCanvas.getContext('2d');
   const maxSize = exportRenderer.capabilities.maxTextureSize;
-  const tile = Math.min(maxSize, 8192);
+  const tile = Math.min(Math.floor(maxSize / scale), 8192);
   for (let y = cropY; y < cropY + cropH; y += tile) {
     for (let x = cropX; x < cropX + cropW; x += tile) {
       const tileW = Math.min(tile, cropW - (x - cropX));
       const tileH = Math.min(tile, cropH - (y - cropY));
-      exportRenderer.setSize(tileW, tileH);
+      const tileWScaled = Math.round(tileW * scale);
+      const tileHScaled = Math.round(tileH * scale);
+      exportRenderer.setSize(tileWScaled, tileHScaled, false);
       const cam = mollweideMap.camera.clone();
-      const aspect = width / height;
+      const aspect = baseWidth / baseHeight;
       cam.left = (-mollweideMap.frustumSize * aspect) / 2;
       cam.right = (mollweideMap.frustumSize * aspect) / 2;
       cam.top = mollweideMap.frustumSize / 2;
       cam.bottom = -mollweideMap.frustumSize / 2;
       cam.updateProjectionMatrix();
-      cam.setViewOffset(width, height, x, y, tileW, tileH);
+      cam.setViewOffset(
+        exportWidth,
+        exportHeight,
+        Math.round(x * scale),
+        Math.round(y * scale),
+        tileWScaled,
+        tileHScaled
+      );
       exportRenderer.render(mollweideMap.scene, cam);
       cam.clearViewOffset();
       ctx.drawImage(
         exportRenderer.domElement,
-        x - cropX,
-        y - cropY,
-        tileW,
-        tileH
+        Math.round((x - cropX) * scale),
+        Math.round((y - cropY) * scale),
+        tileWScaled,
+        tileHScaled
       );
     }
   }
@@ -1460,11 +1475,11 @@ function exportMollweideMap(format = 'png', rect = null) {
     const imgData = finalCanvas.toDataURL('image/png');
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({
-      orientation: cropW >= cropH ? 'landscape' : 'portrait',
+      orientation: exportCropW >= exportCropH ? 'landscape' : 'portrait',
       unit: 'px',
-      format: [cropW, cropH]
+      format: [exportCropW, exportCropH]
     });
-    pdf.addImage(imgData, 'PNG', 0, 0, cropW, cropH);
+    pdf.addImage(imgData, 'PNG', 0, 0, exportCropW, exportCropH);
     pdf.save('mollweide_map.pdf');
   } else {
     finalCanvas.toBlob(b => {
