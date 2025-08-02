@@ -1412,7 +1412,26 @@ function exportMollweideMap(format = 'png', rect = null) {
   const width = 7680;
   const height = 3840;
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
+  exportRenderer.outputColorSpace = mollweideMap.renderer.outputColorSpace;
+  exportRenderer.toneMapping = mollweideMap.renderer.toneMapping;
+  exportRenderer.toneMappingExposure = mollweideMap.renderer.toneMappingExposure;
+  exportRenderer.setClearColor(
+    mollweideMap.renderer.getClearColor(new THREE.Color()),
+    mollweideMap.renderer.getClearAlpha()
+  );
   exportRenderer.setPixelRatio(1);
+  let originalZoom = null;
+  if (
+    mollweideMap.points &&
+    mollweideMap.points.material &&
+    mollweideMap.points.material.uniforms &&
+    mollweideMap.points.material.uniforms.cameraZoom
+  ) {
+    originalZoom = mollweideMap.points.material.uniforms.cameraZoom.value;
+    const scaleFactor = width / mollweideMap.renderer.domElement.width;
+    mollweideMap.points.material.uniforms.cameraZoom.value =
+      originalZoom * scaleFactor;
+  }
   let cropX = 0;
   let cropY = 0;
   let cropW = width;
@@ -1456,6 +1475,9 @@ function exportMollweideMap(format = 'png', rect = null) {
     }
   }
   exportRenderer.dispose();
+  if (originalZoom !== null) {
+    mollweideMap.points.material.uniforms.cameraZoom.value = originalZoom;
+  }
   if (format === 'pdf') {
     const imgData = finalCanvas.toDataURL('image/png');
     const { jsPDF } = window.jspdf;
