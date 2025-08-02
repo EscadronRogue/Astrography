@@ -2,6 +2,8 @@
  * Handles "Stellar Class" logic for showing/hiding star names and star objects themselves.
  * Also exports `generateStellarClassFilters` to build the UI subcategories (O,B,A,F,G,K,M,L,T,Y).
  */
+import { getStellarClassData } from './stellarClassData.js';
+
 export function applyStellarClassLogic(stars, form) {
   // Collect checkboxes from the form
   const stellarClassShowName = {};
@@ -33,11 +35,14 @@ export function applyStellarClassLogic(stars, form) {
   });
 
   // Apply logic to each star
+  const recognizedClasses = new Set(['O','B','A','F','G','K','M','L','T','Y']);
+
   stars.forEach(star => {
-    // Handle missing or empty stellar class
-    const primaryClass = (star.Stellar_class && typeof star.Stellar_class === 'string')
-      ? star.Stellar_class.charAt(0).toUpperCase()
-      : 'G'; // fallback
+    let primaryClass = 'Other';
+    if (star.Stellar_class && typeof star.Stellar_class === 'string') {
+      const candidate = star.Stellar_class.charAt(0).toUpperCase();
+      primaryClass = recognizedClasses.has(candidate) ? candidate : 'Other';
+    }
 
     // Use only the common name of the individual star for display, ignoring the star system name.
     const starName = star.Common_name_of_the_star || '';
@@ -92,6 +97,7 @@ export function generateStellarClassFilters(stars) {
   container.innerHTML = ''; // Clear previous
   // Wrap the whole category in a scrollable container (sidebar) if content exceeds a fixed height.
   container.classList.add('scrollable-category');
+  const stellarClassData = getStellarClassData();
 
   // Master checkboxes to toggle visibility of all star names and stars.
   const globalControls = document.createElement('div');
@@ -130,7 +136,7 @@ export function generateStellarClassFilters(stars) {
   stars.forEach(star => {
     const primaryClass = (star.Stellar_class && typeof star.Stellar_class === 'string')
       ? star.Stellar_class.charAt(0).toUpperCase()
-      : 'G';
+      : 'Other';
     if (!classMap[primaryClass]) {
       classMap[primaryClass] = [];
     }
@@ -158,6 +164,7 @@ export function generateStellarClassFilters(stars) {
     const cName = clsObj.commonName;
     const arr = classMap[cls] || [];
     const starCount = arr.length;
+    const defaultSize = (stellarClassData[cls]?.size) || 1;
 
     // Outer container for this subcategory
     const subcatDiv = document.createElement('div');
@@ -216,34 +223,27 @@ export function generateStellarClassFilters(stars) {
     starSizeSlider.id = `class-${cls}-star-size-slider`;
     starSizeSlider.name = `class-${cls}-star-size`;
     starSizeSlider.min = '0.1';
-    starSizeSlider.max = '10';
+    starSizeSlider.max = '15';
     starSizeSlider.step = '0.1';
-    starSizeSlider.value = '1';
+    starSizeSlider.value = defaultSize;
     const starSizeNumber = document.createElement('input');
     starSizeNumber.type = 'number';
     starSizeNumber.id = `class-${cls}-star-size-number`;
     starSizeNumber.name = `class-${cls}-star-size`;
     starSizeNumber.min = '0.1';
-    starSizeNumber.max = '10';
+    starSizeNumber.max = '15';
     starSizeNumber.step = '0.1';
-    starSizeNumber.value = '1';
-    const starSizeSpan = document.createElement('span');
-    starSizeSpan.id = `class-${cls}-star-size-value`;
-    starSizeSpan.textContent = '1';
+    starSizeNumber.value = defaultSize;
     starSizeDiv.appendChild(starSizeLabel);
     starSizeDiv.appendChild(starSizeSlider);
     starSizeDiv.appendChild(starSizeNumber);
-    starSizeDiv.appendChild(starSizeSpan);
-    starSizeDiv.appendChild(document.createTextNode('x'));
     classCheckboxesDiv.appendChild(starSizeDiv);
 
     starSizeSlider.addEventListener('input', () => {
       starSizeNumber.value = starSizeSlider.value;
-      starSizeSpan.textContent = starSizeSlider.value;
     });
     starSizeNumber.addEventListener('input', () => {
       starSizeSlider.value = starSizeNumber.value;
-      starSizeSpan.textContent = starSizeNumber.value;
     });
 
     // Label size slider
@@ -257,34 +257,27 @@ export function generateStellarClassFilters(stars) {
     labelSizeSlider.id = `class-${cls}-label-size-slider`;
     labelSizeSlider.name = `class-${cls}-label-size`;
     labelSizeSlider.min = '0.1';
-    labelSizeSlider.max = '10';
+    labelSizeSlider.max = '15';
     labelSizeSlider.step = '0.1';
-    labelSizeSlider.value = '1';
+    labelSizeSlider.value = defaultSize;
     const labelSizeNumber = document.createElement('input');
     labelSizeNumber.type = 'number';
     labelSizeNumber.id = `class-${cls}-label-size-number`;
     labelSizeNumber.name = `class-${cls}-label-size`;
     labelSizeNumber.min = '0.1';
-    labelSizeNumber.max = '10';
+    labelSizeNumber.max = '15';
     labelSizeNumber.step = '0.1';
-    labelSizeNumber.value = '1';
-    const labelSizeSpan = document.createElement('span');
-    labelSizeSpan.id = `class-${cls}-label-size-value`;
-    labelSizeSpan.textContent = '1';
+    labelSizeNumber.value = defaultSize;
     labelSizeDiv.appendChild(labelSizeLabel);
     labelSizeDiv.appendChild(labelSizeSlider);
     labelSizeDiv.appendChild(labelSizeNumber);
-    labelSizeDiv.appendChild(labelSizeSpan);
-    labelSizeDiv.appendChild(document.createTextNode('x'));
     classCheckboxesDiv.appendChild(labelSizeDiv);
 
     labelSizeSlider.addEventListener('input', () => {
       labelSizeNumber.value = labelSizeSlider.value;
-      labelSizeSpan.textContent = labelSizeSlider.value;
     });
     labelSizeNumber.addEventListener('input', () => {
       labelSizeSlider.value = labelSizeNumber.value;
-      labelSizeSpan.textContent = labelSizeNumber.value;
     });
 
     subcatDiv.appendChild(classCheckboxesDiv);
@@ -386,6 +379,7 @@ export function generateStellarClassFilters(stars) {
     const cName = 'Miscellaneous';
     const arr = otherStars;
     const starCount = arr.length;
+    const defaultSize = 1;
 
     const subcatDiv = document.createElement('div');
     subcatDiv.classList.add('stellar-class-subcategory');
@@ -439,34 +433,27 @@ export function generateStellarClassFilters(stars) {
     starSizeSlider.id = `class-${cls}-star-size-slider`;
     starSizeSlider.name = `class-${cls}-star-size`;
     starSizeSlider.min = '0.1';
-    starSizeSlider.max = '10';
+    starSizeSlider.max = '15';
     starSizeSlider.step = '0.1';
-    starSizeSlider.value = '1';
+    starSizeSlider.value = defaultSize;
     const starSizeNumber = document.createElement('input');
     starSizeNumber.type = 'number';
     starSizeNumber.id = `class-${cls}-star-size-number`;
     starSizeNumber.name = `class-${cls}-star-size`;
     starSizeNumber.min = '0.1';
-    starSizeNumber.max = '10';
+    starSizeNumber.max = '15';
     starSizeNumber.step = '0.1';
-    starSizeNumber.value = '1';
-    const starSizeSpan = document.createElement('span');
-    starSizeSpan.id = `class-${cls}-star-size-value`;
-    starSizeSpan.textContent = '1';
+    starSizeNumber.value = defaultSize;
     starSizeDiv.appendChild(starSizeLabel);
     starSizeDiv.appendChild(starSizeSlider);
     starSizeDiv.appendChild(starSizeNumber);
-    starSizeDiv.appendChild(starSizeSpan);
-    starSizeDiv.appendChild(document.createTextNode('x'));
     classCheckboxesDiv.appendChild(starSizeDiv);
 
     starSizeSlider.addEventListener('input', () => {
       starSizeNumber.value = starSizeSlider.value;
-      starSizeSpan.textContent = starSizeSlider.value;
     });
     starSizeNumber.addEventListener('input', () => {
       starSizeSlider.value = starSizeNumber.value;
-      starSizeSpan.textContent = starSizeNumber.value;
     });
 
     // Label size slider
@@ -480,34 +467,27 @@ export function generateStellarClassFilters(stars) {
     labelSizeSlider.id = `class-${cls}-label-size-slider`;
     labelSizeSlider.name = `class-${cls}-label-size`;
     labelSizeSlider.min = '0.1';
-    labelSizeSlider.max = '10';
+    labelSizeSlider.max = '15';
     labelSizeSlider.step = '0.1';
-    labelSizeSlider.value = '1';
+    labelSizeSlider.value = defaultSize;
     const labelSizeNumber = document.createElement('input');
     labelSizeNumber.type = 'number';
     labelSizeNumber.id = `class-${cls}-label-size-number`;
     labelSizeNumber.name = `class-${cls}-label-size`;
     labelSizeNumber.min = '0.1';
-    labelSizeNumber.max = '10';
+    labelSizeNumber.max = '15';
     labelSizeNumber.step = '0.1';
-    labelSizeNumber.value = '1';
-    const labelSizeSpan = document.createElement('span');
-    labelSizeSpan.id = `class-${cls}-label-size-value`;
-    labelSizeSpan.textContent = '1';
+    labelSizeNumber.value = defaultSize;
     labelSizeDiv.appendChild(labelSizeLabel);
     labelSizeDiv.appendChild(labelSizeSlider);
     labelSizeDiv.appendChild(labelSizeNumber);
-    labelSizeDiv.appendChild(labelSizeSpan);
-    labelSizeDiv.appendChild(document.createTextNode('x'));
     classCheckboxesDiv.appendChild(labelSizeDiv);
 
     labelSizeSlider.addEventListener('input', () => {
       labelSizeNumber.value = labelSizeSlider.value;
-      labelSizeSpan.textContent = labelSizeSlider.value;
     });
     labelSizeNumber.addEventListener('input', () => {
       labelSizeSlider.value = labelSizeNumber.value;
-      labelSizeSpan.textContent = labelSizeNumber.value;
     });
 
     subcatDiv.appendChild(classCheckboxesDiv);

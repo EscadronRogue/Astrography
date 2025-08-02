@@ -24,12 +24,13 @@ export function applySizeFilter(stars, filters) {
     });
   } else if (filters.size === 'stellar-class') {
     // Map class to size from stellarClassData
+    const recognizedClasses = new Set(['O','B','A','F','G','K','M','L','T','Y']);
     stars.forEach(star => {
-      let primaryClass = 'G';
+      let primaryClass = 'Other';
       if (star.Stellar_class && typeof star.Stellar_class === 'string') {
-        primaryClass = star.Stellar_class.charAt(0).toUpperCase();
+        const candidate = star.Stellar_class.charAt(0).toUpperCase();
+        primaryClass = recognizedClasses.has(candidate) ? candidate : 'Other';
       }
-
       const classData = stellarClassData[primaryClass];
       star.displaySize = classData ? classData.size : 1;
     });
@@ -42,22 +43,24 @@ export function applySizeFilter(stars, filters) {
     });
   }
 
-  // Apply class size multipliers
+  const recognizedClasses = new Set(['O','B','A','F','G','K','M','L','T','Y']);
   stars.forEach(star => {
-    let primaryClass = 'G';
+    let primaryClass = 'Other';
     if (star.Stellar_class && typeof star.Stellar_class === 'string') {
-      primaryClass = star.Stellar_class.charAt(0).toUpperCase();
+      const candidate = star.Stellar_class.charAt(0).toUpperCase();
+      primaryClass = recognizedClasses.has(candidate) ? candidate : 'Other';
     }
-    const starMult =
+    const starSize =
       filters.stellarClassStarSizes && filters.stellarClassStarSizes[primaryClass];
-    if (starMult) {
-      star.displaySize *= starMult;
+    if (starSize !== undefined && !isNaN(starSize)) {
+      star.displaySize = starSize;
     }
-    star.displayLabelSize = star.displaySize;
-    const labelMult =
+    const labelSize =
       filters.stellarClassLabelSizes && filters.stellarClassLabelSizes[primaryClass];
-    if (labelMult) {
-      star.displayLabelSize *= labelMult;
+    if (labelSize !== undefined && !isNaN(labelSize)) {
+      star.displayLabelSize = labelSize;
+    } else {
+      star.displayLabelSize = star.displaySize;
     }
   });
 
