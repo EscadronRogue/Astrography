@@ -30,16 +30,16 @@ async function addStarSection(container) {
     const resp = await fetch('./stellar_class.json');
     const data = await resp.json();
     const classNames = {
-      O: 'Blue',
-      B: 'Blue-white',
-      A: 'White',
-      F: 'Yellow-white',
-      G: 'Yellow',
-      K: 'Orange',
-      M: 'Red',
-      L: 'Red-brown',
-      T: 'Purple',
-      Y: 'Dark brown'
+      O: 'Blue Giant',
+      B: 'Blue-White Dwarf',
+      A: 'White Dwarf',
+      F: 'Yellow-White Dwarf',
+      G: 'Yellow Dwarf',
+      K: 'Orange Dwarf',
+      M: 'Red Dwarf',
+      L: 'Brown Dwarf',
+      T: 'Cool Brown Dwarf',
+      Y: 'Ultra Cool Brown Dwarf'
     };
 
     Object.entries(data).forEach(([cls, info]) => {
