@@ -61,6 +61,17 @@ class CloudDensityGridOverlay {
   createGrid() {
     const halfExt = Math.ceil(this.maxDistance / this.gridSize) * this.gridSize;
     this.cubesData = [];
+    const cubeGeometry = new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize);
+    const planeGeometry = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
+    const circleGeometry = new THREE.CircleGeometry(this.gridSize / 2, 32);
+    const baseMaterial = new THREE.MeshBasicMaterial({
+      color: this.color,
+      transparent: true,
+      opacity: 0.0,
+      depthWrite: false
+    });
+    const planeBase = baseMaterial.clone();
+    planeBase.side = THREE.DoubleSide;
     for (let x = -halfExt; x <= halfExt; x += this.gridSize) {
       for (let y = -halfExt; y <= halfExt; y += this.gridSize) {
         for (let z = -halfExt; z <= halfExt; z += this.gridSize) {
@@ -72,22 +83,11 @@ class CloudDensityGridOverlay {
           const distFromCenter = posTC.length();
           if (distFromCenter < this.minDistance || distFromCenter > this.maxDistance) continue;
 
-          const geometry = new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize);
-          const material = new THREE.MeshBasicMaterial({
-            color: this.color,
-            transparent: true,
-            opacity: 0.0,
-            depthWrite: false
-          });
-          const cubeTC = new THREE.Mesh(geometry, material);
+          const cubeTC = new THREE.Mesh(cubeGeometry, baseMaterial.clone());
           cubeTC.position.copy(posTC);
 
-          const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
-          const circleGeom = new THREE.CircleGeometry(this.gridSize / 2, 32);
-          const planeMat = material.clone();
-          planeMat.side = THREE.DoubleSide;
-          const squareGlobe = new THREE.Mesh(planeGeom, planeMat.clone());
-          const circleMoll = new THREE.Mesh(circleGeom, planeMat.clone());
+          const squareGlobe = new THREE.Mesh(planeGeometry, planeBase.clone());
+          const circleMoll = new THREE.Mesh(circleGeometry, planeBase.clone());
           let projectedPos;
           let ra, dec;
           if (distFromCenter < 1e-6) {
@@ -144,15 +144,20 @@ class CloudDensityGridOverlay {
   }
 
   update(positions, sceneTC, sceneGlobe, sceneMoll, radius) {
-    const rad = radius;
+    const rad2 = radius * radius;
     this.cubesData.forEach(cell => {
-      let minD = Infinity;
-      positions.forEach(pos => {
-        const d = cell.tcPos.distanceTo(pos);
-        if (d < minD) minD = d;
-      });
-      if (minD <= rad) {
-        const t = minD / rad;
+      let minD2 = Infinity;
+      for (let i = 0; i < positions.length; i++) {
+        const pos = positions[i];
+        const dx = cell.tcPos.x - pos.x;
+        const dy = cell.tcPos.y - pos.y;
+        const dz = cell.tcPos.z - pos.z;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < minD2) minD2 = d2;
+      }
+      if (minD2 <= rad2) {
+        const minD = Math.sqrt(minD2);
+        const t = minD / radius;
         const color = lightenColor(this.color.clone(), t * 0.5);
         const alpha = (1 - t) * this.opacityFactor;
         cell.tcMesh.material.color.copy(color);
@@ -175,13 +180,12 @@ class CloudDensityGridOverlay {
         cell.mollweideMesh.visible = false;
         cell.active = false;
       }
+      if (sceneTC && !cell.tcMesh.parent) sceneTC.add(cell.tcMesh);
+      if (sceneGlobe && !cell.globeMesh.parent) sceneGlobe.add(cell.globeMesh);
+      if (sceneMoll && !cell.mollweideMesh.parent) sceneMoll.add(cell.mollweideMesh);
     });
-    if (sceneTC) this.cubesData.forEach(c => sceneTC.add(c.tcMesh));
-    if (sceneGlobe) this.cubesData.forEach(c => sceneGlobe.add(c.globeMesh));
-    if (sceneMoll) {
-      if (!sceneMoll.children.includes(this.textureMesh)) {
-        sceneMoll.add(this.textureMesh);
-      }
+    if (sceneMoll && !sceneMoll.children.includes(this.textureMesh)) {
+      sceneMoll.add(this.textureMesh);
     }
     this.drawHeatmap(getMollweideLambda0());
   }

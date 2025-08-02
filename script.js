@@ -176,10 +176,11 @@ function loadPresets() {
       if (!el) continue;
       if (el.type === 'checkbox' || el.type === 'radio') {
         el.checked = val;
+        el.dispatchEvent(new Event('change'));
       } else {
         el.value = val;
+        el.dispatchEvent(new Event('input'));
       }
-      el.dispatchEvent(new Event('input'));
     }
   }
   if (obj.edits) {
@@ -1409,10 +1410,11 @@ async function updateMollweideView() {
 window.updateMollweideView = updateMollweideView;
 
 function exportMollweideMap(format = 'png', rect = null) {
-  const width = 7680;
-  const height = 3840;
+  const dpr = mollweideMap.renderer.getPixelRatio();
+  const width = mollweideMap.renderer.domElement.width;
+  const height = mollweideMap.renderer.domElement.height;
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
-  exportRenderer.setPixelRatio(1);
+  exportRenderer.setPixelRatio(dpr);
   let cropX = 0;
   let cropY = 0;
   let cropW = width;
@@ -1435,7 +1437,7 @@ function exportMollweideMap(format = 'png', rect = null) {
     for (let x = cropX; x < cropX + cropW; x += tile) {
       const tileW = Math.min(tile, cropW - (x - cropX));
       const tileH = Math.min(tile, cropH - (y - cropY));
-      exportRenderer.setSize(tileW, tileH);
+      exportRenderer.setSize(tileW / dpr, tileH / dpr, false);
       const cam = mollweideMap.camera.clone();
       const aspect = width / height;
       cam.left = (-mollweideMap.frustumSize * aspect) / 2;
