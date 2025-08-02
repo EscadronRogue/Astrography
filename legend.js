@@ -29,18 +29,36 @@ async function addStarSection(container) {
   try {
     const resp = await fetch('./stellar_class.json');
     const data = await resp.json();
+    const classNames = {
+      O: 'Blue',
+      B: 'Blue-white',
+      A: 'White',
+      F: 'Yellow-white',
+      G: 'Yellow',
+      K: 'Orange',
+      M: 'Red',
+      L: 'Red-brown',
+      T: 'Purple',
+      Y: 'Dark brown'
+    };
+
     Object.entries(data).forEach(([cls, info]) => {
       const li = document.createElement('li');
       li.classList.add('legend-item');
+
       const icon = document.createElement('span');
       icon.classList.add('legend-icon', 'star-class-icon');
-      const gradient = `radial-gradient(circle, ${hexToRgba(info.color, 1)} 0%, ${hexToRgba(info.color, 0.9)} 30%, ${hexToRgba(info.color, 0.4)} 60%, ${hexToRgba(info.color, 0)} 100%)`;
+      const gradient = `radial-gradient(circle, rgba(255,255,255,1) 0%, ${hexToRgba(info.color, 1)} 30%, ${hexToRgba(info.color, 0.4)} 60%, ${hexToRgba(info.color, 0)} 100%)`;
       icon.style.background = gradient;
+      icon.style.boxShadow = `0 0 6px ${hexToRgba(info.color, 0.8)}`;
+
       const size = info.size * 2; // scale for visibility
       icon.style.width = `${size}px`;
       icon.style.height = `${size}px`;
+
       li.appendChild(icon);
-      li.appendChild(document.createTextNode(`Class ${cls}`));
+      const common = classNames[cls] ? ` (${classNames[cls]})` : '';
+      li.appendChild(document.createTextNode(`Class ${cls}${common}`));
       list.appendChild(li);
     });
   } catch (err) {
