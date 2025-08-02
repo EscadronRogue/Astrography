@@ -40,8 +40,10 @@ class CloudDensityGridOverlay {
     this.color = uniqueColorFromName(cloudName);
     this.opacityFactor = 1.0;
 
-    this.canvasWidth = 1024;
-    this.canvasHeight = 512;
+    // Use a higher-resolution canvas so the Mollweide overlay appears smooth
+    // even when exporting very large images.
+    this.canvasWidth = 4096;
+    this.canvasHeight = 2048;
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.canvasWidth;
     this.canvas.height = this.canvasHeight;

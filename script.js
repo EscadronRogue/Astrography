@@ -1415,6 +1415,11 @@ function exportMollweideMap(format = 'png', rect = null) {
   exportRenderer.outputColorSpace = mollweideMap.renderer.outputColorSpace;
   exportRenderer.toneMapping = mollweideMap.renderer.toneMapping;
   exportRenderer.toneMappingExposure = mollweideMap.renderer.toneMappingExposure;
+  exportRenderer.physicallyCorrectLights = mollweideMap.renderer.physicallyCorrectLights;
+  exportRenderer.sortObjects = mollweideMap.renderer.sortObjects;
+  exportRenderer.useLegacyLights = mollweideMap.renderer.useLegacyLights;
+  exportRenderer.shadowMap.enabled = mollweideMap.renderer.shadowMap.enabled;
+  exportRenderer.shadowMap.type = mollweideMap.renderer.shadowMap.type;
   exportRenderer.setClearColor(
     mollweideMap.renderer.getClearColor(new THREE.Color()),
     mollweideMap.renderer.getClearAlpha()
@@ -1428,7 +1433,9 @@ function exportMollweideMap(format = 'png', rect = null) {
     mollweideMap.points.material.uniforms.cameraZoom
   ) {
     originalZoom = mollweideMap.points.material.uniforms.cameraZoom.value;
-    const scaleFactor = width / mollweideMap.renderer.domElement.width;
+    const onscreenWidth = mollweideMap.renderer.domElement.width;
+    const scaleFactor =
+      (width * exportRenderer.getPixelRatio()) / onscreenWidth;
     mollweideMap.points.material.uniforms.cameraZoom.value =
       originalZoom * scaleFactor;
   }
