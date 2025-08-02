@@ -442,6 +442,62 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
   margin-top: 4px;
 }
 
+/* Legend */
+.legend {
+  position: fixed;
+  top: 70px;
+  right: 10px;
+  width: 180px;
+  background-color: rgba(20, 20, 20, 0.9);
+  border: 1px solid #555;
+  padding: 10px 15px;
+  border-radius: 8px;
+  z-index: 1100;
+}
+
+.legend h2 {
+  margin-bottom: 8px;
+  font-size: 16px;
+  color: #ff6f61;
+  text-align: center;
+}
+
+.legend ul {
+  list-style: none;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.legend-icon {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.star-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.connection-line-icon {
+  width: 20px;
+  height: 2px;
+  background: #ffffff;
+}
+
+.dust-cloud-icon {
+  width: 16px;
+  height: 16px;
+  background: #8888ff;
+  border-radius: 4px;
+}
+
 /* Label Styles */
 .label-container .label {
   position: absolute;
