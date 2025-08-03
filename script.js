@@ -396,14 +396,23 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
   }
   const geometry = buildWideLineGeometry(pts, thickness);
   const material = new THREE.MeshBasicMaterial({
-    color: 0xaaaaaa,
+    color: 0xbbbbbb,
     side: THREE.DoubleSide,
     depthTest: false,
-    depthWrite: false
+    depthWrite: false,
+    transparent: false,
+    opacity: 1
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1001;
-  mesh.userData = { baseWidth: thickness, points: pts, exportLineWidthFactor: 3 };
+  mesh.userData = {
+    baseWidth: thickness,
+    points: pts,
+    exportLineWidthFactor: 3,
+    baseRadius: R,
+    segments,
+    isMollweideBorder: true
+  };
   return mesh;
 }
 
@@ -1440,7 +1449,24 @@ function scaleMollweideSceneForExport(scale) {
       let width = obj.userData.baseWidth;
       if (obj.userData.exportLineWidthFactor) width *= obj.userData.exportLineWidthFactor;
       obj.geometry.dispose();
-      obj.geometry = buildWideLineGeometry(obj.userData.points, width);
+      if (obj.userData.isMollweideBorder) {
+        const R = obj.userData.baseRadius || 100;
+        const segments = obj.userData.segments || 1024;
+        const pts = [];
+        let prev = null;
+        const offsetR = R + width / 2;
+        for (let i = 0; i <= segments; i++) {
+          const theta = (i / segments) * 2 * Math.PI;
+          const p = new THREE.Vector3(2 * offsetR * Math.cos(theta), offsetR * Math.sin(theta), 0);
+          if (prev) {
+            pts.push(prev, p);
+          }
+          prev = p;
+        }
+        obj.geometry = buildWideLineGeometry(pts, width);
+      } else {
+        obj.geometry = buildWideLineGeometry(obj.userData.points, width);
+      }
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
       let lwFactor = scale;
       if (obj.userData.exportLineWidthFactor) lwFactor *= obj.userData.exportLineWidthFactor;
