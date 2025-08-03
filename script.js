@@ -1,7 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI, generateStellarClassFilters } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines, setConnectionLineParams } from './filters/connectionsFilter.js';
+import { createConnectionLines, mergeConnectionLines, setConnectionLineParams, buildWideLineGeometry, createWideLineMaterial } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
@@ -383,19 +383,21 @@ function createMollweideBackground(R = 100, segments = 1024) {
   return mesh;
 }
 
-function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
-  const geometry = new THREE.RingGeometry(R, R + thickness, segments);
-  geometry.scale(2, 1, 1); // turn the circular ring into an ellipse
-
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xaaaaaa,
-    side: THREE.DoubleSide,
-    depthTest: false,
-    depthWrite: false
-  });
-
+function createMollweideBorder(R = 100, thickness = 1.5, segments = 1024) {
+  const pts = [];
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    pts.push(new THREE.Vector3(2 * R * Math.cos(theta), R * Math.sin(theta), 0));
+  }
+  const segPoints = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    segPoints.push(pts[i], pts[i + 1]);
+  }
+  const geometry = buildWideLineGeometry(segPoints, thickness);
+  const material = createWideLineMaterial(0xaaaaaa);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1001;
+  mesh.userData = { baseWidth: thickness, points: segPoints };
   return mesh;
 }
 
@@ -1423,10 +1425,51 @@ async function updateMollweideView() {
 }
 window.updateMollweideView = updateMollweideView;
 
+function scaleMollweideSceneForExport(scale) {
+  const pixelRatio = mollweideMap.renderer?.getPixelRatio() || window.devicePixelRatio || 1;
+  if (mollweideMap.points && mollweideMap.points.material.uniforms.cameraZoom) {
+    mollweideMap.points.material.uniforms.cameraZoom.value *= scale * pixelRatio;
+  }
+  mollweideMap.scene.traverse(obj => {
+    if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
+      obj.geometry.dispose();
+      obj.geometry = buildWideLineGeometry(obj.userData.points, (obj.userData.baseWidth * pixelRatio) / scale);
+    } else if (obj.userData && obj.userData.baseDashSize !== undefined && obj.material && obj.material.dashSize !== undefined) {
+      obj.material.dashSize = (obj.userData.baseDashSize * pixelRatio) / scale;
+      if (obj.userData.baseGapSize !== undefined && obj.material.gapSize !== undefined) {
+        obj.material.gapSize = (obj.userData.baseGapSize * pixelRatio) / scale;
+      }
+    } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
+      obj.material.linewidth = (obj.userData.baseLineWidth * pixelRatio) / scale;
+    }
+  });
+}
+
+function restoreMollweideScene(scale) {
+  const pixelRatio = mollweideMap.renderer?.getPixelRatio() || window.devicePixelRatio || 1;
+  if (mollweideMap.points && mollweideMap.points.material.uniforms.cameraZoom) {
+    mollweideMap.points.material.uniforms.cameraZoom.value /= scale * pixelRatio;
+  }
+  mollweideMap.scene.traverse(obj => {
+    if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
+      obj.geometry.dispose();
+      obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth);
+    } else if (obj.userData && obj.userData.baseDashSize !== undefined && obj.material && obj.material.dashSize !== undefined) {
+      obj.material.dashSize = obj.userData.baseDashSize;
+      if (obj.userData.baseGapSize !== undefined && obj.material.gapSize !== undefined) {
+        obj.material.gapSize = obj.userData.baseGapSize;
+      }
+    } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
+      obj.material.linewidth = obj.userData.baseLineWidth;
+    }
+  });
+}
+
 function exportMollweideMap(format = 'png', rect = null) {
   const baseWidth = mollweideMap.renderer.domElement.width;
   const baseHeight = mollweideMap.renderer.domElement.height;
-  const scale = Math.max(1, 3840 / baseWidth, 2160 / baseHeight);
+  const scale = Math.max(1, 7680 / baseWidth, 4320 / baseHeight);
+  scaleMollweideSceneForExport(scale);
   const exportWidth = Math.round(baseWidth * scale);
   const exportHeight = Math.round(baseHeight * scale);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1484,6 +1527,7 @@ function exportMollweideMap(format = 'png', rect = null) {
       );
     }
   }
+  restoreMollweideScene(scale);
   exportRenderer.dispose();
   if (format === 'pdf') {
     const imgData = finalCanvas.toDataURL('image/png');

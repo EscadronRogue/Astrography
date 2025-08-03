@@ -4,7 +4,7 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/thr
 import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 
 // Tunable parameters for the connections lines
-let connectionMaxWidth = 5;
+let connectionMaxWidth = 8;
 let connectionFadePower = 1.0;
 
 export function setConnectionLineParams(maxWidth, fadePower) {
@@ -13,7 +13,7 @@ export function setConnectionLineParams(maxWidth, fadePower) {
 }
 
 // Helper material and geometry builders for wide fading lines on the Mollweide map
-function createWideLineMaterial(color) {
+export function createWideLineMaterial(color) {
   return new THREE.ShaderMaterial({
     uniforms: {
       color: { value: new THREE.Color(color) },
@@ -50,7 +50,7 @@ function createWideLineMaterial(color) {
   });
 }
 
-function buildWideLineGeometry(points, width) {
+export function buildWideLineGeometry(points, width) {
   const vertices = [];
   const sides = [];
   const along = [];
@@ -300,6 +300,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         mat.uniforms.fadePower.value = connectionFadePower;
         const mesh = new THREE.Mesh(geom, mat);
         mesh.renderOrder = 3;
+        mesh.userData = { baseWidth: width, points: pts };
         lines.push(mesh);
       });
       return;
@@ -332,6 +333,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       linewidth: lineThickness
     });
     const line = new THREE.Line(geometryLine, materialLine);
+    line.userData = { baseLineWidth: lineThickness };
     if (mapType === 'Globe') {
       line.renderOrder = 1;
     } else if (mapType === 'Mollweide') {
