@@ -408,7 +408,7 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
   mesh.userData = {
     baseWidth: thickness,
     points: pts,
-    exportLineWidthFactor: 2.5,
+    exportLineWidthFactor: 1.25,
     baseRadius: R,
     segments,
     isMollweideBorder: true
