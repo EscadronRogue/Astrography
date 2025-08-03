@@ -1,7 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI, generateStellarClassFilters } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines, setConnectionLineParams, buildWideLineGeometry } from './filters/connectionsFilter.js';
+import { createConnectionLines, mergeConnectionLines, setConnectionLineParams, buildWideLineGeometry, createWideLineMaterial } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
@@ -384,22 +384,21 @@ function createMollweideBackground(R = 100, segments = 1024) {
 }
 
 function createMollweideBorder(R = 100, thickness = 1.5, segments = 1024) {
-  const points = [];
+  const pts = [];
   for (let i = 0; i <= segments; i++) {
     const theta = (i / segments) * 2 * Math.PI;
-    points.push(new THREE.Vector3(2 * R * Math.cos(theta), R * Math.sin(theta), 0));
+    pts.push(new THREE.Vector3(2 * R * Math.cos(theta), R * Math.sin(theta), 0));
   }
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({
-    color: 0xaaaaaa,
-    linewidth: thickness,
-    depthTest: false,
-    depthWrite: false
-  });
-  const line = new THREE.LineLoop(geometry, material);
-  line.renderOrder = 1001;
-  line.userData = { baseLineWidth: thickness };
-  return line;
+  const segPoints = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    segPoints.push(pts[i], pts[i + 1]);
+  }
+  const geometry = buildWideLineGeometry(segPoints, thickness);
+  const material = createWideLineMaterial(0xaaaaaa);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 1001;
+  mesh.userData = { baseWidth: thickness, points: segPoints };
+  return mesh;
 }
 
 function createMollweideMask(R = 100, segments = 1024) {
@@ -1427,25 +1426,29 @@ async function updateMollweideView() {
 window.updateMollweideView = updateMollweideView;
 
 function scaleMollweideSceneForExport(scale) {
+  const pixelRatio = mollweideMap.renderer?.getPixelRatio() || window.devicePixelRatio || 1;
   if (mollweideMap.points && mollweideMap.points.material.uniforms.cameraZoom) {
-    mollweideMap.points.material.uniforms.cameraZoom.value *= scale;
+    mollweideMap.points.material.uniforms.cameraZoom.value *= scale * pixelRatio;
   }
   mollweideMap.scene.traverse(obj => {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
       obj.geometry.dispose();
-      obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth / scale);
+      obj.geometry = buildWideLineGeometry(obj.userData.points, (obj.userData.baseWidth * pixelRatio) / scale);
     } else if (obj.userData && obj.userData.baseDashSize !== undefined && obj.material && obj.material.dashSize !== undefined) {
-      obj.material.dashSize = obj.userData.baseDashSize / scale;
+      obj.material.dashSize = (obj.userData.baseDashSize * pixelRatio) / scale;
       if (obj.userData.baseGapSize !== undefined && obj.material.gapSize !== undefined) {
-        obj.material.gapSize = obj.userData.baseGapSize / scale;
+        obj.material.gapSize = (obj.userData.baseGapSize * pixelRatio) / scale;
       }
+    } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
+      obj.material.linewidth = (obj.userData.baseLineWidth * pixelRatio) / scale;
     }
   });
 }
 
 function restoreMollweideScene(scale) {
+  const pixelRatio = mollweideMap.renderer?.getPixelRatio() || window.devicePixelRatio || 1;
   if (mollweideMap.points && mollweideMap.points.material.uniforms.cameraZoom) {
-    mollweideMap.points.material.uniforms.cameraZoom.value /= scale;
+    mollweideMap.points.material.uniforms.cameraZoom.value /= scale * pixelRatio;
   }
   mollweideMap.scene.traverse(obj => {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
@@ -1456,6 +1459,8 @@ function restoreMollweideScene(scale) {
       if (obj.userData.baseGapSize !== undefined && obj.material.gapSize !== undefined) {
         obj.material.gapSize = obj.userData.baseGapSize;
       }
+    } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
+      obj.material.linewidth = obj.userData.baseLineWidth;
     }
   });
 }
