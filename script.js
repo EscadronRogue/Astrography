@@ -384,21 +384,19 @@ function createMollweideBackground(R = 100, segments = 1024) {
   return mesh;
 }
 
-function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
-  const geometry = new THREE.RingGeometry(R, R + thickness, segments);
-  geometry.scale(2, 1, 1); // turn the circular ring into an ellipse
-
-  const material = new THREE.MeshBasicMaterial({
+function createMollweideBorder(R = 100, segments = 1024) {
+  const curve = new THREE.EllipseCurve(0, 0, 2 * R, R, 0, 2 * Math.PI, false, 0);
+  const points = curve.getPoints(segments);
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({
     color: 0xaaaaaa,
-    side: THREE.DoubleSide,
     depthTest: false,
-    depthWrite: false,
-    transparent: true
+    depthWrite: false
   });
-
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.renderOrder = 1001;
-  return mesh;
+  const line = new THREE.LineLoop(geometry, material);
+  line.renderOrder = 1001;
+  line.raycast = () => {};
+  return line;
 }
 
 function createMollweideMask(R = 100, segments = 1024) {
