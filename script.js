@@ -123,6 +123,7 @@ let exportPdfBtn = null;
 let exportStart = null;
 let exportCurrentRect = null;
 let isSelecting = false;
+let exportResSelect = null;
 
 const ROTATE_SENSITIVITY = 0.3;
 
@@ -391,7 +392,8 @@ function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
     color: 0xaaaaaa,
     side: THREE.DoubleSide,
     depthTest: false,
-    depthWrite: false
+    depthWrite: false,
+    transparent: true
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -1426,7 +1428,10 @@ window.updateMollweideView = updateMollweideView;
 function exportMollweideMap(format = 'png', rect = null) {
   const baseWidth = mollweideMap.renderer.domElement.width;
   const baseHeight = mollweideMap.renderer.domElement.height;
-  const scale = Math.max(1, 3840 / baseWidth, 2160 / baseHeight);
+  const factor = exportResSelect ? parseInt(exportResSelect.value, 10) : 1;
+  const targetWidth = 3840 * factor;
+  const targetHeight = 2160 * factor;
+  const scale = Math.max(1, targetWidth / baseWidth, targetHeight / baseHeight);
   const exportWidth = Math.round(baseWidth * scale);
   const exportHeight = Math.round(baseHeight * scale);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1569,7 +1574,8 @@ function setupExportControls() {
   exportPdfBtn = document.getElementById('export-pdf');
   exportOverlay = document.getElementById('export-selection-overlay');
   exportRectElem = document.getElementById('export-selection-rect');
-  if (!btn || !exportOverlay || !exportRectElem || !exportPngBtn || !exportPdfBtn) return;
+  exportResSelect = document.getElementById('export-resolution');
+  if (!btn || !exportOverlay || !exportRectElem || !exportPngBtn || !exportPdfBtn || !exportResSelect) return;
 
   exportPngBtn.addEventListener('click', () => {
     if (exportCurrentRect) exportMollweideMap('png', exportCurrentRect);
