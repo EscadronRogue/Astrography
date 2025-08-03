@@ -127,8 +127,14 @@ export function createConstellationBoundariesForMollweide(opacity = 0.4) {
   const lineSegs = new THREE.LineSegments(geometry, material);
   lineSegs.renderOrder = 1;
   lineSegs.computeLineDistances();
-  lineSegs.userData.boundaryData = boundaryData;
-  lineSegs.userData.R = R;
+  lineSegs.userData = {
+    boundaryData,
+    R,
+    baseLineWidth: 1,
+    baseOpacity: opacity,
+    exportLineWidthFactor: 1.5,
+    exportOpacityFactor: 2
+  };
   updateConstellationBoundariesForMollweide(lineSegs);
   return [lineSegs];
 }

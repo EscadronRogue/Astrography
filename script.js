@@ -398,6 +398,7 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
   });
   const line = new THREE.LineLoop(geometry, material);
   line.renderOrder = 1001;
+  line.userData = { baseLineWidth: thickness, exportLineWidthFactor: 2 };
   return line;
 }
 
@@ -1432,9 +1433,15 @@ function scaleMollweideSceneForExport(scale) {
   mollweideMap.scene.traverse(obj => {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
       obj.geometry.dispose();
-      obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth / scale);
+      obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth);
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
-      obj.material.linewidth = obj.userData.baseLineWidth / scale;
+      let lwFactor = scale;
+      if (obj.userData.exportLineWidthFactor) lwFactor *= obj.userData.exportLineWidthFactor;
+      obj.material.linewidth = obj.userData.baseLineWidth * lwFactor;
+      if (obj.userData.baseOpacity !== undefined) {
+        const opFactor = obj.userData.exportOpacityFactor || 1;
+        obj.material.opacity = Math.min(1, obj.userData.baseOpacity * opFactor);
+      }
     }
   });
 }
@@ -1449,6 +1456,7 @@ function restoreMollweideScene(scale) {
       obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth);
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
       obj.material.linewidth = obj.userData.baseLineWidth;
+      if (obj.userData.baseOpacity !== undefined) obj.material.opacity = obj.userData.baseOpacity;
     }
   });
 }
