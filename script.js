@@ -384,21 +384,38 @@ function createMollweideBackground(R = 100, segments = 1024) {
 }
 
 function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
-  const points = [];
+  const pts = [];
+  let prev = null;
   for (let i = 0; i <= segments; i++) {
     const theta = (i / segments) * 2 * Math.PI;
-    points.push(new THREE.Vector3(2 * R * Math.cos(theta), R * Math.sin(theta), 0));
+    const p = new THREE.Vector3(2 * R * Math.cos(theta), R * Math.sin(theta), 0);
+    if (prev) {
+      pts.push(prev, p);
+    }
+    prev = p;
   }
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({
-    color: 0xaaaaaa,
-    linewidth: thickness,
+  const geometry = buildWideLineGeometry(pts, thickness);
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xbbbbbb,
+    side: THREE.DoubleSide,
     depthTest: false,
-    depthWrite: false
+    depthWrite: false,
+    transparent: true,
+    opacity: 1
   });
-  const line = new THREE.LineLoop(geometry, material);
-  line.renderOrder = 1001;
-  return line;
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 1001;
+  mesh.userData = {
+    baseWidth: thickness,
+    points: pts,
+    exportLineWidthFactor: 0.85,
+    baseRadius: R,
+    segments,
+    isMollweideBorder: true,
+    baseColor: 0xbbbbbb,
+    exportColor: 0x888888
+  };
+  return mesh;
 }
 
 function createMollweideMask(R = 100, segments = 1024) {
@@ -1431,10 +1448,38 @@ function scaleMollweideSceneForExport(scale) {
   }
   mollweideMap.scene.traverse(obj => {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
+      let width = obj.userData.baseWidth;
+      if (obj.userData.exportLineWidthFactor) width *= obj.userData.exportLineWidthFactor;
       obj.geometry.dispose();
-      obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth / scale);
+      if (obj.userData.isMollweideBorder) {
+        const R = obj.userData.baseRadius || 100;
+        const segments = obj.userData.segments || 1024;
+        const pts = [];
+        let prev = null;
+        const offsetR = R + width / 2;
+        for (let i = 0; i <= segments; i++) {
+          const theta = (i / segments) * 2 * Math.PI;
+          const p = new THREE.Vector3(2 * offsetR * Math.cos(theta), offsetR * Math.sin(theta), 0);
+          if (prev) {
+            pts.push(prev, p);
+          }
+          prev = p;
+        }
+        obj.geometry = buildWideLineGeometry(pts, width);
+      } else {
+        obj.geometry = buildWideLineGeometry(obj.userData.points, width);
+      }
+      if (obj.userData.exportColor !== undefined && obj.material && obj.material.color) {
+        obj.material.color.setHex(obj.userData.exportColor);
+      }
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
-      obj.material.linewidth = obj.userData.baseLineWidth / scale;
+      let lwFactor = scale;
+      if (obj.userData.exportLineWidthFactor) lwFactor *= obj.userData.exportLineWidthFactor;
+      obj.material.linewidth = obj.userData.baseLineWidth * lwFactor;
+      if (obj.userData.baseOpacity !== undefined) {
+        const opFactor = obj.userData.exportOpacityFactor || 1;
+        obj.material.opacity = Math.min(1, obj.userData.baseOpacity * opFactor);
+      }
     }
   });
 }
@@ -1447,8 +1492,12 @@ function restoreMollweideScene(scale) {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
       obj.geometry.dispose();
       obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth);
+      if (obj.userData.baseColor !== undefined && obj.material && obj.material.color) {
+        obj.material.color.setHex(obj.userData.baseColor);
+      }
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
       obj.material.linewidth = obj.userData.baseLineWidth;
+      if (obj.userData.baseOpacity !== undefined) obj.material.opacity = obj.userData.baseOpacity;
     }
   });
 }
