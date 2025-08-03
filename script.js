@@ -400,7 +400,7 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
     side: THREE.DoubleSide,
     depthTest: false,
     depthWrite: false,
-    transparent: false,
+    transparent: true,
     opacity: 1
   });
   const mesh = new THREE.Mesh(geometry, material);
@@ -408,7 +408,7 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
   mesh.userData = {
     baseWidth: thickness,
     points: pts,
-    exportLineWidthFactor: 3,
+    exportLineWidthFactor: 5,
     baseRadius: R,
     segments,
     isMollweideBorder: true
