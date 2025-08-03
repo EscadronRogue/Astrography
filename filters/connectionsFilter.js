@@ -50,7 +50,7 @@ function createWideLineMaterial(color) {
   });
 }
 
-function buildWideLineGeometry(points, width) {
+export function buildWideLineGeometry(points, width) {
   const vertices = [];
   const sides = [];
   const along = [];
@@ -300,6 +300,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         mat.uniforms.fadePower.value = connectionFadePower;
         const mesh = new THREE.Mesh(geom, mat);
         mesh.renderOrder = 3;
+        mesh.userData = { baseWidth: width, points: pts };
         lines.push(mesh);
       });
       return;
@@ -332,6 +333,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       linewidth: lineThickness
     });
     const line = new THREE.Line(geometryLine, materialLine);
+    line.userData = { baseLineWidth: lineThickness };
     if (mapType === 'Globe') {
       line.renderOrder = 1;
     } else if (mapType === 'Mollweide') {
