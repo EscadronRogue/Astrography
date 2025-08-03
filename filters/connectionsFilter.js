@@ -1,7 +1,8 @@
 // filters/connectionsFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
+import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0, vectorToRaDecRad, radToMollweide } from '../utils/geometryUtils.js';
+import { interpolateColor } from '../utils.js';
 
 // Tunable parameters for the connections lines
 let connectionMaxWidth = 5;
@@ -340,6 +341,62 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     lines.push(line);
   });
   return lines;
+}
+
+export function createConnectionDistanceLabels(pairs, labelSize = 1, opacity = 1) {
+  if (!pairs || pairs.length === 0) return [];
+  const labels = [];
+  const baseFontSize = 72;
+  const scaleFactor = THREE.MathUtils.clamp(
+    THREE.MathUtils.mapLinear(labelSize, 0.1, 8, 0.1, 5),
+    0.1,
+    5
+  );
+  pairs.forEach(pair => {
+    const { starA, starB, distance } = pair;
+    if (!starA.spherePosition || !starB.spherePosition) return;
+    const midSphere = starA.spherePosition.clone().add(starB.spherePosition).normalize().multiplyScalar(100);
+    const { ra, dec } = vectorToRaDecRad(midSphere, 100);
+    const midMoll = radToMollweide(ra, dec, 100, getMollweideLambda0());
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const text = formatDistance(distance);
+    const fontSize = baseFontSize * scaleFactor;
+    ctx.font = `${fontSize}px Oswald`;
+    const metrics = ctx.measureText(text);
+    const paddingX = 10;
+    const paddingY = 5;
+    canvas.width = metrics.width + paddingX * 2;
+    canvas.height = fontSize + paddingY * 2;
+    ctx.font = `${fontSize}px Oswald`;
+    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
+    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
+    const gradientColor = c1.clone().lerp(c2, 0.5);
+    const labelColor = '#' + interpolateColor('#ffffff', '#' + gradientColor.getHexString(), 0.5).toString(16).padStart(6, '0');
+    ctx.fillStyle = labelColor;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, paddingX, canvas.height / 2);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
+    const sprite = new THREE.Sprite(material);
+    sprite.scale.set(
+      (canvas.width / 100) * scaleFactor,
+      (canvas.height / 100) * scaleFactor,
+      1
+    );
+    sprite.position.copy(midMoll);
+    sprite.renderOrder = 5;
+    labels.push(sprite);
+  });
+  return labels;
+}
+
+function formatDistance(d) {
+  const rounded = Math.round(d * 10) / 10;
+  return `${(rounded % 1 === 0 ? rounded.toFixed(0) : rounded.toFixed(1))} ly`;
 }
 
 /**
