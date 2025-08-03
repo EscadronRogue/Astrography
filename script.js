@@ -408,10 +408,12 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
   mesh.userData = {
     baseWidth: thickness,
     points: pts,
-    exportLineWidthFactor: 1.25,
+    exportLineWidthFactor: 0.85,
     baseRadius: R,
     segments,
-    isMollweideBorder: true
+    isMollweideBorder: true,
+    baseColor: 0xbbbbbb,
+    exportColor: 0x888888
   };
   return mesh;
 }
@@ -1467,6 +1469,9 @@ function scaleMollweideSceneForExport(scale) {
       } else {
         obj.geometry = buildWideLineGeometry(obj.userData.points, width);
       }
+      if (obj.userData.exportColor !== undefined && obj.material && obj.material.color) {
+        obj.material.color.setHex(obj.userData.exportColor);
+      }
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
       let lwFactor = scale;
       if (obj.userData.exportLineWidthFactor) lwFactor *= obj.userData.exportLineWidthFactor;
@@ -1487,6 +1492,9 @@ function restoreMollweideScene(scale) {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
       obj.geometry.dispose();
       obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth);
+      if (obj.userData.baseColor !== undefined && obj.material && obj.material.color) {
+        obj.material.color.setHex(obj.userData.baseColor);
+      }
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
       obj.material.linewidth = obj.userData.baseLineWidth;
       if (obj.userData.baseOpacity !== undefined) obj.material.opacity = obj.userData.baseOpacity;
