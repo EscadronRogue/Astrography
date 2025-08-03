@@ -398,7 +398,7 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
   });
   const line = new THREE.LineLoop(geometry, material);
   line.renderOrder = 1001;
-  line.userData = { baseLineWidth: thickness, exportLineWidthFactor: 2 };
+  line.userData = { baseLineWidth: thickness, exportLineWidthFactor: 3 };
   return line;
 }
 
