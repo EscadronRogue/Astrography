@@ -1,7 +1,7 @@
 // filters/connectionsFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0, vectorToRaDecRad, radToMollweide } from '../utils/geometryUtils.js';
+import { splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 import { interpolateColor } from '../utils.js';
 
 // Tunable parameters for the connections lines
@@ -355,9 +355,37 @@ export function createConnectionDistanceLabels(pairs, labelSize = 1, opacity = 1
   pairs.forEach(pair => {
     const { starA, starB, distance } = pair;
     if (!starA.spherePosition || !starB.spherePosition) return;
-    const midSphere = starA.spherePosition.clone().add(starB.spherePosition).normalize().multiplyScalar(100);
-    const { ra, dec } = vectorToRaDecRad(midSphere, 100);
-    const midMoll = radToMollweide(ra, dec, 100, getMollweideLambda0());
+
+    // Generate the projected great-circle path and split at map edges
+    const gcPts = greatCircleToMollweide(
+      starA.spherePosition,
+      starB.spherePosition,
+      100,
+      64,
+      getMollweideLambda0()
+    );
+    const segs = [];
+    for (let i = 0; i < gcPts.length - 1; i++) {
+      const parts = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
+      parts.forEach(p => segs.push(p));
+    }
+    if (segs.length === 0) return;
+
+    // Compute total length and find midpoint along the curved path
+    const lengths = segs.map(([s, e]) => s.distanceTo(e));
+    const totalLen = lengths.reduce((a, b) => a + b, 0);
+    let midPoint = segs[0][0].clone();
+    let acc = 0;
+    const halfLen = totalLen / 2;
+    for (let i = 0; i < segs.length; i++) {
+      const len = lengths[i];
+      if (acc + len >= halfLen) {
+        const t = (halfLen - acc) / len;
+        midPoint = segs[i][0].clone().lerp(segs[i][1], t);
+        break;
+      }
+      acc += len;
+    }
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -373,7 +401,9 @@ export function createConnectionDistanceLabels(pairs, labelSize = 1, opacity = 1
     const c1 = new THREE.Color(starA.displayColor || '#ffffff');
     const c2 = new THREE.Color(starB.displayColor || '#ffffff');
     const gradientColor = c1.clone().lerp(c2, 0.5);
-    const labelColor = '#' + interpolateColor('#ffffff', '#' + gradientColor.getHexString(), 0.5).toString(16).padStart(6, '0');
+    const labelColor = '#' + interpolateColor('#ffffff', '#' + gradientColor.getHexString(), 0.5)
+      .toString(16)
+      .padStart(6, '0');
     ctx.fillStyle = labelColor;
     ctx.textBaseline = 'middle';
     ctx.fillText(text, paddingX, canvas.height / 2);
@@ -387,7 +417,7 @@ export function createConnectionDistanceLabels(pairs, labelSize = 1, opacity = 1
       (canvas.height / 100) * scaleFactor,
       1
     );
-    sprite.position.copy(midMoll);
+    sprite.position.copy(midPoint);
     sprite.renderOrder = 5;
     labels.push(sprite);
   });
