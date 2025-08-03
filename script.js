@@ -383,7 +383,7 @@ function createMollweideBackground(R = 100, segments = 1024) {
   return mesh;
 }
 
-function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
+function createMollweideBorder(R = 100, thickness = 1.5, segments = 1024) {
   const points = [];
   for (let i = 0; i <= segments; i++) {
     const theta = (i / segments) * 2 * Math.PI;
@@ -398,6 +398,7 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
   });
   const line = new THREE.LineLoop(geometry, material);
   line.renderOrder = 1001;
+  line.userData = { baseLineWidth: thickness };
   return line;
 }
 
@@ -1433,8 +1434,11 @@ function scaleMollweideSceneForExport(scale) {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
       obj.geometry.dispose();
       obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth / scale);
-    } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
-      obj.material.linewidth = obj.userData.baseLineWidth / scale;
+    } else if (obj.userData && obj.userData.baseDashSize !== undefined && obj.material && obj.material.dashSize !== undefined) {
+      obj.material.dashSize = obj.userData.baseDashSize / scale;
+      if (obj.userData.baseGapSize !== undefined && obj.material.gapSize !== undefined) {
+        obj.material.gapSize = obj.userData.baseGapSize / scale;
+      }
     }
   });
 }
@@ -1447,8 +1451,11 @@ function restoreMollweideScene(scale) {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
       obj.geometry.dispose();
       obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth);
-    } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
-      obj.material.linewidth = obj.userData.baseLineWidth;
+    } else if (obj.userData && obj.userData.baseDashSize !== undefined && obj.material && obj.material.dashSize !== undefined) {
+      obj.material.dashSize = obj.userData.baseDashSize;
+      if (obj.userData.baseGapSize !== undefined && obj.material.gapSize !== undefined) {
+        obj.material.gapSize = obj.userData.baseGapSize;
+      }
     }
   });
 }
