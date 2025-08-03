@@ -1,7 +1,7 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI, generateStellarClassFilters } from './filters/index.js';
-import { createConnectionLines, mergeConnectionLines, setConnectionLineParams } from './filters/connectionsFilter.js';
+import { createConnectionLines, mergeConnectionLines, setConnectionLineParams, createConnectionDistanceLabels } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
@@ -521,6 +521,7 @@ async function buildAndApplyFilters() {
     connectionOpacity,
     connectionWidth,
     connectionFade,
+    connectionLabelSize,
     constellationLineOpacity,
     constellationNameOpacity,
     planeOpacity,
@@ -578,6 +579,9 @@ async function buildAndApplyFilters() {
   trueCoordinatesMap.connectionOpacity = connectionOpacity / 100;
   globeMap.connectionOpacity = connectionOpacity / 100;
   mollweideMap.connectionOpacity = connectionOpacity / 100;
+  trueCoordinatesMap.connectionLabelSize = connectionLabelSize;
+  globeMap.connectionLabelSize = connectionLabelSize;
+  mollweideMap.connectionLabelSize = connectionLabelSize;
 
   trueCoordinatesMap.updateMap(currentFilteredStars, currentConnections);
   trueCoordinatesMap.labelManager.refreshLabels(currentFilteredStars);
@@ -909,6 +913,7 @@ class MapManager {
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
     this.starOpacity = 1.0;
     this.connectionOpacity = 0.5;
+    this.connectionLabelSize = 1;
     this.labelOpacity = 1.0;
     this.points = null;
     this.instancedMesh = null;
@@ -1124,6 +1129,8 @@ class MapManager {
     } else if (this.mapType === 'Mollweide') {
       const linesArray = createConnectionLines(stars, connectionObjs, 'Mollweide', opacity);
       linesArray.forEach(line => this.connectionGroup.add(line));
+      const labelArray = createConnectionDistanceLabels(connectionObjs, this.connectionLabelSize, opacity);
+      labelArray.forEach(lbl => this.connectionGroup.add(lbl));
     } else {
       const merged = mergeConnectionLines(connectionObjs, this.mapType, opacity);
       this.connectionGroup.add(merged);
