@@ -384,19 +384,21 @@ function createMollweideBackground(R = 100, segments = 1024) {
   return mesh;
 }
 
-function createMollweideBorder(R = 100, segments = 1024) {
-  const curve = new THREE.EllipseCurve(0, 0, 2 * R, R, 0, 2 * Math.PI, false, 0);
-  const points = curve.getPoints(segments);
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({
+function createMollweideBorder(R = 100, thickness = 1.5, segments = 1024) {
+  const geometry = new THREE.RingGeometry(R - thickness, R + thickness, segments);
+  geometry.scale(2, 1, 1); // turn the circular ring into an ellipse
+
+  const material = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa,
+    side: THREE.DoubleSide,
     depthTest: false,
     depthWrite: false
   });
-  const line = new THREE.LineLoop(geometry, material);
-  line.renderOrder = 1001;
-  line.raycast = () => {};
-  return line;
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 1001;
+  mesh.raycast = () => {};
+  return mesh;
 }
 
 function createMollweideMask(R = 100, segments = 1024) {
@@ -1433,7 +1435,7 @@ function exportMollweideMap(format = 'png', rect = null) {
   const exportWidth = Math.round(baseWidth * scale);
   const exportHeight = Math.round(baseHeight * scale);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
-  exportRenderer.setPixelRatio(1);
+  exportRenderer.setPixelRatio(mollweideMap.renderer.getPixelRatio());
   let cropX = 0;
   let cropY = 0;
   let cropW = baseWidth;
@@ -1452,8 +1454,23 @@ function exportMollweideMap(format = 'png', rect = null) {
   finalCanvas.width = exportCropW;
   finalCanvas.height = exportCropH;
   const ctx = finalCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
   const maxSize = exportRenderer.capabilities.maxTextureSize;
   const tile = Math.min(Math.floor(maxSize / scale), 8192);
+
+  // Temporarily scale star and line sizes for faithful export
+  let originalZoom = null;
+  if (mollweideMap.points && mollweideMap.points.material.uniforms && mollweideMap.points.material.uniforms.cameraZoom) {
+    originalZoom = mollweideMap.points.material.uniforms.cameraZoom.value;
+    mollweideMap.points.material.uniforms.cameraZoom.value = originalZoom * scale;
+  }
+  const lineMats = [];
+  mollweideMap.scene.traverse(obj => {
+    if (obj.isLine && obj.material && obj.material.linewidth !== undefined) {
+      lineMats.push({ mat: obj.material, width: obj.material.linewidth });
+      obj.material.linewidth *= scale;
+    }
+  });
   for (let y = cropY; y < cropY + cropH; y += tile) {
     for (let x = cropX; x < cropX + cropW; x += tile) {
       const tileW = Math.min(tile, cropW - (x - cropX));
@@ -1488,6 +1505,12 @@ function exportMollweideMap(format = 'png', rect = null) {
     }
   }
   exportRenderer.dispose();
+  if (originalZoom !== null) {
+    mollweideMap.points.material.uniforms.cameraZoom.value = originalZoom;
+  }
+  lineMats.forEach(({ mat, width }) => {
+    mat.linewidth = width;
+  });
   if (format === 'pdf') {
     const imgData = finalCanvas.toDataURL('image/png');
     const { jsPDF } = window.jspdf;
