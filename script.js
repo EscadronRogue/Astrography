@@ -384,22 +384,27 @@ function createMollweideBackground(R = 100, segments = 1024) {
 }
 
 function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
-  const points = [];
+  const pts = [];
+  let prev = null;
   for (let i = 0; i <= segments; i++) {
     const theta = (i / segments) * 2 * Math.PI;
-    points.push(new THREE.Vector3(2 * R * Math.cos(theta), R * Math.sin(theta), 0));
+    const p = new THREE.Vector3(2 * R * Math.cos(theta), R * Math.sin(theta), 0);
+    if (prev) {
+      pts.push(prev, p);
+    }
+    prev = p;
   }
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({
+  const geometry = buildWideLineGeometry(pts, thickness);
+  const material = new THREE.MeshBasicMaterial({
     color: 0xaaaaaa,
-    linewidth: thickness,
+    side: THREE.DoubleSide,
     depthTest: false,
     depthWrite: false
   });
-  const line = new THREE.LineLoop(geometry, material);
-  line.renderOrder = 1001;
-  line.userData = { baseLineWidth: thickness, exportLineWidthFactor: 6 };
-  return line;
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 1001;
+  mesh.userData = { baseWidth: thickness, points: pts, exportLineWidthFactor: 8 };
+  return mesh;
 }
 
 function createMollweideMask(R = 100, segments = 1024) {
@@ -1432,8 +1437,10 @@ function scaleMollweideSceneForExport(scale) {
   }
   mollweideMap.scene.traverse(obj => {
     if (obj.userData && obj.userData.baseWidth && obj.userData.points) {
+      let width = obj.userData.baseWidth;
+      if (obj.userData.exportLineWidthFactor) width *= obj.userData.exportLineWidthFactor;
       obj.geometry.dispose();
-      obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth);
+      obj.geometry = buildWideLineGeometry(obj.userData.points, width);
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
       let lwFactor = scale;
       if (obj.userData.exportLineWidthFactor) lwFactor *= obj.userData.exportLineWidthFactor;
