@@ -383,20 +383,22 @@ function createMollweideBackground(R = 100, segments = 1024) {
   return mesh;
 }
 
-function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
-  const geometry = new THREE.RingGeometry(R, R + thickness, segments);
-  geometry.scale(2, 1, 1); // turn the circular ring into an ellipse
-
-  const material = new THREE.MeshBasicMaterial({
+function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
+  const points = [];
+  for (let i = 0; i <= segments; i++) {
+    const theta = (i / segments) * 2 * Math.PI;
+    points.push(new THREE.Vector3(2 * R * Math.cos(theta), R * Math.sin(theta), 0));
+  }
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({
     color: 0xaaaaaa,
-    side: THREE.DoubleSide,
+    linewidth: thickness,
     depthTest: false,
     depthWrite: false
   });
-
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.renderOrder = 1001;
-  return mesh;
+  const line = new THREE.LineLoop(geometry, material);
+  line.renderOrder = 1001;
+  return line;
 }
 
 function createMollweideMask(R = 100, segments = 1024) {
@@ -1426,7 +1428,7 @@ window.updateMollweideView = updateMollweideView;
 function exportMollweideMap(format = 'png', rect = null) {
   const baseWidth = mollweideMap.renderer.domElement.width;
   const baseHeight = mollweideMap.renderer.domElement.height;
-  const scale = Math.max(1, 3840 / baseWidth, 2160 / baseHeight);
+  const scale = Math.max(1, 7680 / baseWidth, 4320 / baseHeight);
   const exportWidth = Math.round(baseWidth * scale);
   const exportHeight = Math.round(baseHeight * scale);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
