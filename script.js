@@ -403,7 +403,7 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1001;
-  mesh.userData = { baseWidth: thickness, points: pts, exportLineWidthFactor: 8 };
+  mesh.userData = { baseWidth: thickness, points: pts, exportLineWidthFactor: 3 };
   return mesh;
 }
 
