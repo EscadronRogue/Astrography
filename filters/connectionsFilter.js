@@ -343,7 +343,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         const prev = pathPts[Math.max(idx - 1, 0)];
         const next = pathPts[Math.min(idx + 1, pathPts.length - 1)];
         const tangent = next.clone().sub(prev);
-        let rot = Math.atan2(tangent.y, tangent.x) + Math.PI / 2;
+        let rot = Math.atan2(tangent.y, tangent.x);
         if (rot > Math.PI / 2) rot -= Math.PI;
         if (rot < -Math.PI / 2) rot += Math.PI;
 
@@ -359,7 +359,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         canvas.width = metrics.width + padX * 2;
         canvas.height = fontSize + padY * 2;
         ctx.font = `${fontSize}px Oswald`;
-        const labelColor = c1.clone().lerp(c2, 0.5).lerp(new THREE.Color('#ffffff'), 0.5);
+        const labelColor = c1.clone().lerp(c2, 0.5);
         ctx.fillStyle = `#${labelColor.getHexString()}`;
         ctx.textBaseline = 'middle';
         ctx.fillText(distanceText, padX, canvas.height / 2);
@@ -370,7 +370,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
           depthWrite: true,
           depthTest: true,
           transparent: true,
-          opacity: 1,
+          opacity,
         });
         const sprite = new THREE.Sprite(spriteMat);
         sprite.renderOrder = 5;
