@@ -96,9 +96,9 @@ export function createConstellationBoundariesForGlobe(opacity = 0.4) {
     const points = curve.getPoints(32);
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const material = new THREE.LineDashedMaterial({
-      color: 0x888888,
-      dashSize: 2,
-      gapSize: 1,
+      color: 0x3b2f2f,
+      dashSize: 3,
+      gapSize: 1.5,
       linewidth: 1,
       transparent: true,
       opacity
@@ -113,9 +113,9 @@ export function createConstellationBoundariesForGlobe(opacity = 0.4) {
 export function createConstellationBoundariesForMollweide(opacity = 0.4) {
   const R = 100;
   const material = new THREE.LineDashedMaterial({
-    color: 0x888888,
-    dashSize: 2,
-    gapSize: 1,
+    color: 0x3b2f2f,
+    dashSize: 3,
+    gapSize: 1.5,
     linewidth: 1,
     transparent: true,
     opacity

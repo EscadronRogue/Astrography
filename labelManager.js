@@ -1,7 +1,6 @@
 // labelManager.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { interpolateColor } from './utils.js';
 
 /**
  * Returns a ShaderMaterial that renders a texture double‑sided without mirroring.
@@ -59,7 +58,7 @@ export class LabelManager {
    * Creates or updates the 3D label and connecting line for a single star.
    */
   createOrUpdateLabel(star) {
-    const starColor = star.displayColor || '#888888';
+    const starColor = '#3b2f2f';
     const displayName = star.displayName || '';
 
     // Check our cache
@@ -96,7 +95,7 @@ export class LabelManager {
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      ctx.font = `${fontSize}px Oswald`;
+      ctx.font = `${fontSize}px 'IM Fell English'`;
 
       const textMetrics = ctx.measureText(displayName);
       const textWidth = textMetrics.width;
@@ -106,10 +105,11 @@ export class LabelManager {
       canvas.width = textWidth + paddingX * 2;
       canvas.height = textHeight + paddingY * 2;
 
-      // Draw text without background
-      ctx.font = `${fontSize}px Oswald`;
-      const labelColor = '#' + interpolateColor('#ffffff', starColor, 0.5).toString(16).padStart(6, '0');
-      ctx.fillStyle = labelColor;
+      // Draw parchment backdrop
+      ctx.fillStyle = '#f5e6c4';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.font = `${fontSize}px 'IM Fell English'`;
+      ctx.fillStyle = starColor;
       ctx.textBaseline = 'middle';
       ctx.fillText(displayName, paddingX, canvas.height / 2);
 
@@ -216,7 +216,7 @@ export class LabelManager {
     // Update line geometry
     const points = [starPos, labelPos];
     lineObj.geometry.setFromPoints(points);
-    lineObj.material.color.set(star.displayColor || '#888888');
+      lineObj.material.color.set(starColor);
   }
 
   /**

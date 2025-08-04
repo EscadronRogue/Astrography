@@ -38,7 +38,7 @@ export function showTooltip(x, y, star) {
       <div id="tooltip-catalogLink">
         <strong>Catalog:</strong> 
         ${star.Catalog_link 
-            ? `<a href="${star.Catalog_link}" target="_blank" style="color: #ff6f61; text-decoration: underline;">Catalog</a>` 
+            ? `<a href="${star.Catalog_link}" target="_blank" style="color: #3b2f2f; text-decoration: underline;">Catalog</a>`
             : 'N/A'}
       </div>
     `;
