@@ -850,25 +850,26 @@ function createStarTexture() {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
-  const gradient = ctx.createRadialGradient(
-    size / 2,
-    size / 2,
-    0,
-    size / 2,
-    size / 2,
-    size / 2
-  );
-  // Create a bright, opaque core that quickly fades outward so stars look like
-  // they have a luminous center with radiating light.
-  gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(0.3, 'rgba(255,255,255,0.9)');
-  gradient.addColorStop(0.6, 'rgba(255,255,255,0.4)');
-  gradient.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
+
+  ctx.translate(size / 2, size / 2);
+  ctx.strokeStyle = '#3b2f2f';
+  ctx.fillStyle = '#3b2f2f';
+  ctx.lineWidth = 2;
+
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const angle = (i * Math.PI) / 4;
+    const r = i % 2 === 0 ? size * 0.5 : size * 0.2;
+    ctx.lineTo(r * Math.cos(angle), r * Math.sin(angle));
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
   return texture;
 }
 
@@ -912,7 +913,7 @@ function createStarMaterial(texture, opacity, sizeAttenuation, cameraZoom) {
     `,
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending
+    blending: THREE.NormalBlending
   });
 }
 
@@ -1090,7 +1091,7 @@ class MapManager {
         positions[i * 3 + 1] = pos.y;
         positions[i * 3 + 2] = pos.z;
         sizes[i] = scale;
-        const color = new THREE.Color(star.displayColor || '#ffffff');
+        const color = new THREE.Color(star.displayColor || '#3b2f2f');
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;
         colors[i * 3 + 2] = color.b;
@@ -1119,7 +1120,7 @@ class MapManager {
         dummy.scale.set(scale, scale, scale);
         dummy.updateMatrix();
         this.instancedMesh.setMatrixAt(i, dummy.matrix);
-        const color = new THREE.Color(star.displayColor || '#ffffff');
+        const color = new THREE.Color(star.displayColor || '#3b2f2f');
         colors[i * 3] = color.r;
         colors[i * 3 + 1] = color.g;
         colors[i * 3 + 2] = color.b;

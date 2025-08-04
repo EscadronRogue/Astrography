@@ -2,6 +2,10 @@
 
 Astrography is a 3D visualization tool focused on performing astrography—the mapping of our local stellar environment. This tool charts stars within 20 light years of the Sun (as of March 2025) and uses density mapping to distinguish “seas” (areas with few stars) from “continents” (clusters of stars). It’s designed to help researchers, educators, and space planners understand our local space geography and assess potential future pathways for exploration and expansion.
 
+### 1600s Theme
+
+The interface now evokes a seventeenth‑century star chart. Sepia parchment backgrounds, inked eight‑point star markers and dark‑brown calligraphic labels give the visualization a vintage atlas style.
+
 ---
 
 ## Key Features ✨
@@ -16,8 +20,8 @@ Astrography is a 3D visualization tool focused on performing astrography—the m
 - **Density Mapping:**  
   Visualize regions of high and low star density to identify potential "continents" and "seas" in space.
 
-- **Interactive Exploration:**  
-  - **Custom Camera Controls:** Rotate, zoom, and pan using mouse or touch.  
+- **Interactive Exploration:**
+  - **Custom Camera Controls:** Rotate, zoom, and pan using mouse or touch.
   - **Dynamic Labels & Tooltips:** Click or hover on stars to see detailed information (e.g., star name, distance, spectral type, mass).
 
 - **Advanced Filtering:**  
@@ -50,7 +54,7 @@ Astrography is a 3D visualization tool focused on performing astrography—the m
 
 3. **Open in Browser:**
 
-   Navigate to [http://localhost:8000](http://localhost:8000) to launch Astrography.
+Navigate to [http://localhost:8000](http://localhost:8000) to launch Astrography.
 
 ---
 
@@ -76,6 +80,11 @@ Astrography is a 3D visualization tool focused on performing astrography—the m
 Astrography is free to use for any purpose. If you use Astrography in your work, please include the following attribution:
 
 > *"This work utilizes Astrography, developed by Antoine Paulet."*
+
+### Assets & Fonts
+
+- Calligraphy font: [IM Fell English](https://fonts.google.com/specimen/IM+Fell+English)
+- Parchment and decorative graphics are original vector placeholders located in the `assets/` directory.
 
 ---
 

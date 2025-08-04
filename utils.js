@@ -26,17 +26,15 @@ export function generateConstellationColors(stars) {
  * @param {number} numColors - Number of unique colors to generate.
  * @returns {Array} - Array of HEX color strings.
  */
-function generateColorPalette(numColors) {
+export function generateColorPalette(numColors) {
+  const earthTones = [
+    '#3b2f2f', '#5c4433', '#765c3d', '#8a6f47', '#a88b58',
+    '#c0a474', '#d8c19f', '#e8d9c2', '#f5e6c4'
+  ];
   const palette = [];
-  const hueStep = 360 / (numColors || 1);
-
   for (let i = 0; i < numColors; i++) {
-    const hue = i * hueStep;
-    const saturation = 70; // Percentage
-    const lightness = 50; // Percentage
-    palette.push(hslToHex(hue, saturation, lightness));
+    palette.push(earthTones[i % earthTones.length]);
   }
-
   return palette;
 }
 
@@ -49,11 +47,13 @@ function generateColorPalette(numColors) {
  */
 function hslToHex(h, s, l) {
   l /= 100;
-  const a = s * Math.min(l, 1 - l) / 100;
+  const a = (s * Math.min(l, 1 - l)) / 100;
   const f = n => {
     const k = (n + h / 30) % 12;
     const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * color).toString(16).padStart(2, '0');
+    return Math.round(255 * color)
+      .toString(16)
+      .padStart(2, '0');
   };
   return `#${f(0)}${f(8)}${f(4)}`;
 }
