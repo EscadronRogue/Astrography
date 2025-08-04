@@ -135,16 +135,17 @@ class DensityGridOverlay {
           cubeTC.position.copy(posTC);
 
           const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
+          const circleGeom = new THREE.CircleGeometry(this.gridSize / 2, 32);
           const planeMat = material.clone();
           planeMat.side = THREE.DoubleSide;
           const squareGlobe = new THREE.Mesh(planeGeom, planeMat.clone());
-          const squareMoll = new THREE.Mesh(planeGeom.clone(), planeMat.clone());
+          const circleMoll = new THREE.Mesh(circleGeom, planeMat.clone());
 
           let projectedPos;
           let ra, dec;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
-            squareMoll.position.set(0, 0, 0);
+            circleMoll.position.set(0, 0, 0);
             ra = 0; dec = 0;
           } else {
             ra = Math.atan2(-posTC.z, -posTC.x);
@@ -156,7 +157,7 @@ class DensityGridOverlay {
               -radius * Math.cos(dec) * Math.sin(ra)
             );
             const projMoll = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
-            squareMoll.position.copy(projMoll);
+            circleMoll.position.copy(projMoll);
           }
           let theta = dec;
           for (let i = 0; i < 10; i++) {
@@ -181,7 +182,7 @@ class DensityGridOverlay {
           const cell = {
             tcMesh: cubeTC,
             globeMesh: squareGlobe,
-            mollweideMesh: squareMoll,
+            mollweideMesh: circleMoll,
             tcPos: posTC,
             grid: {
               ix: Math.round(x / this.gridSize),
@@ -281,7 +282,7 @@ class DensityGridOverlay {
   drawHeatmap(lambda0 = getMollweideLambda0()) {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-    ctx.filter = 'blur(4px)';
+    ctx.filter = 'blur(8px)';
     const xScale = this.canvasWidth / 400;
     const yScale = this.canvasHeight / 200;
     this.cubesData.forEach(cell => {
@@ -300,9 +301,10 @@ class DensityGridOverlay {
       const r = Math.round(col.r * 255);
       const g = Math.round(col.g * 255);
       const b = Math.round(col.b * 255);
-      const radius = Math.max(width, height) * 0.6;
+      const radius = Math.max(width, height);
       const grd = ctx.createRadialGradient(px, py, 0, px, py, radius);
       grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
+      grd.addColorStop(0.7, `rgba(${r},${g},${b},${alpha * 0.3})`);
       grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
       ctx.fillStyle = grd;
       ctx.beginPath();
@@ -383,7 +385,7 @@ class DensityGridOverlay {
       cell.mollweideMesh.material.color.copy(color);
       cell.tcMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
-      cell.mollweideMesh.scale.set(scale, scale, 1);
+      cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
     });
     this.adjacentLines.forEach(obj => {
       const { line, lineM, cell1, cell2 } = obj;
