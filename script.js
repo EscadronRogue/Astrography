@@ -2389,3 +2389,4 @@ async function main() {
 }
 
 window.onload = main;
+window.buildAndApplyFilters = buildAndApplyFilters;

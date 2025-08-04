@@ -1,5 +1,6 @@
 // filters/planesFilter.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { getThemeFont } from '../utils/theme.js';
 import { radToSphere, radToMollweide, getMollweideLambda0, splitMollweideWrap } from '../utils/geometryUtils.js';
 
 const DEG2RAD = Math.PI / 180;
@@ -244,11 +245,11 @@ export function updateCelestialEquatorMollweide(line) {
 function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  ctx.font = `${fontSize}px Oswald`;
+  ctx.font = getThemeFont(fontSize);
   const textWidth = ctx.measureText(text).width;
   canvas.width = textWidth + 20;
   canvas.height = fontSize * 1.2;
-  ctx.font = `${fontSize}px Oswald`;
+  ctx.font = getThemeFont(fontSize);
   ctx.fillStyle = color;
   ctx.fillText(text, 10, fontSize);
   const texture = new THREE.CanvasTexture(canvas);
@@ -262,11 +263,11 @@ function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150
 function createTextPlane(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  ctx.font = `${fontSize}px Oswald`;
+  ctx.font = getThemeFont(fontSize);
   const textWidth = ctx.measureText(text).width;
   canvas.width = textWidth + 20;
   canvas.height = fontSize * 1.2;
-  ctx.font = `${fontSize}px Oswald`;
+  ctx.font = getThemeFont(fontSize);
   ctx.fillStyle = color;
   ctx.fillText(text, 10, fontSize);
   const texture = new THREE.CanvasTexture(canvas);

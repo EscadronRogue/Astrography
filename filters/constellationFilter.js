@@ -2,6 +2,7 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide } from '../utils/geometryUtils.js';
+import { getThemeFont } from '../utils/theme.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -184,12 +185,12 @@ export function createConstellationLabelsForGlobe(opacity = 0.8) {
     const baseFontSize = 300; // Very large base font size
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    ctx.font = `${baseFontSize}px Oswald`;
+    ctx.font = getThemeFont(baseFontSize);
     const textWidth = ctx.measureText(c.name).width;
     canvas.width = textWidth + 20;
     canvas.height = baseFontSize * 1.2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `${baseFontSize}px Oswald`;
+    ctx.font = getThemeFont(baseFontSize);
     ctx.fillStyle = '#888888';
     ctx.fillText(c.name, 10, baseFontSize);
     const texture = new THREE.CanvasTexture(canvas);
@@ -246,12 +247,12 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
     const baseFontSize = 300;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    ctx.font = `${baseFontSize}px Oswald`;
+    ctx.font = getThemeFont(baseFontSize);
     const textWidth = ctx.measureText(c.name).width;
     canvas.width = textWidth + 20;
     canvas.height = baseFontSize * 1.2;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `${baseFontSize}px Oswald`;
+    ctx.font = getThemeFont(baseFontSize);
     ctx.fillStyle = '#888888';
     ctx.fillText(c.name, 10, baseFontSize);
     const texture = new THREE.CanvasTexture(canvas);

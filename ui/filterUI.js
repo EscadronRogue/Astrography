@@ -16,6 +16,9 @@ export function initFilterUI() {
       historicalBtn.textContent = enabled
         ? 'Disable Historical Aesthetic'
         : 'Enable Historical Aesthetic';
+      if (window.buildAndApplyFilters) {
+        window.buildAndApplyFilters();
+      }
     });
   }
 

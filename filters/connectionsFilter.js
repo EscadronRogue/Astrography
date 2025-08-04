@@ -2,6 +2,7 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
+import { getThemeFont } from '../utils/theme.js';
 
 // Tunable parameters for the connections lines
 let connectionMaxWidth = 5;
@@ -339,13 +340,13 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       const fontSize = baseFontSize * connectionLabelSize;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      ctx.font = `${fontSize}px Oswald`;
+      ctx.font = getThemeFont(fontSize);
       const metrics = ctx.measureText(distanceText);
       const padX = 10;
       const padY = 5;
       canvas.width = metrics.width + padX * 2;
       canvas.height = fontSize + padY * 2;
-      ctx.font = `${fontSize}px Oswald`;
+      ctx.font = getThemeFont(fontSize);
       const labelColor = c1.clone().lerp(c2, 0.5);
       ctx.fillStyle = `#${labelColor.getHexString()}`;
       ctx.textBaseline = 'middle';

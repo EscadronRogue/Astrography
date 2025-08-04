@@ -570,6 +570,10 @@ body.historical .map-container h2 {
 }
 body.historical .map-container canvas {
   background-color: #f5f1e1;
+  filter: sepia(1) saturate(0.6) contrast(0.85);
+}
+body.historical canvas {
+  filter: sepia(1) saturate(0.6) contrast(0.85);
 }
 body.historical .fullscreen-btn {
   background: rgba(215, 198, 171, 0.7);

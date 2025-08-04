@@ -18,6 +18,14 @@ import { getStellarClassData } from './stellarClassData.js';
 export function applyColorFilter(stars, filters) {
   const stellarClassData = getStellarClassData();
 
+  // Override colors with a monochrome palette in historical mode.
+  if (document.body.classList.contains('historical')) {
+    stars.forEach(star => {
+      star.displayColor = '#3b2d1f';
+    });
+    return stars;
+  }
+
   if (filters.color === 'stellar-class') {
     stars.forEach(star => {
       const primaryClass = star.Stellar_class ? star.Stellar_class.charAt(0).toUpperCase() : 'G';

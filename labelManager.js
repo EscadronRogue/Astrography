@@ -2,6 +2,7 @@
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { interpolateColor } from './utils.js';
+import { getThemeFont } from './utils/theme.js';
 
 /**
  * Returns a ShaderMaterial that renders a texture double‑sided without mirroring.
@@ -96,7 +97,7 @@ export class LabelManager {
 
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      ctx.font = `${fontSize}px Oswald`;
+      ctx.font = getThemeFont(fontSize);
 
       const textMetrics = ctx.measureText(displayName);
       const textWidth = textMetrics.width;
@@ -107,7 +108,7 @@ export class LabelManager {
       canvas.height = textHeight + paddingY * 2;
 
       // Draw text without background
-      ctx.font = `${fontSize}px Oswald`;
+      ctx.font = getThemeFont(fontSize);
       const labelColor = '#' + interpolateColor('#ffffff', starColor, 0.5).toString(16).padStart(6, '0');
       ctx.fillStyle = labelColor;
       ctx.textBaseline = 'middle';
