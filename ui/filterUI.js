@@ -7,6 +7,18 @@ export function initFilterUI() {
     document.querySelector('.sidebar').classList.toggle('open');
   });
 
+  // Historical aesthetic toggle.
+  const historicalBtn = document.getElementById('historical-toggle');
+  if (historicalBtn) {
+    historicalBtn.addEventListener('click', function () {
+      document.body.classList.toggle('historical');
+      const enabled = document.body.classList.contains('historical');
+      historicalBtn.textContent = enabled
+        ? 'Disable Historical Aesthetic'
+        : 'Enable Historical Aesthetic';
+    });
+  }
+
   // Enable/disable connection slider.
   const enableConnectionsChk = document.getElementById('enable-connections');
   const connectionSlider = document.getElementById('connection-slider');
