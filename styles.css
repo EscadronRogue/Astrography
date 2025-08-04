@@ -506,3 +506,81 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
     font-size:11px;
   }
 }
+
+/* Historical Aesthetic */
+body.historical {
+  background-color: #f5f1e1;
+  color: #3b2d1f;
+  font-family: 'Times New Roman', serif;
+}
+body.historical #loader {
+  background-color: rgba(245, 241, 225, 0.95);
+  color: #3b2d1f;
+}
+body.historical header {
+  background-color: rgba(215, 198, 171, 0.9);
+}
+body.historical #menu-toggle {
+  color: #6b4a2b;
+}
+body.historical .sidebar {
+  background-color: rgba(245, 241, 225, 0.95);
+  border-right: 1px solid #b8a47a;
+}
+body.historical .sidebar h2 {
+  border-bottom: 2px solid #b8a47a;
+  color: #6b4a2b;
+}
+body.historical .sidebar fieldset {
+  background-color: rgba(245, 241, 225, 0.8);
+  border-color: #b8a47a;
+}
+body.historical .sidebar legend {
+  color: #6b4a2b;
+}
+body.historical .sidebar legend:hover {
+  background-color: rgba(232, 219, 196, 0.8);
+}
+body.historical .filter-item label {
+  color: #3b2d1f;
+}
+body.historical .filter-item input[type="checkbox"],
+body.historical .filter-item input[type="radio"] {
+  accent-color: #6b4a2b;
+}
+body.historical .filter-item input[type="range"] {
+  background: #b8a47a;
+}
+body.historical .filter-item input[type="range"]::-webkit-slider-thumb {
+  background: #6b4a2b;
+  border: 2px solid #f5f1e1;
+}
+body.historical .filter-item input[type="range"]::-moz-range-thumb {
+  background: #6b4a2b;
+  border: 2px solid #f5f1e1;
+}
+body.historical .map-container {
+  background-color: rgba(245, 241, 225, 0.95);
+  border-color: #b8a47a;
+  box-shadow: 0 0 15px rgba(107, 74, 43, 0.5);
+}
+body.historical .map-container h2 {
+  color: #6b4a2b;
+  text-shadow: 0 0 3px rgba(107, 74, 43, 0.7);
+}
+body.historical .map-container canvas {
+  background-color: #f5f1e1;
+  filter: sepia(1) saturate(0.6) contrast(0.85);
+}
+body.historical canvas {
+  filter: sepia(1) saturate(0.6) contrast(0.85);
+}
+body.historical .fullscreen-btn {
+  background: rgba(215, 198, 171, 0.7);
+  color: #6b4a2b;
+}
+body.historical .filter-item button {
+  background: rgba(215, 198, 171, 0.9);
+  color: #6b4a2b;
+  border-color: #b8a47a;
+}
