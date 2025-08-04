@@ -1,7 +1,7 @@
 // filters/connectionsFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
+import { splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 
 // Tunable parameters for the connections lines
 let connectionMaxWidth = 5;
@@ -308,77 +308,63 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       });
 
       // ---- distance label ----
-      if (starA.spherePosition && starB.spherePosition) {
-        const pathPts = greatCircleToMollweide(
-          starA.spherePosition,
-          starB.spherePosition,
-          100,
-          64,
-          getMollweideLambda0()
-        );
-        for (let i = 1; i < pathPts.length; i++) {
-          const adj = adjustMollweideWrap(pathPts[i - 1], pathPts[i]);
-          pathPts[i - 1] = adj[0];
-          pathPts[i] = adj[1];
+      // Determine midpoint and tangent along the actual rendered segments
+      let totalLen = 0;
+      const segLens = segments.map(([a, b]) => {
+        const len = a.clone().sub(b).length();
+        totalLen += len;
+        return len;
+      });
+      let acc = 0;
+      let mid = segments[0][0].clone();
+      let tangent = new THREE.Vector3(1, 0, 0);
+      const halfLen = totalLen / 2;
+      for (let i = 0; i < segments.length; i++) {
+        const [a, b] = segments[i];
+        const len = segLens[i];
+        if (acc + len >= halfLen) {
+          const t = (halfLen - acc) / (len || 1);
+          mid = a.clone().lerp(b, t);
+          tangent = b.clone().sub(a);
+          break;
         }
-        let total = 0;
-        const cumulative = [0];
-        for (let i = 1; i < pathPts.length; i++) {
-          total += pathPts[i].clone().sub(pathPts[i - 1]).length();
-          cumulative.push(total);
-        }
-        const half = total / 2;
-        let idx = 0;
-        while (idx < cumulative.length && cumulative[idx] < half) idx++;
-        let mid;
-        if (idx === 0) {
-          mid = pathPts[0].clone();
-        } else {
-          const t = (half - cumulative[idx - 1]) / (cumulative[idx] - cumulative[idx - 1] || 1);
-          mid = pathPts[idx - 1].clone().lerp(pathPts[idx], t);
-        }
-        while (mid.x > 200) mid.x -= 400;
-        while (mid.x < -200) mid.x += 400;
-
-        const prev = pathPts[Math.max(idx - 1, 0)];
-        const next = pathPts[Math.min(idx + 1, pathPts.length - 1)];
-        const tangent = next.clone().sub(prev);
-        let rot = Math.atan2(tangent.y, tangent.x);
-        if (rot > Math.PI / 2) rot -= Math.PI;
-        if (rot < -Math.PI / 2) rot += Math.PI;
-
-        const distanceText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
-        const baseFontSize = 72;
-        const fontSize = baseFontSize * connectionLabelSize;
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.font = `${fontSize}px Oswald`;
-        const metrics = ctx.measureText(distanceText);
-        const padX = 10;
-        const padY = 5;
-        canvas.width = metrics.width + padX * 2;
-        canvas.height = fontSize + padY * 2;
-        ctx.font = `${fontSize}px Oswald`;
-        const labelColor = c1.clone().lerp(c2, 0.5);
-        ctx.fillStyle = `#${labelColor.getHexString()}`;
-        ctx.textBaseline = 'middle';
-        ctx.fillText(distanceText, padX, canvas.height / 2);
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.needsUpdate = true;
-        const spriteMat = new THREE.SpriteMaterial({
-          map: texture,
-          depthWrite: true,
-          depthTest: true,
-          transparent: true,
-          opacity,
-        });
-        const sprite = new THREE.Sprite(spriteMat);
-        sprite.renderOrder = 5;
-        sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
-        sprite.position.copy(mid);
-        sprite.material.rotation = rot;
-        group.add(sprite);
+        acc += len;
       }
+      let rot = Math.atan2(tangent.y, tangent.x);
+      if (rot > Math.PI / 2) rot -= Math.PI;
+      if (rot < -Math.PI / 2) rot += Math.PI;
+
+      const distanceText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
+      const baseFontSize = 72;
+      const fontSize = baseFontSize * connectionLabelSize;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.font = `${fontSize}px Oswald`;
+      const metrics = ctx.measureText(distanceText);
+      const padX = 10;
+      const padY = 5;
+      canvas.width = metrics.width + padX * 2;
+      canvas.height = fontSize + padY * 2;
+      ctx.font = `${fontSize}px Oswald`;
+      const labelColor = c1.clone().lerp(c2, 0.5);
+      ctx.fillStyle = `#${labelColor.getHexString()}`;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(distanceText, padX, canvas.height / 2);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      const spriteMat = new THREE.SpriteMaterial({
+        map: texture,
+        depthWrite: true,
+        depthTest: true,
+        transparent: true,
+        opacity,
+      });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.renderOrder = 5;
+      sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
+      sprite.position.copy(mid);
+      sprite.material.rotation = rot;
+      group.add(sprite);
 
       lines.push(group);
       return;
