@@ -17,6 +17,8 @@ export function initFilterUI() {
   const connectionWidthNumber = document.getElementById('connection-width-number');
   const connectionFadeSlider = document.getElementById('connection-fade-slider');
   const connectionFadeNumber = document.getElementById('connection-fade-number');
+  const connectionLabelSizeSlider = document.getElementById('connection-label-size-slider');
+  const connectionLabelSizeNumber = document.getElementById('connection-label-size-number');
   enableConnectionsChk.addEventListener('change', function () {
     const enabled = this.checked;
     connectionSlider.disabled = !enabled;
@@ -27,6 +29,8 @@ export function initFilterUI() {
     connectionWidthNumber.disabled = !enabled;
     connectionFadeSlider.disabled = !enabled;
     connectionFadeNumber.disabled = !enabled;
+    connectionLabelSizeSlider.disabled = !enabled;
+    connectionLabelSizeNumber.disabled = !enabled;
   });
   connectionSlider.addEventListener('input', function () {
     connectionNumber.value = this.value;
@@ -53,6 +57,12 @@ export function initFilterUI() {
   });
   connectionFadeNumber.addEventListener('input', function () {
     connectionFadeSlider.value = this.value;
+  });
+  connectionLabelSizeSlider.addEventListener('input', function () {
+    connectionLabelSizeNumber.value = this.value;
+  });
+  connectionLabelSizeNumber.addEventListener('input', function () {
+    connectionLabelSizeSlider.value = this.value;
   });
 
   // Isolation Filter UI controls.

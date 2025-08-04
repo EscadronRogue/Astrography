@@ -6,10 +6,12 @@ import { adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide, getMol
 // Tunable parameters for the connections lines
 let connectionMaxWidth = 5;
 let connectionFadePower = 1.0;
+let connectionLabelSize = 1.0;
 
-export function setConnectionLineParams(maxWidth, fadePower) {
+export function setConnectionLineParams(maxWidth, fadePower, labelSize = 1.0) {
   connectionMaxWidth = maxWidth;
   connectionFadePower = fadePower;
+  connectionLabelSize = labelSize;
 }
 
 // Helper material and geometry builders for wide fading lines on the Mollweide map
@@ -292,6 +294,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         starA.mollweidePosition,
         starB.mollweidePosition
       );
+      const group = new THREE.Group();
       segments.forEach(([s1, s2]) => {
         const pts = [s1, s2];
         const geom = buildWideLineGeometry(pts, width);
@@ -301,8 +304,83 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         const mesh = new THREE.Mesh(geom, mat);
         mesh.renderOrder = 3;
         mesh.userData = { baseWidth: width, points: pts };
-        lines.push(mesh);
+        group.add(mesh);
       });
+
+      // ---- distance label ----
+      if (starA.spherePosition && starB.spherePosition) {
+        const pathPts = greatCircleToMollweide(
+          starA.spherePosition,
+          starB.spherePosition,
+          100,
+          64,
+          getMollweideLambda0()
+        );
+        for (let i = 1; i < pathPts.length; i++) {
+          const adj = adjustMollweideWrap(pathPts[i - 1], pathPts[i]);
+          pathPts[i - 1] = adj[0];
+          pathPts[i] = adj[1];
+        }
+        let total = 0;
+        const cumulative = [0];
+        for (let i = 1; i < pathPts.length; i++) {
+          total += pathPts[i].clone().sub(pathPts[i - 1]).length();
+          cumulative.push(total);
+        }
+        const half = total / 2;
+        let idx = 0;
+        while (idx < cumulative.length && cumulative[idx] < half) idx++;
+        let mid;
+        if (idx === 0) {
+          mid = pathPts[0].clone();
+        } else {
+          const t = (half - cumulative[idx - 1]) / (cumulative[idx] - cumulative[idx - 1] || 1);
+          mid = pathPts[idx - 1].clone().lerp(pathPts[idx], t);
+        }
+        while (mid.x > 200) mid.x -= 400;
+        while (mid.x < -200) mid.x += 400;
+
+        const prev = pathPts[Math.max(idx - 1, 0)];
+        const next = pathPts[Math.min(idx + 1, pathPts.length - 1)];
+        const tangent = next.clone().sub(prev);
+        let rot = Math.atan2(tangent.y, tangent.x) + Math.PI / 2;
+        if (rot > Math.PI / 2) rot -= Math.PI;
+        if (rot < -Math.PI / 2) rot += Math.PI;
+
+        const distanceText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
+        const baseFontSize = 72;
+        const fontSize = baseFontSize * connectionLabelSize;
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.font = `${fontSize}px Oswald`;
+        const metrics = ctx.measureText(distanceText);
+        const padX = 10;
+        const padY = 5;
+        canvas.width = metrics.width + padX * 2;
+        canvas.height = fontSize + padY * 2;
+        ctx.font = `${fontSize}px Oswald`;
+        const labelColor = c1.clone().lerp(c2, 0.5).lerp(new THREE.Color('#ffffff'), 0.5);
+        ctx.fillStyle = `#${labelColor.getHexString()}`;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(distanceText, padX, canvas.height / 2);
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        const spriteMat = new THREE.SpriteMaterial({
+          map: texture,
+          depthWrite: true,
+          depthTest: true,
+          transparent: true,
+          opacity: 1,
+        });
+        const sprite = new THREE.Sprite(spriteMat);
+        sprite.renderOrder = 5;
+        sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
+        sprite.position.copy(mid);
+        sprite.material.rotation = rot;
+        group.add(sprite);
+      }
+
+      lines.push(group);
       return;
     } else {
       // Use the computed truePosition if available
