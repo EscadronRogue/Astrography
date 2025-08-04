@@ -540,6 +540,7 @@ async function buildAndApplyFilters() {
     connectionOpacity,
     connectionWidth,
     connectionFade,
+    connectionLabelSize,
     constellationLineOpacity,
     constellationNameOpacity,
     planeOpacity,
@@ -592,7 +593,7 @@ async function buildAndApplyFilters() {
   trueCoordinatesMap.setConnectionOpacity(connectionOpacity / 100);
   globeMap.setConnectionOpacity(connectionOpacity / 100);
   mollweideMap.setConnectionOpacity(connectionOpacity / 100);
-  setConnectionLineParams(connectionWidth, connectionFade);
+  setConnectionLineParams(connectionWidth, connectionFade, connectionLabelSize);
 
   trueCoordinatesMap.connectionOpacity = connectionOpacity / 100;
   globeMap.connectionOpacity = connectionOpacity / 100;
