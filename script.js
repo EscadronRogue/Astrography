@@ -123,6 +123,7 @@ let exportPdfBtn = null;
 let exportStart = null;
 let exportCurrentRect = null;
 let isSelecting = false;
+let exportResSelect = null;
 
 const ROTATE_SENSITIVITY = 0.3;
 
@@ -383,8 +384,8 @@ function createMollweideBackground(R = 100, segments = 1024) {
   return mesh;
 }
 
-function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
-  const geometry = new THREE.RingGeometry(R, R + thickness, segments);
+function createMollweideBorder(R = 100, thickness = 1.5, segments = 1024) {
+  const geometry = new THREE.RingGeometry(R - thickness, R + thickness, segments);
   geometry.scale(2, 1, 1); // turn the circular ring into an ellipse
 
   const material = new THREE.MeshBasicMaterial({
@@ -396,6 +397,7 @@ function createMollweideBorder(R = 100, thickness = 8, segments = 1024) {
 
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1001;
+  mesh.raycast = () => {};
   return mesh;
 }
 
@@ -1426,11 +1428,14 @@ window.updateMollweideView = updateMollweideView;
 function exportMollweideMap(format = 'png', rect = null) {
   const baseWidth = mollweideMap.renderer.domElement.width;
   const baseHeight = mollweideMap.renderer.domElement.height;
-  const scale = Math.max(1, 3840 / baseWidth, 2160 / baseHeight);
+  const factor = exportResSelect ? parseInt(exportResSelect.value, 10) : 1;
+  const targetWidth = 3840 * factor;
+  const targetHeight = 2160 * factor;
+  const scale = Math.max(1, targetWidth / baseWidth, targetHeight / baseHeight);
   const exportWidth = Math.round(baseWidth * scale);
   const exportHeight = Math.round(baseHeight * scale);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
-  exportRenderer.setPixelRatio(1);
+  exportRenderer.setPixelRatio(mollweideMap.renderer.getPixelRatio());
   let cropX = 0;
   let cropY = 0;
   let cropW = baseWidth;
@@ -1449,8 +1454,23 @@ function exportMollweideMap(format = 'png', rect = null) {
   finalCanvas.width = exportCropW;
   finalCanvas.height = exportCropH;
   const ctx = finalCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
   const maxSize = exportRenderer.capabilities.maxTextureSize;
   const tile = Math.min(Math.floor(maxSize / scale), 8192);
+
+  // Temporarily scale star and line sizes for faithful export
+  let originalZoom = null;
+  if (mollweideMap.points && mollweideMap.points.material.uniforms && mollweideMap.points.material.uniforms.cameraZoom) {
+    originalZoom = mollweideMap.points.material.uniforms.cameraZoom.value;
+    mollweideMap.points.material.uniforms.cameraZoom.value = originalZoom * scale;
+  }
+  const lineMats = [];
+  mollweideMap.scene.traverse(obj => {
+    if (obj.isLine && obj.material && obj.material.linewidth !== undefined) {
+      lineMats.push({ mat: obj.material, width: obj.material.linewidth });
+      obj.material.linewidth *= scale;
+    }
+  });
   for (let y = cropY; y < cropY + cropH; y += tile) {
     for (let x = cropX; x < cropX + cropW; x += tile) {
       const tileW = Math.min(tile, cropW - (x - cropX));
@@ -1485,6 +1505,12 @@ function exportMollweideMap(format = 'png', rect = null) {
     }
   }
   exportRenderer.dispose();
+  if (originalZoom !== null) {
+    mollweideMap.points.material.uniforms.cameraZoom.value = originalZoom;
+  }
+  lineMats.forEach(({ mat, width }) => {
+    mat.linewidth = width;
+  });
   if (format === 'pdf') {
     const imgData = finalCanvas.toDataURL('image/png');
     const { jsPDF } = window.jspdf;
@@ -1569,7 +1595,8 @@ function setupExportControls() {
   exportPdfBtn = document.getElementById('export-pdf');
   exportOverlay = document.getElementById('export-selection-overlay');
   exportRectElem = document.getElementById('export-selection-rect');
-  if (!btn || !exportOverlay || !exportRectElem || !exportPngBtn || !exportPdfBtn) return;
+  exportResSelect = document.getElementById('export-resolution');
+  if (!btn || !exportOverlay || !exportRectElem || !exportPngBtn || !exportPdfBtn || !exportResSelect) return;
 
   exportPngBtn.addEventListener('click', () => {
     if (exportCurrentRect) exportMollweideMap('png', exportCurrentRect);
