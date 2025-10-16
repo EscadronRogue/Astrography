@@ -2,7 +2,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI, generateStellarClassFilters } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, setConnectionLineParams, buildWideLineGeometry } from './filters/connectionsFilter.js';
-import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
+import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide, rebuildConstellationMeshFromSegments } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
@@ -1959,6 +1959,9 @@ function applyStoredLineEdits(root) {
     if (key && hiddenLineKeys.has(key)) {
       obj.visible = false;
     }
+    if (obj.type !== 'Line' && obj.type !== 'LineSegments') {
+      return;
+    }
     const posAttr = obj.geometry && obj.geometry.getAttribute('position');
     if (!posAttr) return;
     const array = posAttr.array;
@@ -1980,7 +1983,12 @@ function applyStoredLineEdits(root) {
         changed = true;
       }
     }
-    if (changed) posAttr.needsUpdate = true;
+    if (changed) {
+      posAttr.needsUpdate = true;
+      if (obj.userData && obj.userData.visibleMesh) {
+        rebuildConstellationMeshFromSegments(obj);
+      }
+    }
   });
 }
 
