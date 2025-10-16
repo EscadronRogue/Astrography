@@ -83,7 +83,7 @@ export function getConstellationBoundaries() {
 /**
  * Creates constellation boundary line meshes for the Globe.
  */
-export function createConstellationBoundariesForGlobe(opacity = 0.4) {
+export function createConstellationBoundariesForGlobe(opacity = 0.4, lineWidth = 1) {
   const lines = [];
   const R = 100;
   boundaryData.forEach(b => {
@@ -99,24 +99,28 @@ export function createConstellationBoundariesForGlobe(opacity = 0.4) {
       color: 0x888888,
       dashSize: 2,
       gapSize: 1,
-      linewidth: 1,
+      linewidth: lineWidth,
       transparent: true,
       opacity
     });
     const line = new THREE.Line(geometry, material);
     line.computeLineDistances();
+    line.userData = {
+      baseLineWidth: lineWidth,
+      baseOpacity: opacity
+    };
     lines.push(line);
   });
   return lines;
 }
 
-export function createConstellationBoundariesForMollweide(opacity = 0.4) {
+export function createConstellationBoundariesForMollweide(opacity = 0.4, lineWidth = 1) {
   const R = 100;
   const material = new THREE.LineDashedMaterial({
     color: 0x888888,
     dashSize: 2,
     gapSize: 1,
-    linewidth: 1,
+    linewidth: lineWidth,
     transparent: true,
     opacity
   });
@@ -130,10 +134,10 @@ export function createConstellationBoundariesForMollweide(opacity = 0.4) {
   lineSegs.userData = {
     boundaryData,
     R,
-    baseLineWidth: 1,
+    baseLineWidth: lineWidth,
     baseOpacity: opacity,
     exportLineWidthFactor: 1.5,
-    exportOpacityFactor: 2
+    exportOpacityFactor: 1
   };
   updateConstellationBoundariesForMollweide(lineSegs);
   return [lineSegs];
