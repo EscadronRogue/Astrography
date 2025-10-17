@@ -2,7 +2,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { applyFilters, setupFilterUI, generateStellarClassFilters } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, setConnectionLineParams, buildWideLineGeometry } from './filters/connectionsFilter.js';
-import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide } from './filters/constellationFilter.js';
+import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide, rebuildConstellationMeshFromSegments } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
 import { initIsolationFilter, updateIsolationFilter } from './filters/isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './filters/densityFilter.js';
@@ -383,7 +383,9 @@ function createMollweideBackground(R = 100, segments = 1024) {
   return mesh;
 }
 
-function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
+function createMollweideBorder(R = 100, thickness = 1, opacity = 1, segments = 1024) {
+  const clampedThickness = Math.max(0.1, thickness);
+  const clampedOpacity = Math.max(0, Math.min(1, opacity));
   const pts = [];
   let prev = null;
   for (let i = 0; i <= segments; i++) {
@@ -394,26 +396,28 @@ function createMollweideBorder(R = 100, thickness = 1, segments = 1024) {
     }
     prev = p;
   }
-  const geometry = buildWideLineGeometry(pts, thickness);
+  const geometry = buildWideLineGeometry(pts, clampedThickness);
   const material = new THREE.MeshBasicMaterial({
     color: 0xbbbbbb,
     side: THREE.DoubleSide,
     depthTest: false,
     depthWrite: false,
     transparent: true,
-    opacity: 1
+    opacity: clampedOpacity
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1001;
   mesh.userData = {
-    baseWidth: thickness,
+    baseWidth: clampedThickness,
     points: pts,
-    exportLineWidthFactor: 0.85,
+    exportLineWidthFactor: 1,
     baseRadius: R,
     segments,
     isMollweideBorder: true,
     baseColor: 0xbbbbbb,
-    exportColor: 0x888888
+    exportColor: 0x888888,
+    baseOpacity: clampedOpacity,
+    exportOpacityFactor: 1
   };
   return mesh;
 }
@@ -542,14 +546,21 @@ async function buildAndApplyFilters() {
     connectionFade,
     connectionLabelSize,
     constellationLineOpacity,
+    constellationLineWidth,
     constellationNameOpacity,
     planeOpacity,
+    mollweideBorderWidth,
+    mollweideBorderOpacity,
     showGalacticPlane,
     showEclipticPlane,
     showCelestialEquator,
     isolationOverlay: returnedIsolationOverlay,
     densityOverlay: returnedDensityOverlay
   } = filters;
+
+  const sanitizedConstellationLineWidth = Math.max(0.1, constellationLineWidth || 0.1);
+  const sanitizedBorderWidth = Math.max(0.1, mollweideBorderWidth || 0.1);
+  const sanitizedBorderOpacity = Math.max(0, Math.min(100, mollweideBorderOpacity));
 
   showConstellationBoundariesFlag = showConstellationBoundaries;
   showConstellationNamesFlag = showConstellationNames;
@@ -617,9 +628,15 @@ async function buildAndApplyFilters() {
   removeConstellationOverlayObjectsFromGlobe();
 
   if (showConstellationBoundaries) {
-    constellationLinesGlobe = createConstellationBoundariesForGlobe(constellationLineOpacity / 100);
+    constellationLinesGlobe = createConstellationBoundariesForGlobe(
+      constellationLineOpacity / 100,
+      sanitizedConstellationLineWidth
+    );
     constellationLinesGlobe.forEach(ln => globeMap.scene.add(ln));
-    constellationLinesMoll = createConstellationBoundariesForMollweide(constellationLineOpacity / 100);
+    constellationLinesMoll = createConstellationBoundariesForMollweide(
+      constellationLineOpacity / 100,
+      sanitizedConstellationLineWidth
+    );
     constellationLinesMoll.forEach(ln => { mollweideMap.scene.add(ln); applyStoredLineEdits(ln); });
   }
   if (showConstellationNames) {
@@ -638,6 +655,10 @@ async function buildAndApplyFilters() {
     constellationOverlayMoll.forEach(mesh => {
       mollweideMap.scene.add(mesh);
     });
+  }
+
+  if (mollweideMap && typeof mollweideMap.setMollweideBorderAppearance === 'function') {
+    mollweideMap.setMollweideBorderAppearance(sanitizedBorderWidth, sanitizedBorderOpacity / 100);
   }
 
   // --- Dust Clouds Overlay ---
@@ -986,6 +1007,7 @@ class MapManager {
       const mask = createMollweideMask(100);
       this.scene.add(mask);
       const border = createMollweideBorder(100);
+      this.mollweideBorder = border;
       this.scene.add(border);
     } else {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
@@ -1187,6 +1209,29 @@ class MapManager {
   setLabelOpacity(opacity) {
     this.labelOpacity = opacity;
     this.labelManager.setLabelOpacity(opacity);
+  }
+
+  setMollweideBorderAppearance(width, opacity) {
+    if (this.mapType !== 'Mollweide' || !this.mollweideBorder) return;
+    const border = this.mollweideBorder;
+    const sanitizedWidth = Math.max(0.1, width || 0);
+    const sanitizedOpacity = Math.max(0, Math.min(1, opacity !== undefined ? opacity : border.material.opacity));
+    if (Math.abs((border.userData.baseWidth || 0) - sanitizedWidth) > 1e-4) {
+      border.geometry.dispose();
+      border.geometry = buildWideLineGeometry(border.userData.points, sanitizedWidth);
+      border.userData.baseWidth = sanitizedWidth;
+      if (border.material) {
+        border.material.needsUpdate = true;
+      }
+    }
+    if (border.material) {
+      if (border.material.opacity !== sanitizedOpacity) {
+        border.material.opacity = sanitizedOpacity;
+        border.material.needsUpdate = true;
+      }
+    }
+    border.userData.baseOpacity = sanitizedOpacity;
+    if (window.requestRender) window.requestRender();
   }
 
   updateMap(stars, connectionObjs) {
@@ -1473,6 +1518,10 @@ function scaleMollweideSceneForExport(scale) {
       if (obj.userData.exportColor !== undefined && obj.material && obj.material.color) {
         obj.material.color.setHex(obj.userData.exportColor);
       }
+      if (obj.userData.baseOpacity !== undefined && obj.material) {
+        const opFactor = obj.userData.exportOpacityFactor || 1;
+        obj.material.opacity = Math.min(1, obj.userData.baseOpacity * opFactor);
+      }
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
       let lwFactor = scale;
       if (obj.userData.exportLineWidthFactor) lwFactor *= obj.userData.exportLineWidthFactor;
@@ -1495,6 +1544,9 @@ function restoreMollweideScene(scale) {
       obj.geometry = buildWideLineGeometry(obj.userData.points, obj.userData.baseWidth);
       if (obj.userData.baseColor !== undefined && obj.material && obj.material.color) {
         obj.material.color.setHex(obj.userData.baseColor);
+      }
+      if (obj.userData.baseOpacity !== undefined && obj.material) {
+        obj.material.opacity = obj.userData.baseOpacity;
       }
     } else if (obj.userData && obj.userData.baseLineWidth !== undefined && obj.material && obj.material.linewidth !== undefined) {
       obj.material.linewidth = obj.userData.baseLineWidth;
@@ -1907,6 +1959,9 @@ function applyStoredLineEdits(root) {
     if (key && hiddenLineKeys.has(key)) {
       obj.visible = false;
     }
+    if (obj.type !== 'Line' && obj.type !== 'LineSegments') {
+      return;
+    }
     const posAttr = obj.geometry && obj.geometry.getAttribute('position');
     if (!posAttr) return;
     const array = posAttr.array;
@@ -1928,7 +1983,12 @@ function applyStoredLineEdits(root) {
         changed = true;
       }
     }
-    if (changed) posAttr.needsUpdate = true;
+    if (changed) {
+      posAttr.needsUpdate = true;
+      if (obj.userData && obj.userData.visibleMesh) {
+        rebuildConstellationMeshFromSegments(obj);
+      }
+    }
   });
 }
 

@@ -1,7 +1,8 @@
 // /filters/constellationFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, adjustMollweideWrap, splitMollweideWrap, greatCircleToMollweide } from '../utils/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, greatCircleToMollweide } from '../utils/geometryUtils.js';
+import { buildWideLineGeometry } from './connectionsFilter.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -83,7 +84,7 @@ export function getConstellationBoundaries() {
 /**
  * Creates constellation boundary line meshes for the Globe.
  */
-export function createConstellationBoundariesForGlobe(opacity = 0.4) {
+export function createConstellationBoundariesForGlobe(opacity = 0.4, lineWidth = 1) {
   const lines = [];
   const R = 100;
   boundaryData.forEach(b => {
@@ -99,26 +100,122 @@ export function createConstellationBoundariesForGlobe(opacity = 0.4) {
       color: 0x888888,
       dashSize: 2,
       gapSize: 1,
-      linewidth: 1,
+      linewidth: lineWidth,
       transparent: true,
       opacity
     });
     const line = new THREE.Line(geometry, material);
     line.computeLineDistances();
+    line.userData = {
+      baseLineWidth: lineWidth,
+      baseOpacity: opacity
+    };
     lines.push(line);
   });
   return lines;
 }
 
-export function createConstellationBoundariesForMollweide(opacity = 0.4) {
+function ensureVisibleConstellationMesh(lineSegs) {
+  if (!lineSegs) return null;
+  if (!lineSegs.userData) lineSegs.userData = {};
+  if (!lineSegs.userData.visibleMesh) {
+    const mesh = new THREE.Mesh(
+      new THREE.BufferGeometry(),
+      new THREE.MeshBasicMaterial({
+        color: 0x888888,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        depthTest: false,
+        side: THREE.DoubleSide
+      })
+    );
+    mesh.renderOrder = (lineSegs.renderOrder || 1) + 0.01;
+    mesh.userData = {
+      baseWidth: 1,
+      baseOpacity: 1,
+      baseColor: 0x888888,
+      exportLineWidthFactor: 1.5,
+      exportOpacityFactor: 1,
+      points: []
+    };
+    lineSegs.add(mesh);
+    lineSegs.userData.visibleMesh = mesh;
+  }
+  return lineSegs.userData.visibleMesh;
+}
+
+export function rebuildConstellationMeshFromSegments(lineSegs, overrideWidth, overrideOpacity) {
+  if (!lineSegs) return;
+  const mesh = ensureVisibleConstellationMesh(lineSegs);
+  if (!mesh) return;
+  const posAttr = lineSegs.geometry ? lineSegs.geometry.getAttribute('position') : null;
+  if (!posAttr) return;
+  const arr = posAttr.array;
+  const pts = [];
+  for (let i = 0; i + 5 < arr.length; i += 6) {
+    const ax = arr[i];
+    const ay = arr[i + 1];
+    const az = arr[i + 2];
+    const bx = arr[i + 3];
+    const by = arr[i + 4];
+    const bz = arr[i + 5];
+    if (
+      !Number.isFinite(ax) || !Number.isFinite(ay) || !Number.isFinite(az) ||
+      !Number.isFinite(bx) || !Number.isFinite(by) || !Number.isFinite(bz)
+    ) {
+      continue;
+    }
+    if (
+      ax === 0 && ay === 0 && az === 0 &&
+      bx === 0 && by === 0 && bz === 0
+    ) {
+      continue;
+    }
+    pts.push(new THREE.Vector3(ax, ay, az));
+    pts.push(new THREE.Vector3(bx, by, bz));
+  }
+  const width = Math.max(0.1, overrideWidth !== undefined ? overrideWidth : (lineSegs.userData.baseLineWidth || 1));
+  const baseOpacity = overrideOpacity !== undefined ? overrideOpacity : (lineSegs.userData.baseOpacity !== undefined ? lineSegs.userData.baseOpacity : mesh.material.opacity);
+  if (pts.length === 0) {
+    mesh.visible = false;
+  } else {
+    mesh.visible = true;
+    const geometry = buildWideLineGeometry(pts, width);
+    geometry.computeBoundingSphere();
+    if (mesh.geometry) {
+      mesh.geometry.dispose();
+    }
+    mesh.geometry = geometry;
+  }
+  const clampedOpacity = Math.max(0, Math.min(1, baseOpacity));
+  if (mesh.material && mesh.material.color) {
+    mesh.material.color.setHex(0x888888);
+  }
+  mesh.material.opacity = clampedOpacity;
+  mesh.material.needsUpdate = true;
+  mesh.userData.baseWidth = width;
+  mesh.userData.baseOpacity = clampedOpacity;
+  mesh.userData.points = pts.map(p => p.clone());
+  mesh.userData.baseColor = 0x888888;
+  if (mesh.userData.exportColor === undefined) mesh.userData.exportColor = 0x888888;
+  if (mesh.userData.exportLineWidthFactor === undefined) mesh.userData.exportLineWidthFactor = 1.5;
+  if (mesh.userData.exportOpacityFactor === undefined) mesh.userData.exportOpacityFactor = 1;
+  lineSegs.userData.baseLineWidth = width;
+  lineSegs.userData.baseOpacity = clampedOpacity;
+}
+
+export function createConstellationBoundariesForMollweide(opacity = 0.4, lineWidth = 1) {
   const R = 100;
+  const sanitizedWidth = Math.max(0.1, lineWidth);
+  const sanitizedOpacity = Math.max(0, Math.min(1, opacity));
   const material = new THREE.LineDashedMaterial({
     color: 0x888888,
     dashSize: 2,
     gapSize: 1,
-    linewidth: 1,
+    linewidth: sanitizedWidth,
     transparent: true,
-    opacity
+    opacity: 0
   });
   const maxSegments = boundaryData.length * 32; // 16 segments per boundary, each may wrap
   const positions = new Float32Array(maxSegments * 2 * 3); // 2 vertices per segment
@@ -126,14 +223,16 @@ export function createConstellationBoundariesForMollweide(opacity = 0.4) {
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   const lineSegs = new THREE.LineSegments(geometry, material);
   lineSegs.renderOrder = 1;
-  lineSegs.computeLineDistances();
+  lineSegs.material.depthWrite = false;
+  lineSegs.material.transparent = true;
+  lineSegs.material.opacity = 0;
   lineSegs.userData = {
     boundaryData,
     R,
-    baseLineWidth: 1,
-    baseOpacity: opacity,
+    baseLineWidth: sanitizedWidth,
+    baseOpacity: sanitizedOpacity,
     exportLineWidthFactor: 1.5,
-    exportOpacityFactor: 2
+    exportOpacityFactor: 1
   };
   updateConstellationBoundariesForMollweide(lineSegs);
   return [lineSegs];
@@ -168,6 +267,7 @@ export function updateConstellationBoundariesForMollweide(lineSegs) {
   for (; idx < array.length; idx++) array[idx] = 0;
   posAttr.needsUpdate = true;
   lineSegs.computeLineDistances();
+  rebuildConstellationMeshFromSegments(lineSegs);
 }
 
 /**

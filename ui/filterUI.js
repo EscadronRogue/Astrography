@@ -547,6 +547,29 @@ export function bindAdditionalOpacitySliders() {
     });
   }
 
+  const lineWidthSlider = document.getElementById('constellation-line-width-slider');
+  const lineWidthNumber = document.getElementById('constellation-line-width-number');
+  const lineWidthSpan = document.getElementById('constellation-line-width-value');
+  if (lineWidthSlider && lineWidthNumber && lineWidthSpan) {
+    const updateWidthDisplay = val => {
+      const clamped = Math.min(5, Math.max(0.1, val));
+      const display = clamped.toFixed(1);
+      lineWidthNumber.value = display;
+      lineWidthSpan.textContent = display;
+      return clamped;
+    };
+    lineWidthSlider.addEventListener('input', () => {
+      const current = parseFloat(lineWidthSlider.value);
+      const normalized = updateWidthDisplay(Number.isFinite(current) ? current : 1);
+      lineWidthSlider.value = normalized.toString();
+    });
+    lineWidthNumber.addEventListener('input', () => {
+      const current = parseFloat(lineWidthNumber.value);
+      const normalized = updateWidthDisplay(Number.isFinite(current) ? current : 1);
+      lineWidthSlider.value = normalized.toString();
+    });
+  }
+
   const nameOpSlider = document.getElementById('constellation-name-opacity-slider');
   const nameOpNumber = document.getElementById('constellation-name-opacity-number');
   const nameOpSpan = document.getElementById('constellation-name-opacity-value');
@@ -558,6 +581,43 @@ export function bindAdditionalOpacitySliders() {
     nameOpNumber.addEventListener('input', () => {
       nameOpSlider.value = nameOpNumber.value;
       nameOpSpan.textContent = nameOpNumber.value;
+    });
+  }
+
+  const borderWidthSlider = document.getElementById('mollweide-border-width-slider');
+  const borderWidthNumber = document.getElementById('mollweide-border-width-number');
+  const borderWidthSpan = document.getElementById('mollweide-border-width-value');
+  if (borderWidthSlider && borderWidthNumber && borderWidthSpan) {
+    const updateBorderWidthDisplay = val => {
+      const clamped = Math.min(10, Math.max(0.1, val));
+      const display = clamped.toFixed(1);
+      borderWidthNumber.value = display;
+      borderWidthSpan.textContent = display;
+      return clamped;
+    };
+    borderWidthSlider.addEventListener('input', () => {
+      const current = parseFloat(borderWidthSlider.value);
+      const normalized = updateBorderWidthDisplay(Number.isFinite(current) ? current : 1);
+      borderWidthSlider.value = normalized.toString();
+    });
+    borderWidthNumber.addEventListener('input', () => {
+      const current = parseFloat(borderWidthNumber.value);
+      const normalized = updateBorderWidthDisplay(Number.isFinite(current) ? current : 1);
+      borderWidthSlider.value = normalized.toString();
+    });
+  }
+
+  const borderOpacitySlider = document.getElementById('mollweide-border-opacity-slider');
+  const borderOpacityNumber = document.getElementById('mollweide-border-opacity-number');
+  const borderOpacitySpan = document.getElementById('mollweide-border-opacity-value');
+  if (borderOpacitySlider && borderOpacityNumber && borderOpacitySpan) {
+    borderOpacitySlider.addEventListener('input', () => {
+      borderOpacityNumber.value = borderOpacitySlider.value;
+      borderOpacitySpan.textContent = borderOpacitySlider.value;
+    });
+    borderOpacityNumber.addEventListener('input', () => {
+      borderOpacitySlider.value = borderOpacityNumber.value;
+      borderOpacitySpan.textContent = borderOpacityNumber.value;
     });
   }
 

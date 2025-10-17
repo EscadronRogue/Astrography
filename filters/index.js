@@ -147,6 +147,37 @@ function addConstellationsFieldset() {
   lineOpDiv.appendChild(document.createTextNode('%'));
   contentDiv.appendChild(lineOpDiv);
 
+  const lineWidthDiv = document.createElement('div');
+  lineWidthDiv.classList.add('filter-item');
+  const lineWidthLabel = document.createElement('label');
+  lineWidthLabel.htmlFor = 'constellation-line-width-slider';
+  lineWidthLabel.textContent = 'Line Width:';
+  const lineWidthSlider = document.createElement('input');
+  lineWidthSlider.type = 'range';
+  lineWidthSlider.id = 'constellation-line-width-slider';
+  lineWidthSlider.name = 'constellation-line-width';
+  lineWidthSlider.min = '0.1';
+  lineWidthSlider.max = '5';
+  lineWidthSlider.value = '1';
+  lineWidthSlider.step = '0.1';
+  const lineWidthNumber = document.createElement('input');
+  lineWidthNumber.type = 'number';
+  lineWidthNumber.id = 'constellation-line-width-number';
+  lineWidthNumber.name = 'constellation-line-width';
+  lineWidthNumber.min = '0.1';
+  lineWidthNumber.max = '5';
+  lineWidthNumber.value = '1.0';
+  lineWidthNumber.step = '0.1';
+  const lineWidthSpan = document.createElement('span');
+  lineWidthSpan.id = 'constellation-line-width-value';
+  lineWidthSpan.textContent = '1.0';
+  lineWidthDiv.appendChild(lineWidthLabel);
+  lineWidthDiv.appendChild(lineWidthSlider);
+  lineWidthDiv.appendChild(lineWidthNumber);
+  lineWidthDiv.appendChild(lineWidthSpan);
+  lineWidthDiv.appendChild(document.createTextNode('px'));
+  contentDiv.appendChild(lineWidthDiv);
+
   const nameOpDiv = document.createElement('div');
   nameOpDiv.classList.add('filter-item');
   const nameOpLabel = document.createElement('label');
@@ -177,6 +208,69 @@ function addConstellationsFieldset() {
   nameOpDiv.appendChild(nameOpSpan);
   nameOpDiv.appendChild(document.createTextNode('%'));
   contentDiv.appendChild(nameOpDiv);
+
+  const borderWidthDiv = document.createElement('div');
+  borderWidthDiv.classList.add('filter-item');
+  const borderWidthLabel = document.createElement('label');
+  borderWidthLabel.htmlFor = 'mollweide-border-width-slider';
+  borderWidthLabel.textContent = 'Border Width:';
+  const borderWidthSlider = document.createElement('input');
+  borderWidthSlider.type = 'range';
+  borderWidthSlider.id = 'mollweide-border-width-slider';
+  borderWidthSlider.name = 'mollweide-border-width';
+  borderWidthSlider.min = '0.1';
+  borderWidthSlider.max = '10';
+  borderWidthSlider.value = '1';
+  borderWidthSlider.step = '0.1';
+  const borderWidthNumber = document.createElement('input');
+  borderWidthNumber.type = 'number';
+  borderWidthNumber.id = 'mollweide-border-width-number';
+  borderWidthNumber.name = 'mollweide-border-width';
+  borderWidthNumber.min = '0.1';
+  borderWidthNumber.max = '10';
+  borderWidthNumber.value = '1.0';
+  borderWidthNumber.step = '0.1';
+  const borderWidthSpan = document.createElement('span');
+  borderWidthSpan.id = 'mollweide-border-width-value';
+  borderWidthSpan.textContent = '1.0';
+  borderWidthDiv.appendChild(borderWidthLabel);
+  borderWidthDiv.appendChild(borderWidthSlider);
+  borderWidthDiv.appendChild(borderWidthNumber);
+  borderWidthDiv.appendChild(borderWidthSpan);
+  borderWidthDiv.appendChild(document.createTextNode('px'));
+  contentDiv.appendChild(borderWidthDiv);
+
+  const borderOpacityDiv = document.createElement('div');
+  borderOpacityDiv.classList.add('filter-item');
+  const borderOpacityLabel = document.createElement('label');
+  borderOpacityLabel.htmlFor = 'mollweide-border-opacity-slider';
+  borderOpacityLabel.textContent = 'Border Opacity:';
+  const borderOpacitySlider = document.createElement('input');
+  borderOpacitySlider.type = 'range';
+  borderOpacitySlider.id = 'mollweide-border-opacity-slider';
+  borderOpacitySlider.name = 'mollweide-border-opacity';
+  borderOpacitySlider.min = '0';
+  borderOpacitySlider.max = '100';
+  borderOpacitySlider.value = '100';
+  borderOpacitySlider.step = '1';
+  const borderOpacityNumber = document.createElement('input');
+  borderOpacityNumber.type = 'number';
+  borderOpacityNumber.id = 'mollweide-border-opacity-number';
+  borderOpacityNumber.name = 'mollweide-border-opacity';
+  borderOpacityNumber.min = '0';
+  borderOpacityNumber.max = '100';
+  borderOpacityNumber.value = '100';
+  borderOpacityNumber.step = '1';
+  const borderOpacitySpan = document.createElement('span');
+  borderOpacitySpan.id = 'mollweide-border-opacity-value';
+  borderOpacitySpan.textContent = '100';
+  borderOpacityDiv.appendChild(borderOpacityLabel);
+  borderOpacityDiv.appendChild(borderOpacitySlider);
+  borderOpacityDiv.appendChild(borderOpacityNumber);
+  borderOpacityDiv.appendChild(borderOpacitySpan);
+  borderOpacityDiv.appendChild(document.createTextNode('%'));
+  contentDiv.appendChild(borderOpacityDiv);
+
   fs.appendChild(contentDiv);
   filterForm.appendChild(fs);
 }
@@ -342,7 +436,10 @@ export function applyFilters(allStars) {
         connectionFade: 1,
         connectionLabelSize: 1,
         constellationLineOpacity: 40,
+        constellationLineWidth: 1,
         constellationNameOpacity: 80,
+        mollweideBorderWidth: 1,
+        mollweideBorderOpacity: 100,
         planeOpacity: 50,
         enableIsolationLabeling: false,
         enableDensityLabeling: false,
@@ -358,6 +455,9 @@ export function applyFilters(allStars) {
     }
   }
   const formData = new FormData(filterForm);
+  const rawConstellationLineWidth = parseFloat(formData.get('constellation-line-width'));
+  const rawMollweideBorderWidth = parseFloat(formData.get('mollweide-border-width'));
+  const rawMollweideBorderOpacity = parseFloat(formData.get('mollweide-border-opacity'));
   const filters = {
     size: formData.get('size'),
     color: formData.get('color'),
@@ -396,8 +496,11 @@ export function applyFilters(allStars) {
     connectionFade: parseFloat(formData.get('connection-fade')) || 1,
     connectionLabelSize: parseFloat(formData.get('connection-label-size')) || 1,
     constellationLineOpacity: parseFloat(formData.get('constellation-line-opacity')) || 40,
+    constellationLineWidth: Number.isFinite(rawConstellationLineWidth) ? rawConstellationLineWidth : 1,
     constellationNameOpacity: parseFloat(formData.get('constellation-name-opacity')) || 80,
     planeOpacity: parseFloat(formData.get('plane-opacity')) || 50,
+    mollweideBorderWidth: Number.isFinite(rawMollweideBorderWidth) ? rawMollweideBorderWidth : 1,
+    mollweideBorderOpacity: Number.isFinite(rawMollweideBorderOpacity) ? rawMollweideBorderOpacity : 100,
     showClouds: (formData.getAll('dust-clouds').length > 0),
     showCloudDensity: (formData.getAll('dust-density-clouds').length > 0),
     showGalacticPlane: (formData.get('show-galactic-plane') !== null),
@@ -583,8 +686,11 @@ export function applyFilters(allStars) {
     connectionFade: filters.connectionFade,
     connectionLabelSize: filters.connectionLabelSize,
     constellationLineOpacity: filters.constellationLineOpacity,
+    constellationLineWidth: filters.constellationLineWidth,
     constellationNameOpacity: filters.constellationNameOpacity,
     planeOpacity: filters.planeOpacity,
+    mollweideBorderWidth: filters.mollweideBorderWidth,
+    mollweideBorderOpacity: filters.mollweideBorderOpacity,
     showClouds: filters.showClouds,
     showCloudDensity: filters.showCloudDensity,
     showGalacticPlane: filters.showGalacticPlane,
