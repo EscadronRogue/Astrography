@@ -4,28 +4,32 @@
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Starmap Visualization</title>
+  <title>Astrography</title>
+  <meta
+    name="description"
+    content="Astrography is an interactive map of our local stellar neighborhood with 3D, globe, and Mollweide views."
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Oswald&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Loader -->
-  <div id="loader" class="active">Loading Stars...</div>
+  <a class="skip-link" href="#maps-section">Skip to maps</a>
 
-  <!-- Header with Menu Toggle Button -->
+  <div id="loader" class="active" role="status" aria-live="polite">Loading stars …</div>
+
   <header>
-    <button id="menu-toggle" aria-label="Toggle Menu">☰</button>
-    <h1>Starmap Visualization</h1>
+    <button id="menu-toggle" type="button" aria-label="Toggle filter menu" aria-controls="filter-sidebar" aria-expanded="false">☰</button>
+    <h1>Astrography</h1>
   </header>
 
-  <!-- Main Container -->
   <div class="main-container">
-    <aside class="sidebar">
+    <aside id="filter-sidebar" class="sidebar" aria-label="Filters">
       <h2>Filters</h2>
       <form id="filters-form">
-        <!-- Map Projection Filter Fieldset -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Map Projections</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Map Projections</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="map-mollweide" name="map-projection" value="mollweide" checked />
@@ -41,36 +45,34 @@
             </div>
           </div>
         </fieldset>
-        <!-- Stellar Class Filter Fieldset -->
+
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Stellar Class</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Stellar Class</legend>
           <div class="filter-content">
             <div id="stellar-class-container"></div>
           </div>
         </fieldset>
 
-        <!-- Size Filter -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Size</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Size</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="radio" id="size-stellar-class" name="size" value="stellar-class" checked />
-              <label for="size-stellar-class">Stellar Class-Based</label>
+              <label for="size-stellar-class">Stellar class-based</label>
             </div>
             <div class="filter-item">
               <input type="radio" id="size-distance" name="size" value="distance" />
-              <label for="size-distance">Distance-Based</label>
+              <label for="size-distance">Distance-based</label>
             </div>
           </div>
         </fieldset>
 
-        <!-- Color Filter -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Color</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Color</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="radio" id="color-stellar-class" name="color" value="stellar-class" checked />
-              <label for="color-stellar-class">Stellar Class-Based</label>
+              <label for="color-stellar-class">Stellar class-based</label>
             </div>
             <div class="filter-item">
               <input type="radio" id="color-constellation" name="color" value="constellation" />
@@ -78,260 +80,281 @@
             </div>
             <div class="filter-item">
               <input type="radio" id="color-galactic-plane" name="color" value="galactic-plane" />
-              <label for="color-galactic-plane">Galactic Plane</label>
+              <label for="color-galactic-plane">Galactic plane</label>
             </div>
           </div>
         </fieldset>
 
-        <!-- Opacity Filter -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Opacity</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Opacity</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="radio" id="opacity-absolute-mag" name="opacity" value="absolute-magnitude" checked />
-              <label for="opacity-absolute-mag">Absolute Magnitude-Based</label>
+              <label for="opacity-absolute-mag">Absolute magnitude-based</label>
             </div>
             <div class="filter-item">
               <input type="radio" id="opacity-75" name="opacity" value="75" />
-              <label for="opacity-75">75% Opacity</label>
+              <label for="opacity-75">75% opacity</label>
             </div>
-            <div class="filter-item">
-              <label for="star-opacity-slider">Star Opacity:</label>
-              <input type="range" id="star-opacity-slider" name="star-opacity" min="0" max="100" value="100" step="1" />
-              <input type="number" id="star-opacity-number" name="star-opacity" min="0" max="100" value="100" step="1" />
-              <span id="star-opacity-value">100</span>%
+            <div class="filter-item filter-item--stacked">
+              <label for="star-opacity-slider">Star opacity</label>
+              <div class="paired-inputs">
+                <input type="range" id="star-opacity-slider" name="star-opacity" min="0" max="100" value="100" step="1" />
+                <input type="number" id="star-opacity-number" name="star-opacity" min="0" max="100" value="100" step="1" />
+                <span id="star-opacity-value">100</span><span>%</span>
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="star-name-opacity-slider">Star Name Opacity:</label>
-              <input type="range" id="star-name-opacity-slider" name="star-name-opacity" min="0" max="100" value="100" step="1" />
-              <input type="number" id="star-name-opacity-number" name="star-name-opacity" min="0" max="100" value="100" step="1" />
-              <span id="star-name-opacity-value">100</span>%
+            <div class="filter-item filter-item--stacked">
+              <label for="star-name-opacity-slider">Star name opacity</label>
+              <div class="paired-inputs">
+                <input type="range" id="star-name-opacity-slider" name="star-name-opacity" min="0" max="100" value="100" step="1" />
+                <input type="number" id="star-name-opacity-number" name="star-name-opacity" min="0" max="100" value="100" step="1" />
+                <span id="star-name-opacity-value">100</span><span>%</span>
+              </div>
             </div>
           </div>
         </fieldset>
 
-        <!-- Stars Shown Filter -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Stars Shown</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Stars Shown</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="radio" id="stars-shown-all" name="stars-shown" value="all" checked />
-              <label for="stars-shown-all">All Stars</label>
+              <label for="stars-shown-all">All stars</label>
             </div>
             <div class="filter-item">
               <input type="radio" id="stars-shown-visible" name="stars-shown" value="visible" />
-              <label for="stars-shown-visible">Visible Stars (Magnitude ≤ 6)</label>
+              <label for="stars-shown-visible">Visible stars (magnitude ․6)</label>
             </div>
           </div>
         </fieldset>
 
-        <!-- Distance Filter Fieldset -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Distance Filter (LY)</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Distance Filter (LY)</legend>
           <div class="filter-content">
-            <div class="filter-item">
-              <label for="min-distance-slider">Minimum Distance:</label>
-              <input type="range" id="min-distance-slider" min="0" max="100" value="0" />
-              <input type="number" id="min-distance-number" name="min-distance" min="0" max="100" value="0" />
+            <div class="filter-item filter-item--stacked">
+              <label for="min-distance-slider">Minimum distance</label>
+              <div class="paired-inputs">
+                <input type="range" id="min-distance-slider" min="0" max="100" value="0" />
+                <input type="number" id="min-distance-number" name="min-distance" min="0" max="100" value="0" />
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="max-distance-slider">Maximum Distance:</label>
-              <input type="range" id="max-distance-slider" min="0" max="100" value="20" />
-              <input type="number" id="max-distance-number" name="max-distance" min="0" max="100" value="20" />
+            <div class="filter-item filter-item--stacked">
+              <label for="max-distance-slider">Maximum distance</label>
+              <div class="paired-inputs">
+                <input type="range" id="max-distance-slider" min="0" max="100" value="20" />
+                <input type="number" id="max-distance-number" name="max-distance" min="0" max="100" value="20" />
+              </div>
             </div>
           </div>
         </fieldset>
 
-        <!-- Connections Filter -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Connections (LY)</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Connections (LY)</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-connections" name="enable-connections" />
-              <label for="enable-connections">Enable Connections</label>
+              <label for="enable-connections">Enable connections</label>
             </div>
             <div class="filter-item">
-              <input type="range" id="connection-slider" name="connections" min="1" max="50" value="7" disabled />
-              <input type="number" id="connection-number" name="connections" min="1" max="50" value="7" disabled /> Light Years
+              <div class="paired-inputs paired-inputs--with-suffix">
+                <input type="range" id="connection-slider" name="connections" min="1" max="50" value="7" disabled />
+                <input type="number" id="connection-number" name="connections" min="1" max="50" value="7" disabled />
+                <span>LY</span>
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="connection-opacity-slider">Line Opacity:</label>
-              <input type="range" id="connection-opacity-slider" name="connection-opacity" min="0" max="100" value="50" step="1" disabled />
-              <input type="number" id="connection-opacity-number" name="connection-opacity" min="0" max="100" value="50" step="1" disabled />
-              <span id="connection-opacity-value">50</span>%
+            <div class="filter-item filter-item--stacked">
+              <label for="connection-opacity-slider">Line opacity</label>
+              <div class="paired-inputs">
+                <input type="range" id="connection-opacity-slider" name="connection-opacity" min="0" max="100" value="50" step="1" disabled />
+                <input type="number" id="connection-opacity-number" name="connection-opacity" min="0" max="100" value="50" step="1" disabled />
+                <span id="connection-opacity-value">50</span><span>%</span>
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="connection-width-slider">Max Thickness:</label>
-              <input type="range" id="connection-width-slider" name="connection-width" min="1" max="10" value="5" step="0.5" disabled />
-              <input type="number" id="connection-width-number" name="connection-width" min="1" max="10" step="0.5" value="5" disabled />
+            <div class="filter-item filter-item--stacked">
+              <label for="connection-width-slider">Max thickness</label>
+              <div class="paired-inputs">
+                <input type="range" id="connection-width-slider" name="connection-width" min="1" max="10" value="5" step="0.5" disabled />
+                <input type="number" id="connection-width-number" name="connection-width" min="1" max="10" step="0.5" value="5" disabled />
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="connection-fade-slider">Edge Hardness:</label>
-              <input type="range" id="connection-fade-slider" name="connection-fade" min="0.5" max="5" value="1" step="0.1" disabled />
-              <input type="number" id="connection-fade-number" name="connection-fade" min="0.5" max="5" step="0.1" value="1" disabled />
+            <div class="filter-item filter-item--stacked">
+              <label for="connection-fade-slider">Edge hardness</label>
+              <div class="paired-inputs">
+                <input type="range" id="connection-fade-slider" name="connection-fade" min="0.5" max="5" value="1" step="0.1" disabled />
+                <input type="number" id="connection-fade-number" name="connection-fade" min="0.5" max="5" step="0.1" value="1" disabled />
+                </span>
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="connection-label-size-slider">Label Size:</label>
-              <input type="range" id="connection-label-size-slider" name="connection-label-size" min="0.5" max="5" value="1" step="0.1" disabled />
-              <input type="number" id="connection-label-size-number" name="connection-label-size" min="0.5" max="5" value="1" step="0.1" disabled />
+            <div class="filter-item filter-item--stacked">
+              <label for="connection-label-size-slider">Label size</label>
+              <div class="paired-inputs">
+                <input type="range" id="connection-label-size-slider" name="connection-label-size" min="0.5" max="5" value="1" step="0.1" disabled />
+                <input type="number" id="connection-label-size-number" name="connection-label-size" min="0.5" max="5" value="1" step="0.1" disabled />
+              </div>
             </div>
           </div>
         </fieldset>
 
-        <!-- Isolation Filter Fieldset -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Isolation Filter</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Isolation Filter</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-isolation-filter" name="enable-isolation-filter" />
-              <label for="enable-isolation-filter">Enable Isolation Filter</label>
+              <label for="enable-isolation-filter">Enable isolation filter</label>
             </div>
-            <div class="filter-item">
-              <label for="isolation-slider">Isolation Distance (LY):</label>
-              <input type="range" id="isolation-slider" name="isolation" min="1" max="20" value="5" disabled />
-              <input type="number" id="isolation-number" name="isolation" min="1" max="20" value="5" disabled />
-              <span id="isolation-value">5</span> LY
+            <div class="filter-item filter-item--stacked">
+              <label for="isolation-slider">Isolation distance (LY)</label>
+              <div class="paired-inputs">
+                <input type="range" id="isolation-slider" name="isolation" min="1" max="20" value="5" disabled />
+                <input type="number" id="isolation-number" name="isolation" min="1" max="20" value="5" disabled />
+                <span id="isolation-value">5</span><span> LY</span>
+              </div>
             </div>
-            <div class="filter-item">
-              <label>Ignore this many closest stars: <span id="isolation-tolerance-value">0</span></label>
+            <div class="filter-item filter-item--stacked">
+              <label for="isolation-tolerance-slider">Ignore closest stars: <span id="isolation-tolerance-value">0</span></label>
               <input type="range" id="isolation-tolerance-slider" name="isolation-tolerance" min="0" max="10" value="0" disabled />
             </div>
             <div class="filter-item">
               <input type="checkbox" id="enable-isolation-labeling" name="enable-isolation-labeling" />
-              <label for="enable-isolation-labeling">Enable Isolation Cluster Labeling &amp; Segmentation</label>
+              <label for="enable-isolation-labeling">Enable isolation cluster labeling &amp; segmentation</label>
             </div>
-            <div class="filter-item">
-              <label for="isolation-grid-slider">Grid Subdivision:</label>
-              <input type="range" id="isolation-grid-slider" name="isolation-grid-size" min="-10" max="10" step="1" value="1" disabled />
-              <input type="number" id="isolation-grid-number" name="isolation-grid-size" min="-10" max="10" step="1" value="1" disabled />
+            <div class="filter-item filter-item--stacked">
+              <label for="isolation-grid-slider">Grid subdivision</label>
+              <div class="paired-inputs">
+                <input type="range" id="isolation-grid-slider" name="isolation-grid-size" min="-10" max="10" step="1" value="1" disabled />
+                <input type="number" id="isolation-grid-number" name="isolation-grid-size" min="-10" max="10" step="1" value="1" disabled />
+              </div>
             </div>
           </div>
         </fieldset>
 
-        <!-- Density Filter Fieldset -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Density Filter</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Density Filter</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-density-filter" name="enable-density-filter" />
-              <label for="enable-density-filter">Enable Density Filter</label>
+              <label for="enable-density-filter">Enable density filter</label>
             </div>
-            <div class="filter-item">
-              <label for="density-slider">Density Radius (LY):</label>
-              <input type="range" id="density-slider" name="density" min="1" max="20" value="10" disabled />
-              <input type="number" id="density-number" name="density" min="1" max="20" value="10" disabled />
-              <span id="density-value">10</span> LY
+            <div class="filter-item filter-item--stacked">
+              <label for="density-slider">Density radius (LY)</label>
+              <div class="paired-inputs">
+                <input type="range" id="density-slider" name="density" min="1" max="20" value="10" disabled />
+                <input type="number" id="density-number" name="density" min="1" max="20" value="10" disabled />
+                <span id="density-value">10</span><span> S</span>
+              </div>
             </div>
-            <div class="filter-item">
-              <label>Ignore this many closest stars: <span id="density-tolerance-value">0</span></label>
+            <div class="filter-item filter-item--stacked">
+              <label for="density-tolerance-slider">Ignore closest stars: <span id="density-tolerance-value">0</span></label>
               <input type="range" id="density-tolerance-slider" name="density-tolerance" min="0" max="10" value="0" disabled />
             </div>
-            <div class="filter-item">
-              <label for="density-bottom-slider">Bottom Cells %:</label>
-              <input type="range" id="density-bottom-slider" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
-              <input type="number" id="density-bottom-number" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
-              <span id="density-bottom-value">10</span>%
+            <div class="filter-item filter-item--stacked">
+              <label for="density-bottom-slider">Bottom cells %</label>
+              <div class="paired-inputs">
+                <input type="range" id="density-bottom-slider" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
+                <input type="number" id="density-bottom-number" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
+                <span id="density-bottom-value">10</span><span>%</span>
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="density-top-slider">Top Cells %:</label>
-              <input type="range" id="density-top-slider" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
-              <input type="number" id="density-top-number" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
-              <span id="density-top-value">10</span>%
+            <div class="filter-item filter-item--stacked">
+              <label for="density-top-slider">Top cells %</label>
+              <div class="paired-inputs">
+                <input type="range" id="density-top-slider" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
+                <input type="number" id="density-top-number" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
+                <span id="density-top-value">10</span><span>%</span>
+              </div>
             </div>
             <div class="filter-item">
               <input type="checkbox" id="enable-density-labeling" name="enable-density-labeling" />
-              <label for="enable-density-labeling">Enable Density Cluster Labeling &amp; Segmentation</label>
+              <label for="enable-density-labeling">Enable density cluster labeling &amp; segmentation</label>
             </div>
-            <div class="filter-item">
-              <label for="density-grid-slider">Grid Subdivision:</label>
-              <input type="range" id="density-grid-slider" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
-              <input type="number" id="density-grid-number" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
+            <div class="filter-item filter-item--stacked">
+              <label for="density-grid-slider">Grid subdivision</label>
+              <div class="paired-inputs">
+                <input type="range" id="density-grid-slider" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
+                <input type="number" id="density-grid-number" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="density-opacity-slider">Overlay Opacity:</label>
-              <input type="range" id="density-opacity-slider" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
-              <input type="number" id="density-opacity-number" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
-              <span id="density-opacity-value">100</span>%
+            <div class="filter-item filter-item--stacked">
+              <label for="density-opacity-slider">Overlay opacity</label>
+              <div class="paired-inputs">
+                <input type="range" id="density-opacity-slider" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
+                <input type="number" id="density-opacity-number" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
+                <span id="density-opacity-value">100</span><span>%</span>
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="density-line-width-slider">Line Thickness:</label>
-              <input type="range" id="density-line-width-slider" name="density-line-width" min="5" max="60" value="30" step="1" disabled />
-              <input type="number" id="density-line-width-number" name="density-line-width" min="5" max="60" value="30" step="1" disabled />
+            <div class="filter-item filter-item--stacked">
+              <label for="density-line-width-slider">Line thickness</label>
+              <div class="paired-inputs">
+                <input type="range" id="density-line-width-slider" name="density-line-width" min="5" max="60" value="30" step="1" disabled />
+                <input type="number" id="density-line-width-number" name="density-line-width" min="5" max="60" value="30" step="1" disabled />
+              </div>
             </div>
-            <div class="filter-item">
-              <label for="density-fade-slider">Edge Hardness:</label>
-              <input type="range" id="density-fade-slider" name="density-fade" min="0.5" max="5" value="1" step="0.1" disabled />
-              <input type="number" id="density-fade-number" name="density-fade" min="0.5" max="5" value="1" step="0.1" disabled />
+            <div class="filter-item filter-item--stacked">
+              <label for="density-fade-slider">Edge hardness</label>
+              <div class="paired-inputs">
+                <input type="range" id="density-fade-slider" name="density-fade" min="0.5" max="5" value="1" step="0.1" disabled />
+                <input type="number" id="density-fade-number" name="density-fade" min="0.5" max="5" step="0.1" value="1" disabled />
+                </span>
+              </div>
             </div>
           </div>
         </fieldset>
-        <!-- Save Presets Fieldset -->
+
         <fieldset id="save-presets-fieldset">
-          <legend class="collapsible" aria-expanded="false">Save Presets</legend>
+          <legend class="collapsible" aria-expanded="false" tabindex="0" role="button">Save Presets</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-save-presets" name="enable-save-presets" />
-              <label for="enable-save-presets">Remember Filters &amp; Edits</label>
+              <label for="enable-save-presets">Remember filters &amp; edits</label>
             </div>
             <div class="filter-item">
               <button type="button" id="clear-saved-presets">Clear Saved Presets</button>
             </div>
-            <div class="filter-item">
+            <div class="filter-item filter-item--actions">
               <button type="button" id="download-edits">Download Edits</button>
               <button type="button" id="upload-edits">Upload Edits</button>
-              <input type="file" id="upload-edits-input" accept="application/json" style="display:none" />
+              <input type="file" id="upload-edits-input" accept="application/json" hidden />
             </div>
           </div>
         </fieldset>
       </form>
     </aside>
 
-    <!-- Maps Section -->
-    <section class="maps-section">
+    <section id="maps-section" class="maps-section">
       <div class="map-container">
         <h2>True Coordinates Map</h2>
-        <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">⤢</button>
+        <button class="fullscreen-btn" type="button" aria-label="Fullscreen True Coordinates Map">⤫</button>
         <canvas id="map3D"></canvas>
       </div>
       <div class="map-container">
         <h2>Globe Map</h2>
-        <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">⤢</button>
+        <button class="fullscreen-btn" type="button" aria-label="Fullscreen Globe Map">☫</button>
         <canvas id="sphereMap"></canvas>
       </div>
       <div class="map-container">
         <h2>Mollweide Map</h2>
-        <button class="fullscreen-btn" aria-label="Fullscreen Mollweide Map">⤢</button>
+        <button class="fullscreen-btn" type="button" aria-label="Fullscreen Mollweide Map">⊫</button>
         <canvas id="mollweideMap"></canvas>
         <div class="export-controls">
-          <button id="export-mollweide" class="export-btn">Export</button>
-          <button id="export-png" class="export-btn" style="display:none">PNG</button>
-          <button id="export-pdf" class="export-btn" style="display:none">PDF</button>
-          <button id="toggle-label-editor" class="export-btn">Edit Labels</button>
-          <button id="toggle-line-editor" class="export-btn">Edit Lines</button>
-          <button id="undo-edit" class="export-btn">Undo</button>
+          <button id="export-mollweide" class="export-btn" type="button">Export</button>
+          <button id="export-png" class="export-btn" type="button" hidden>PNG</button>
+          <button id="export-pdf" class="export-btn" type="button" hidden>PDF</button>
+          <button id="toggle-label-editor" class="export-btn" type="button">Edit Labels</button>
+          <button id="toggle-line-editor" class="export-btn" type="button">Edit Lines</button>
+          <button id="undo-edit" class="export-btn" type="button">Undo</button>
         </div>
       </div>
     </section>
   </div>
 
-  <!-- Tooltip -->
-  <div id="tooltip" class="hidden">
-    <div id="tooltip-starName"></div>
-    <div id="tooltip-systemName"></div>
-    <div id="tooltip-distance"></div>
-    <div id="tooltip-stellarClass"></div>
-    <div id="tooltip-mass"></div>
-    <div id="tooltip-apparentMag"></div>
-    <div id="tooltip-absoluteMag"></div>
-  </div>
+  <div id="tooltip" class="hidden" role="dialog" aria-live="polite" aria-hidden="true"></div>
 
-  <!-- Labels Container -->
   <div class="label-container"></div>
   <div id="export-selection-overlay" style="display:none">
     <div id="export-selection-rect"></div>
   </div>
 
-  <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script type="module" src="script.js"></script>
   <script type="module">
