@@ -36,6 +36,7 @@ import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
 import { minimalRADifference } from './utils.js';
+import { initFilterUI } from './ui/filterUI.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -2406,6 +2407,7 @@ async function main() {
   try {
     cachedStars = await loadStarData();
     if (!cachedStars.length) throw new Error('No star data available');
+    initFilterUI();
     await setupFilterUI(cachedStars);
     const form = document.getElementById('filters-form');
     if (form) {

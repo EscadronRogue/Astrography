@@ -46,6 +46,7 @@ export class ThreeDControls {
     offset.setFromSpherical(spherical);
     this.camera.position.copy(this.target.clone().add(offset));
     this.camera.lookAt(this.target);
+    window.requestRender?.();
   }
 
   onPointerUp(event) {
@@ -61,6 +62,7 @@ export class ThreeDControls {
     offset.setLength(next);
     this.camera.position.copy(this.target.clone().add(offset));
     this.camera.lookAt(this.target);
+    window.requestRender?.();
   }
 
   dispose() {
@@ -110,6 +112,7 @@ export class TwoDControls {
     this.previousPointerPosition.y = event.clientY;
     this.camera.position.x -= dx * this.panSpeed / this.camera.zoom;
     this.camera.position.y += dy * this.panSpeed / this.camera.zoom;
+    window.requestRender?.();
   }
 
   onPointerUp(event) {
@@ -122,6 +125,7 @@ export class TwoDControls {
     const nextZoom = THREE.MathUtils.clamp(this.camera.zoom * (1 - event.deltaY * this.zoomSpeed), this.minZoom, this.maxZoom);
     this.camera.zoom = nextZoom;
     this.camera.updateProjectionMatrix();
+    window.requestRender?.();
   }
 
   dispose() {
