@@ -35,6 +35,7 @@ import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
 import { minimalRADifference } from './utils.js';
+import { disposeObject3D } from './utils/renderUtils.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -127,6 +128,7 @@ let isSelecting = false;
 const ROTATE_SENSITIVITY = 0.3;
 
 const PRESET_KEY = 'astrography-presets';
+const PRESET_SCHEMA_VERSION = 2;
 
 function maybeSavePresets() {
   const chk = document.getElementById('enable-save-presets');
@@ -158,7 +160,7 @@ function savePresets() {
     removedSegments: Array.from(removedLineSegments),
     hiddenLines: Array.from(hiddenLineKeys)
   };
-  const obj = { remember: true, form: data, edits, lineEdits };
+  const obj = { schemaVersion: PRESET_SCHEMA_VERSION, remember: true, form: data, edits, lineEdits };
   localStorage.setItem(PRESET_KEY, JSON.stringify(obj));
 }
 
@@ -176,6 +178,7 @@ function loadPresets() {
     const chk = document.getElementById('enable-save-presets');
     if (chk) chk.checked = true;
   }
+  if (obj.schemaVersion && obj.schemaVersion > PRESET_SCHEMA_VERSION) return;
   if (form && obj.form) {
     const data = obj.form;
     for (const [id, val] of Object.entries(data)) {
@@ -208,6 +211,29 @@ function loadPresets() {
     hiddenLineKeys.clear();
     (obj.lineEdits.hiddenLines || []).forEach(k => hiddenLineKeys.add(k));
   }
+}
+
+
+function normalizeNumber(value) {
+  const num = typeof value === 'string' ? Number.parseFloat(value) : value;
+  return Number.isFinite(num) ? num : undefined;
+}
+
+function buildStableStarId(star) {
+  return star.Source_id || star.HIP_number || star.HD_catalogue_identifier || `${star.Common_name_of_the_star || 'star'}|${star.RA_in_degrees}|${star.DEC_in_degrees}`;
+}
+
+function normalizeStarRecord(star) {
+  const distance = normalizeNumber(star.distance ?? star.Distance_from_the_Sun);
+  const apparentMagnitude = normalizeNumber(star.apparentMagnitude ?? star.Apparent_magnitude);
+  const absoluteMagnitude = normalizeNumber(star.absoluteMagnitude ?? star.Absolute_magnitude);
+  return {
+    ...star,
+    distance,
+    apparentMagnitude,
+    absoluteMagnitude,
+    starId: star.starId || buildStableStarId(star)
+  };
 }
 
 function captureStellarClassState() {
@@ -462,7 +488,8 @@ async function loadStarData() {
       console.warn(`Manifest file not found: ${manifestUrl}`);
       return [];
     }
-    const fileNames = await manifestResp.json();
+    const manifestPayload = await manifestResp.json();
+    const fileNames = Array.isArray(manifestPayload) ? manifestPayload : (manifestPayload.files || []);
     const dataPromises = fileNames.map(name =>
       fetch(`data/${name}`).then(resp => {
         if (!resp.ok) {
@@ -473,10 +500,9 @@ async function loadStarData() {
       })
     );
     const filesData = await Promise.all(dataPromises);
-    const combinedData = filesData.flat();
-    return combinedData;
+    return filesData.flat().map(normalizeStarRecord);
   } catch (e) {
-    console.warn("Error loading star data:", e);
+    console.warn('Error loading star data:', e);
     return [];
   }
 }
@@ -647,9 +673,9 @@ async function buildAndApplyFilters() {
     registerMollweideEditableLabels();
   }
   if (showConstellationOverlay) {
-    const constellationOverlay = createConstellationOverlayForGlobe();
-    constellationOverlay.forEach(mesh => {
-      window.globeMap.scene.add(mesh);
+    constellationOverlayGlobe = createConstellationOverlayForGlobe();
+    constellationOverlayGlobe.forEach(mesh => {
+      globeMap.scene.add(mesh);
     });
     constellationOverlayMoll = createConstellationOverlayForMollweide();
     constellationOverlayMoll.forEach(mesh => {
@@ -682,11 +708,11 @@ async function buildAndApplyFilters() {
     const files = new FormData(form).getAll('dust-density-clouds');
     cloudDensityOverlays.forEach(ov => {
       ov.cubesData.forEach(c => {
-        trueCoordinatesMap.scene.remove(c.tcMesh);
-        globeMap.scene.remove(c.globeMesh);
-        mollweideMap.scene.remove(c.mollweideMesh);
+        trueCoordinatesMap.scene.remove(c.tcMesh); disposeObject3D(c.tcMesh);
+        globeMap.scene.remove(c.globeMesh); disposeObject3D(c.globeMesh);
+        mollweideMap.scene.remove(c.mollweideMesh); disposeObject3D(c.mollweideMesh);
       });
-      mollweideMap.scene.remove(ov.textureMesh);
+      mollweideMap.scene.remove(ov.textureMesh); disposeObject3D(ov.textureMesh);
     });
     cloudDensityOverlays = [];
     for (const f of files) {
@@ -705,11 +731,11 @@ async function buildAndApplyFilters() {
   } else {
     cloudDensityOverlays.forEach(ov => {
       ov.cubesData.forEach(c => {
-        trueCoordinatesMap.scene.remove(c.tcMesh);
-        globeMap.scene.remove(c.globeMesh);
-        mollweideMap.scene.remove(c.mollweideMesh);
+        trueCoordinatesMap.scene.remove(c.tcMesh); disposeObject3D(c.tcMesh);
+        globeMap.scene.remove(c.globeMesh); disposeObject3D(c.globeMesh);
+        mollweideMap.scene.remove(c.mollweideMesh); disposeObject3D(c.mollweideMesh);
       });
-      mollweideMap.scene.remove(ov.textureMesh);
+      mollweideMap.scene.remove(ov.textureMesh); disposeObject3D(ov.textureMesh);
     });
     cloudDensityOverlays = [];
   }
@@ -722,30 +748,30 @@ async function buildAndApplyFilters() {
 
 function removeConstellationObjectsFromGlobe() {
   if (constellationLinesGlobe && constellationLinesGlobe.length > 0) {
-    constellationLinesGlobe.forEach(l => globeMap.scene.remove(l));
+    constellationLinesGlobe.forEach(l => { globeMap.scene.remove(l); disposeObject3D(l); });
   }
   constellationLinesGlobe = [];
   if (constellationLabelsGlobe && constellationLabelsGlobe.length > 0) {
-    constellationLabelsGlobe.forEach(lbl => globeMap.scene.remove(lbl));
+    constellationLabelsGlobe.forEach(lbl => { globeMap.scene.remove(lbl); disposeObject3D(lbl); });
   }
   constellationLabelsGlobe = [];
   if (constellationLinesMoll && constellationLinesMoll.length > 0) {
-    constellationLinesMoll.forEach(l => mollweideMap.scene.remove(l));
+    constellationLinesMoll.forEach(l => { mollweideMap.scene.remove(l); disposeObject3D(l); });
   }
   constellationLinesMoll = [];
   if (constellationLabelsMoll && constellationLabelsMoll.length > 0) {
-    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
+    constellationLabelsMoll.forEach(lbl => { mollweideMap.scene.remove(lbl); disposeObject3D(lbl); });
   }
   constellationLabelsMoll = [];
 }
 
 function removeConstellationOverlayObjectsFromGlobe() {
   if (constellationOverlayGlobe && constellationOverlayGlobe.length > 0) {
-    constellationOverlayGlobe.forEach(mesh => globeMap.scene.remove(mesh));
+    constellationOverlayGlobe.forEach(mesh => { globeMap.scene.remove(mesh); disposeObject3D(mesh); });
   }
   constellationOverlayGlobe = [];
   if (constellationOverlayMoll && constellationOverlayMoll.length > 0) {
-    constellationOverlayMoll.forEach(mesh => mollweideMap.scene.remove(mesh));
+    constellationOverlayMoll.forEach(mesh => { mollweideMap.scene.remove(mesh); disposeObject3D(mesh); });
   }
   constellationOverlayMoll = [];
 }
@@ -1445,13 +1471,13 @@ async function updateMollweideView() {
     }
   }
   if (showConstellationNamesFlag) {
-    constellationLabelsMoll.forEach(lbl => mollweideMap.scene.remove(lbl));
+    constellationLabelsMoll.forEach(lbl => { mollweideMap.scene.remove(lbl); disposeObject3D(lbl); });
     constellationLabelsMoll = createConstellationLabelsForMollweide();
     constellationLabelsMoll.forEach(lbl => mollweideMap.scene.add(lbl));
     registerMollweideEditableLabels();
   }
   if (showConstellationOverlayFlag) {
-    constellationOverlayMoll.forEach(mesh => mollweideMap.scene.remove(mesh));
+    constellationOverlayMoll.forEach(mesh => { mollweideMap.scene.remove(mesh); disposeObject3D(mesh); });
     constellationOverlayMoll = createConstellationOverlayForMollweide();
     constellationOverlayMoll.forEach(mesh => mollweideMap.scene.add(mesh));
   }
@@ -2448,4 +2474,4 @@ async function main() {
   }
 }
 
-window.onload = main;
+window.addEventListener('DOMContentLoaded', main);

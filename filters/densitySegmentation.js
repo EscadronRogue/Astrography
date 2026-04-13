@@ -41,7 +41,7 @@ function computeConnectedComponents(cells) {
       if (visited.has(cur.id)) continue;
       visited.add(cur.id);
       comp.push(cur);
-      const nbrs = neighbors(cur);
+      const nbrs = neighbors(cur, cells);
       nbrs.forEach(n => {
         if (!visited.has(n.id)) {
           stack.push(n);
@@ -53,7 +53,7 @@ function computeConnectedComponents(cells) {
   return components;
 }
 
-function neighbors(cell) {
+function neighbors(cell, cells) {
   const result = [];
   for (let dx = -1; dx <= 1; dx++) {
     for (let dy = -1; dy <= 1; dy++) {

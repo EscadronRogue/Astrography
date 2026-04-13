@@ -1,8 +1,9 @@
 // /filters/constellationFilter.js
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, greatCircleToMollweide } from '../utils/geometryUtils.js';
-import { buildWideLineGeometry } from './connectionsFilter.js';
+import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, greatCircleToMollweide, parseRA, parseDec, degToRad } from '../utils/geometryUtils.js';
+import { buildWideLineGeometry, createWideLineMaterial } from '../utils/renderUtils.js';
+import { getDoubleSidedLabelMaterial } from './densityColorUtils.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -44,22 +45,10 @@ export async function loadConstellationBoundaries() {
  */
 export async function loadConstellationCenters() {
   try {
-    const resp = await fetch('constellation_center.txt');
-    if (!resp.ok) throw new Error(`Failed to load constellation_center.txt: ${resp.status}`);
-    const raw = await resp.text();
-    const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
-    centerData = [];
-    for (const line of lines) {
-      const parts = line.split(/\s+/);
-      if (parts.length < 5) continue;
-      const raStr = parts[2];
-      const decStr = parts[3];
-      const matchName = line.match(/"([^"]+)"/);
-      const name = matchName ? matchName[1] : 'Unknown';
-      const raVal = parseRA(raStr);
-      const decVal = parseDec(decStr);
-      centerData.push({ ra: raVal, dec: decVal, name });
-    }
+    const resp = await fetch('constellation_center.json');
+    if (!resp.ok) throw new Error(`Failed to load constellation_center.json: ${resp.status}`);
+    const raw = await resp.json();
+    centerData = raw.map(entry => ({ ra: degToRad(entry.raDeg), dec: degToRad(entry.decDeg), name: entry.name }));
     console.log(`[ConstellationFilter] Centers: loaded ${centerData.length} items.`);
   } catch (err) {
     console.error('Error loading constellation centers:', err);
@@ -294,31 +283,7 @@ export function createConstellationLabelsForGlobe(opacity = 0.8) {
     ctx.fillText(c.name, 10, baseFontSize);
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        map: { value: texture },
-        opacity: { value: opacity }
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D map;
-        uniform float opacity;
-        varying vec2 vUv;
-        void main() {
-          vec2 uvCorrected = gl_FrontFacing ? vUv : vec2(1.0 - vUv.x, vUv.y);
-          vec4 color = texture2D(map, uvCorrected);
-          gl_FragColor = vec4(color.rgb, color.a * opacity);
-        }
-      `,
-      transparent: true,
-      side: THREE.DoubleSide
-    });
+    const material = getDoubleSidedLabelMaterial(texture, opacity);
     const planeGeom = new THREE.PlaneGeometry(canvas.width / 100, canvas.height / 100);
     const label = new THREE.Mesh(planeGeom, material);
     label.position.copy(p);
@@ -366,75 +331,3 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
   return labels;
 }
 
-export function createConstellationOverlayForMollweide() {
-  const boundaries = getConstellationBoundaries();
-  const groups = {};
-  const lambda0 = getMollweideLambda0();
-  boundaries.forEach(seg => {
-    const key1 = seg.const1 ? seg.const1.toUpperCase() : null;
-    const key2 = seg.const2 ? seg.const2.toUpperCase() : null;
-    if (key1) {
-      if (!groups[key1]) groups[key1] = [];
-      groups[key1].push(seg);
-    }
-    if (key2 && key2 !== key1) {
-      if (!groups[key2]) groups[key2] = [];
-      groups[key2].push(seg);
-    }
-  });
-  const colorMapping = computeConstellationColorMapping();
-  const overlays = [];
-  for (const constellation in groups) {
-    const segs = groups[constellation];
-    const points = [];
-    segs.forEach(seg => {
-      const p1 = cachedRadToMollweide(seg.ra1, seg.dec1, 100, lambda0);
-      const p2 = cachedRadToMollweide(seg.ra2, seg.dec2, 100, lambda0);
-      if (Math.abs(p1.x - p2.x) > 200) {
-        if (p1.x > p2.x) p1.x -= 400; else p2.x -= 400;
-      }
-      points.push(p1);
-      points.push(p2);
-    });
-    const shape = new THREE.Shape(points.map(p => new THREE.Vector2(p.x, p.y)));
-    const geometry = new THREE.ShapeGeometry(shape);
-    const material = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(colorMapping[constellation]),
-      opacity: 0.15,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    overlays.push(mesh);
-  }
-  return overlays;
-}
-
-/**
- * Parses a Right Ascension string (e.g. "12:34:56") into radians.
- */
-function parseRA(raStr) {
-  const [hh, mm, ss] = raStr.split(':').map(x => parseFloat(x));
-  const hours = hh + mm / 60 + ss / 3600;
-  const deg = hours * 15;
-  return degToRad(deg);
-}
-
-/**
- * Parses a Declination string (e.g. "-12:34:56") into radians.
- */
-function parseDec(decStr) {
-  const sign = decStr.startsWith('-') ? -1 : 1;
-  const stripped = decStr.replace('+', '').replace('-', '');
-  const [dd, mm, ss] = stripped.split(':').map(x => parseFloat(x));
-  const degVal = (dd + mm / 60 + ss / 3600) * sign;
-  return degToRad(degVal);
-}
-
-/**
- * Converts degrees to radians.
- */
-function degToRad(d) {
-  return d * Math.PI / 180;
-}

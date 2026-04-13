@@ -453,18 +453,10 @@ class IsolationGridOverlay {
       const arcAngle = p1.angleTo(p2);
       const perpAngle = Math.asin(Math.abs(cellPos.clone().normalize().dot(p1.clone().cross(p2).normalize())));
       if (angleToP1 + angleToP2 - arcAngle < 1e-3) {
-        return THREE.Math.radToDeg(perpAngle);
+        return THREE.MathUtils.radToDeg(perpAngle);
       } else {
-        return THREE.Math.radToDeg(Math.min(angleToP1, angleToP2));
+        return THREE.MathUtils.radToDeg(Math.min(angleToP1, angleToP2));
       }
-    }
-    function vectorToRaDec(cellPos) {
-      const R = 100;
-      const dec = Math.asin(cellPos.y / R);
-      let ra = Math.atan2(-cellPos.z, -cellPos.x);
-      let raDeg = ra * 180 / Math.PI;
-      if (raDeg < 0) raDeg += 360;
-      return { ra: raDeg, dec: dec * 180 / Math.PI };
     }
     // Assumes loadConstellationFullNames is available.
     const namesMapping = await loadConstellationFullNames();
@@ -513,11 +505,11 @@ class IsolationGridOverlay {
         let bestConstellation = "Unknown";
         let minAngle = Infinity;
         centers.forEach(center => {
-          const centerRAdeg = THREE.Math.radToDeg(center.ra);
-          const centerDecdeg = THREE.Math.radToDeg(center.dec);
-          const cosDelta = Math.sin(THREE.Math.degToRad(cellDec)) * Math.sin(THREE.Math.degToRad(centerDecdeg)) +
-                           Math.cos(THREE.Math.degToRad(cellDec)) * Math.cos(THREE.Math.degToRad(centerDecdeg)) *
-                           Math.cos(THREE.Math.degToRad(cellRA - centerRAdeg));
+          const centerRAdeg = THREE.MathUtils.radToDeg(center.ra);
+          const centerDecdeg = THREE.MathUtils.radToDeg(center.dec);
+          const cosDelta = Math.sin(THREE.MathUtils.degToRad(cellDec)) * Math.sin(THREE.MathUtils.degToRad(centerDecdeg)) +
+                           Math.cos(THREE.MathUtils.degToRad(cellDec)) * Math.cos(THREE.MathUtils.degToRad(centerDecdeg)) *
+                           Math.cos(THREE.MathUtils.degToRad(cellRA - centerRAdeg));
           const dist = Math.acos(THREE.MathUtils.clamp(cosDelta, -1, 1));
           if (dist < minAngle) {
             minAngle = dist;

@@ -1,71 +1,48 @@
-// File: /filters/densityColorUtils.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 
 export function lightenColor(color, factor) {
-  let hsl = { h: 0, s: 0, l: 0 };
+  const hsl = { h: 0, s: 0, l: 0 };
   color.getHSL(hsl);
-  hsl.l = Math.min(1, hsl.l + factor);
-  let newColor = new THREE.Color();
-  newColor.setHSL(hsl.h, hsl.s, hsl.l);
-  return newColor;
+  const next = new THREE.Color();
+  next.setHSL(hsl.h, hsl.s, Math.min(1, hsl.l + factor));
+  return next;
 }
 
 export function darkenColor(color, factor) {
-  let hsl = { h: 0, s: 0, l: 0 };
+  const hsl = { h: 0, s: 0, l: 0 };
   color.getHSL(hsl);
-  hsl.l = Math.max(0, hsl.l - factor);
-  let newColor = new THREE.Color();
-  newColor.setHSL(hsl.h, hsl.s, hsl.l);
-  return newColor;
+  const next = new THREE.Color();
+  next.setHSL(hsl.h, hsl.s, Math.max(0, hsl.l - factor));
+  return next;
 }
 
-export function getBaseColor(str) {
+function hashString(str) {
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = (hash % 360 + 360) % 360;
+  const value = String(str ?? '');
+  for (let i = 0; i < value.length; i++) hash = value.charCodeAt(i) + ((hash << 5) - hash);
+  return hash;
+}
+
+function hslColorFromHash(str, { start, spread }) {
+  const hue = start + (Math.abs(hashString(str)) % spread);
   return new THREE.Color(`hsl(${hue}, 70%, 50%)`);
 }
 
-export function getBlueColor(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = 200 + (Math.abs(hash) % 41);
-  return new THREE.Color(`hsl(${hue}, 70%, 50%)`);
-}
-
+export function getBaseColor(str) { return hslColorFromHash(str, { start: 0, spread: 360 }); }
+export function getBlueColor(str) { return hslColorFromHash(str, { start: 200, spread: 41 }); }
+export function getGreenColor(str) { return hslColorFromHash(str, { start: 120, spread: 41 }); }
 export function getIndividualBlueColor(seedStr) {
-  let hash = 0;
-  for (let i = 0; i < seedStr.length; i++) {
-    hash = seedStr.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  let normalized = (Math.abs(hash) % 1000) / 1000;
-  let hue = 180 + normalized * 80;
-  let saturation = 70;
-  let lightness = 50;
-  return new THREE.Color(`hsl(${hue}, ${saturation}%, ${lightness}%)`);
+  const normalized = (Math.abs(hashString(seedStr)) % 1000) / 1000;
+  return new THREE.Color(`hsl(${180 + normalized * 80}, 70%, 50%)`);
 }
 
-// NEW: For high density mapping, use a green‐based color instead of blue.
-export function getGreenColor(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  // Green hue around 120° (range 120–160)
-  const hue = 120 + (Math.abs(hash) % 41);
-  return new THREE.Color(`hsl(${hue}, 70%, 50%)`);
+export function getStableConstellationColor(str) {
+  return `#${getBaseColor(String(str || 'UNKNOWN')).getHexString()}`;
 }
 
 export function getDoubleSidedLabelMaterial(texture, opacity = 1.0) {
   return new THREE.ShaderMaterial({
-    uniforms: {
-      map: { value: texture },
-      opacity: { value: opacity }
-    },
+    uniforms: { map: { value: texture }, opacity: { value: opacity } },
     vertexShader: `
       varying vec2 vUv;
       void main() {

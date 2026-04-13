@@ -1,334 +1,161 @@
-// labelManager.js
-
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { interpolateColor } from './utils.js';
+import { getDoubleSidedLabelMaterial } from './filters/densityColorUtils.js';
+import { disposeObject3D, stableAngleFromString } from './utils/renderUtils.js';
 
-/**
- * Returns a ShaderMaterial that renders a texture double‑sided without mirroring.
- */
-function getDoubleSidedLabelMaterial(texture, opacity = 1.0) {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      map: { value: texture },
-      opacity: { value: opacity }
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D map;
-      uniform float opacity;
-      varying vec2 vUv;
-      void main() {
-        // Flip the UV if rendering the back face
-        vec2 uvCorrected = gl_FrontFacing ? vUv : vec2(1.0 - vUv.x, vUv.y);
-        vec4 color = texture2D(map, uvCorrected);
-        gl_FragColor = vec4(color.rgb, color.a * opacity);
-      }
-    `,
-    transparent: true,
-    side: THREE.DoubleSide
-  });
+function getStarCacheKey(star) {
+  return star.starId || star.Source_id || star.HIP_number || `${star.Common_name_of_the_star || 'star'}|${star.RA_in_degrees}|${star.DEC_in_degrees}`;
 }
 
 export class LabelManager {
   constructor(mapType, scene) {
     this.mapType = mapType;
     this.scene = scene;
-
-    // Global opacity applied to star labels
     this.labelOpacity = 1.0;
-
-    // Keep references to label meshes (sprites or planes) and connecting lines
     this.sprites = new Map();
     this.lines = new Map();
-
-    // Used to cache each star's last displayed label text, color, and size
-    // so we only rebuild the label texture if something has changed.
     this.labelCache = new Map();
-
-    // Track assigned label angles for each star system to avoid overlaps
     this.systemAngles = new Map();
   }
 
-  /**
-   * Creates or updates the 3D label and connecting line for a single star.
-   */
   createOrUpdateLabel(star) {
+    const cacheKey = getStarCacheKey(star);
     const starColor = star.displayColor || '#888888';
     const displayName = star.displayName || '';
-
-    // Check our cache
-    const cached = this.labelCache.get(star) || {};
-    const textChanged = (cached.lastText !== displayName);
-    const colorChanged = (cached.lastColor !== starColor);
+    const cached = this.labelCache.get(cacheKey) || {};
     const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
-    const sizeChanged = (cached.lastSize !== labelSize);
+    const needsRebuild = !this.sprites.get(star) || cached.lastText !== displayName || cached.lastColor !== starColor || cached.lastSize !== labelSize;
 
-    // If label already exists but something changed, remove from scene and rebuild.
     let labelObj = this.sprites.get(star);
     let lineObj = this.lines.get(star);
-    const needsRebuild = (!labelObj || textChanged || colorChanged || sizeChanged);
 
     if (needsRebuild) {
-      // Remove old objects if present
-      if (labelObj) this.scene.remove(labelObj);
-      if (lineObj) this.scene.remove(lineObj);
+      if (labelObj) { this.scene.remove(labelObj); disposeObject3D(labelObj); }
+      if (lineObj) { this.scene.remove(lineObj); disposeObject3D(lineObj); }
 
-      // Create the canvas-based label texture
-      const baseFontSize = (this.mapType === 'Globe'
-        ? 64
-        : (this.mapType === 'Mollweide' ? 72 : 24));
-      // Scale label size with the star's display size but cap the extremes
-      // so small star labels remain readable and huge stars aren't
-      // overwhelmingly large. Map the typical size range (1–8) to a more
-      // moderate label scale.
-      const scaleFactor = THREE.MathUtils.clamp(
-        THREE.MathUtils.mapLinear(labelSize, 0.1, 8, 0.1, 5),
-        0.1,
-        5
-      );
+      const baseFontSize = this.mapType === 'Globe' ? 64 : (this.mapType === 'Mollweide' ? 72 : 24);
+      const scaleFactor = THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(labelSize, 0.1, 8, 0.1, 5), 0.1, 5);
       const fontSize = baseFontSize * scaleFactor;
-
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       ctx.font = `${fontSize}px Oswald`;
-
-      const textMetrics = ctx.measureText(displayName);
-      const textWidth = textMetrics.width;
-      const textHeight = fontSize;
+      const textWidth = ctx.measureText(displayName).width;
       const paddingX = 10;
       const paddingY = 5;
       canvas.width = textWidth + paddingX * 2;
-      canvas.height = textHeight + paddingY * 2;
-
-      // Draw text without background
+      canvas.height = fontSize + paddingY * 2;
       ctx.font = `${fontSize}px Oswald`;
-      const labelColor = '#' + interpolateColor('#ffffff', starColor, 0.5).toString(16).padStart(6, '0');
-      ctx.fillStyle = labelColor;
+      ctx.fillStyle = '#' + interpolateColor('#ffffff', starColor, 0.5).toString(16).padStart(6, '0');
       ctx.textBaseline = 'middle';
       ctx.fillText(displayName, paddingX, canvas.height / 2);
 
       const texture = new THREE.CanvasTexture(canvas);
       texture.needsUpdate = true;
-
-      // Globe -> use a plane geometry with custom shader (double-sided).
-      // TrueCoordinates -> use a Sprite.
       if (this.mapType === 'Globe') {
-        const planeGeom = new THREE.PlaneGeometry(
-          (canvas.width / 100) * scaleFactor,
-          (canvas.height / 100) * scaleFactor
-        );
-        const material = getDoubleSidedLabelMaterial(texture, this.labelOpacity);
-        labelObj = new THREE.Mesh(planeGeom, material);
-        labelObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
+        labelObj = new THREE.Mesh(new THREE.PlaneGeometry((canvas.width / 100) * scaleFactor, (canvas.height / 100) * scaleFactor), getDoubleSidedLabelMaterial(texture, this.labelOpacity));
       } else {
-        const spriteMaterial = new THREE.SpriteMaterial({
-          map: texture,
-          depthWrite: true,
-          depthTest: true,
-          transparent: true,
-          opacity: this.labelOpacity,
-        });
-        labelObj = new THREE.Sprite(spriteMaterial);
-        labelObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
-        labelObj.scale.set(
-          (canvas.width / 100) * scaleFactor,
-          (canvas.height / 100) * scaleFactor,
-          1
-        );
+        labelObj = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: true, depthTest: true, transparent: true, opacity: this.labelOpacity }));
+        labelObj.scale.set((canvas.width / 100) * scaleFactor, (canvas.height / 100) * scaleFactor, 1);
       }
-
-      this.sprites.set(star, labelObj);
-
-      // Create connecting line
-      const lineGeom = new THREE.BufferGeometry();
-      const lineMat = new THREE.LineBasicMaterial({
-        color: new THREE.Color(starColor),
-        transparent: true,
-        opacity: 0.2,
-        linewidth: 2,
-      });
-      lineObj = new THREE.Line(lineGeom, lineMat);
+      labelObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
+      lineObj = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: new THREE.Color(starColor), transparent: true, opacity: 0.2, linewidth: 2 }));
       lineObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
+      this.sprites.set(star, labelObj);
       this.lines.set(star, lineObj);
-
-      // Update cache
-      this.labelCache.set(star, {
-        lastText: displayName,
-        lastColor: starColor,
-        lastSize: labelSize
-      });
+      this.labelCache.set(cacheKey, { lastText: displayName, lastColor: starColor, lastSize: labelSize });
     }
 
-    // Ensure both label and line are present in the scene
-    if (!this.scene.children.includes(labelObj)) {
-      this.scene.add(labelObj);
-    }
-    if (!this.scene.children.includes(lineObj)) {
-      this.scene.add(lineObj);
-    }
+    if (!this.scene.children.includes(labelObj)) this.scene.add(labelObj);
+    if (!this.scene.children.includes(lineObj)) this.scene.add(lineObj);
 
-    // Update positions:
-    // For TrueCoordinates map, use star.truePosition if available.
-    const starPos = (this.mapType === 'TrueCoordinates')
-      ? (star.truePosition
-          ? new THREE.Vector3(star.truePosition.x, star.truePosition.y, star.truePosition.z)
-          : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate))
-      : (this.mapType === 'Globe'
-          ? new THREE.Vector3(star.spherePosition.x, star.spherePosition.y, star.spherePosition.z)
-          : new THREE.Vector3(star.mollweidePosition.x, star.mollweidePosition.y, star.mollweidePosition.z));
+    const starPos = this.mapType === 'TrueCoordinates'
+      ? (star.truePosition ? new THREE.Vector3(star.truePosition.x, star.truePosition.y, star.truePosition.z) : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate))
+      : (this.mapType === 'Globe' ? new THREE.Vector3(star.spherePosition.x, star.spherePosition.y, star.spherePosition.z) : new THREE.Vector3(star.mollweidePosition.x, star.mollweidePosition.y, star.mollweidePosition.z));
 
-    let offset;
-    if (this.mapType === 'Mollweide' && star.mollLabelOffset) {
-      offset = star.mollLabelOffset.clone();
-    } else {
-      offset = this.computeLabelOffset(star, starPos);
-    }
+    const offset = this.mapType === 'Mollweide' && star.mollLabelOffset ? star.mollLabelOffset.clone() : this.computeLabelOffset(star, starPos);
     const labelPos = starPos.clone().add(offset);
     labelObj.position.copy(labelPos);
 
-      if (this.mapType === 'Mollweide') {
-        if (star.mollLabelRotation !== undefined) {
-          labelObj.material.rotation = star.mollLabelRotation;
-        }
-        if (star.mollLabelScale) {
-          labelObj.scale.multiply(star.mollLabelScale);
-        }
-      }
+    if (this.mapType === 'Mollweide') {
+      if (star.mollLabelRotation !== undefined && labelObj.material) labelObj.material.rotation = star.mollLabelRotation;
+      if (star.mollLabelScale) labelObj.scale.multiply(star.mollLabelScale);
+    }
 
-    // Globe labels: orient plane tangent to sphere
-    if (this.mapType === 'Globe' && (labelObj instanceof THREE.Mesh)) {
+    if (this.mapType === 'Globe' && labelObj instanceof THREE.Mesh) {
       const normal = starPos.clone().normalize();
       const globalUp = new THREE.Vector3(0, 1, 0);
       let desiredUp = globalUp.clone().sub(normal.clone().multiplyScalar(globalUp.dot(normal)));
       if (desiredUp.lengthSq() < 1e-6) desiredUp = new THREE.Vector3(0, 0, 1);
       else desiredUp.normalize();
       const desiredRight = new THREE.Vector3().crossVectors(desiredUp, normal).normalize();
-      const matrix = new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal);
-      labelObj.setRotationFromMatrix(matrix);
+      labelObj.setRotationFromMatrix(new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal));
     }
 
-    // Update line geometry
-    const points = [starPos, labelPos];
-    lineObj.geometry.setFromPoints(points);
+    lineObj.geometry.setFromPoints([starPos, labelPos]);
     lineObj.material.color.set(star.displayColor || '#888888');
   }
 
-  /**
-   * Simple helper to compute label offset from star position, so the label doesn't overlap the star mesh.
-   */
   computeLabelOffset(star, starPos) {
     const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
     if (this.mapType === 'TrueCoordinates') {
-      // Simple screen space offset scaled by star size
+      return new THREE.Vector3(1, 1, 0).multiplyScalar(0.5 * THREE.MathUtils.clamp(labelSize / 2, 0.1, 5));
+    }
+    if (this.mapType === 'Mollweide') {
       const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
-      const dist = 0.5 * scaleFactor;
-      return new THREE.Vector3(1, 1, 0).multiplyScalar(dist);
-    } else if (this.mapType === 'Mollweide') {
-      // Offset labels randomly around the star. Ensure labels from the same
-      // system are separated by at least 90 degrees and at most 270 degrees.
-      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
-      const dist = 1 * scaleFactor * 2; // double the offset
-
+      const dist = 2 * scaleFactor;
       const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
+      const starKey = getStarCacheKey(star);
       let starMap = this.systemAngles.get(system);
-      if (!starMap) {
-        starMap = new Map();
-        this.systemAngles.set(system, starMap);
-      }
-
-      let angle = starMap.get(star);
+      if (!starMap) { starMap = new Map(); this.systemAngles.set(system, starMap); }
+      let angle = starMap.get(starKey);
       if (angle === undefined) {
+        const base = stableAngleFromString(`${system}|${starKey}`);
         const existing = Array.from(starMap.values());
-        for (let attempt = 0; attempt < 10; attempt++) {
-          const candidate = Math.random() * Math.PI * 2;
-          const valid = existing.every(a => {
+        angle = base;
+        for (let i = 0; i < 8; i++) {
+          const candidate = (base + i * (Math.PI / 3)) % (Math.PI * 2);
+          if (existing.every(a => {
             const diff = Math.abs(candidate - a) % (Math.PI * 2);
             const minDiff = Math.min(diff, Math.PI * 2 - diff);
-            return minDiff > Math.PI / 2 && minDiff < (Math.PI * 3) / 2;
-          });
-          if (valid) {
-            angle = candidate;
-            break;
-          }
+            return minDiff > Math.PI / 4;
+          })) { angle = candidate; break; }
         }
-        if (angle === undefined) angle = Math.random() * Math.PI * 2;
-        starMap.set(star, angle);
+        starMap.set(starKey, angle);
       }
-
       return new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(dist);
-    } else {
-      // For the Globe, offset tangentially around the star on the sphere
-      const normal = starPos.clone().normalize();
-      let tangent = new THREE.Vector3(0, 1, 0);
-      if (Math.abs(normal.dot(tangent)) > 0.9) {
-        tangent = new THREE.Vector3(1, 0, 0);
-      }
-      tangent.cross(normal).normalize();
-      const bitangent = normal.clone().cross(tangent).normalize();
-      // Random angle around the star
-      const angle = Math.random() * Math.PI * 2;
-      const baseDistance = 2;
-      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
-      return tangent.clone().multiplyScalar(Math.cos(angle))
-        .add(bitangent.clone().multiplyScalar(Math.sin(angle)))
-        .multiplyScalar(baseDistance * scaleFactor);
     }
+    const normal = starPos.clone().normalize();
+    let tangent = new THREE.Vector3(0, 1, 0);
+    if (Math.abs(normal.dot(tangent)) > 0.9) tangent = new THREE.Vector3(1, 0, 0);
+    tangent.cross(normal).normalize();
+    const bitangent = normal.clone().cross(tangent).normalize();
+    const angle = stableAngleFromString(getStarCacheKey(star));
+    return tangent.multiplyScalar(Math.cos(angle)).add(bitangent.multiplyScalar(Math.sin(angle))).multiplyScalar(2 * THREE.MathUtils.clamp(labelSize / 2, 0.1, 5));
   }
 
-  /**
-   * Called once every time the filter changes or the star set is replaced.
-   * We create/update labels for the new star list, and remove any labels for stars no longer present.
-   */
   refreshLabels(stars) {
     const inNewSet = new Set(stars);
-
-    // Create or update labels for every (visible) star in the new set
-    stars.forEach(star => {
-      if (star.displayVisible) {
-        this.createOrUpdateLabel(star);
-      }
-    });
-
-    // Remove labels for stars not in the new set or no longer visible
+    stars.forEach(star => { if (star.displayVisible) this.createOrUpdateLabel(star); });
     this.sprites.forEach((labelObj, star) => {
       if (!inNewSet.has(star) || !star.displayVisible) {
-        this.scene.remove(labelObj);
-        this.sprites.delete(star);
+        this.scene.remove(labelObj); disposeObject3D(labelObj); this.sprites.delete(star);
         const line = this.lines.get(star);
-        if (line) {
-          this.scene.remove(line);
-          this.lines.delete(star);
-        }
-        this.labelCache.delete(star);
+        if (line) { this.scene.remove(line); disposeObject3D(line); this.lines.delete(star); }
       }
     });
   }
 
-  /**
-   * Removes all labels from the scene.
-   */
   removeAllLabels() {
-    this.sprites.forEach(obj => this.scene.remove(obj));
-    this.lines.forEach(obj => this.scene.remove(obj));
-    this.sprites.clear();
-    this.lines.clear();
-    this.labelCache.clear();
+    this.sprites.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
+    this.lines.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
+    this.sprites.clear(); this.lines.clear(); this.labelCache.clear();
   }
 
   setLabelOpacity(opacity) {
     this.labelOpacity = opacity;
     this.sprites.forEach(sprite => {
-      if (sprite.material.uniforms && sprite.material.uniforms.opacity) {
-        sprite.material.uniforms.opacity.value = opacity;
-      } else if (sprite.material.opacity !== undefined) {
-        sprite.material.opacity = opacity;
-      }
+      if (sprite.material.uniforms?.opacity) sprite.material.uniforms.opacity.value = opacity;
+      else if (sprite.material.opacity !== undefined) sprite.material.opacity = opacity;
       sprite.material.needsUpdate = true;
     });
   }

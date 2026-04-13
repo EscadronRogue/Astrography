@@ -506,3 +506,8 @@ filter-item input[type="range"]::-moz-range-thumb:hover {
     font-size:11px;
   }
 }
+
+
+.is-hidden {
+  display: none !important;
+}

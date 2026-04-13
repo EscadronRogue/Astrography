@@ -327,18 +327,12 @@
 
   <!-- Labels Container -->
   <div class="label-container"></div>
-  <div id="export-selection-overlay" style="display:none">
+  <div id="export-selection-overlay" class="is-hidden">
     <div id="export-selection-rect"></div>
   </div>
 
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script type="module" src="script.js"></script>
-  <script type="module">
-    import { initFilterUI } from './ui/filterUI.js';
-    window.addEventListener('DOMContentLoaded', () => {
-      initFilterUI();
-    });
-  </script>
 </body>
 </html>

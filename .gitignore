@@ -1,1 +1,17 @@
 Instructions.txt
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+node_modules/
+dist/
+build/
+coverage/
+*.local
+*.bak
+*.orig

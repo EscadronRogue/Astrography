@@ -1,26 +1,28 @@
-// filters/stellarClassData.js
-
 let stellarClassData = {};
+let stellarClassDataPromise = null;
 
-/**
- * Loads the stellar_class.json data asynchronously.
- */
 export async function loadStellarClassData() {
-  try {
-    const response = await fetch('./stellar_class.json');
-    if (!response.ok) {
-      throw new Error(`Failed to fetch stellar_class.json: ${response.status}`);
-    }
-    stellarClassData = await response.json();
-    console.log('Stellar class data loaded successfully.');
-  } catch (error) {
-    console.error('Error loading stellar class data:', error);
-  }
+  if (stellarClassDataPromise) return stellarClassDataPromise;
+  stellarClassDataPromise = fetch('./stellar_class.json')
+    .then(response => {
+      if (!response.ok) throw new Error(`Failed to fetch stellar_class.json: ${response.status}`);
+      return response.json();
+    })
+    .then(data => {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('stellar_class.json must be an object keyed by stellar class.');
+      }
+      stellarClassData = Object.freeze({ ...data });
+      return stellarClassData;
+    })
+    .catch(error => {
+      stellarClassDataPromise = null;
+      console.error('Error loading stellar class data:', error);
+      throw error;
+    });
+  return stellarClassDataPromise;
 }
 
-/**
- * Getter for the loaded stellar class data.
- */
 export function getStellarClassData() {
   return stellarClassData;
 }
