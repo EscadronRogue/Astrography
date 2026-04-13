@@ -37,6 +37,9 @@ import { showTooltip, hideTooltip } from './tooltips.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
 import { minimalRADifference } from './utils.js';
 import { initFilterUI } from './ui/filterUI.js';
+import { loadStarData } from './app/starData.js';
+import { captureStellarClassState, restoreStellarClassState } from './app/stellarClassState.js';
+import { maybeSavePresets, savePresets, loadPresets, clearSavedPresets } from './app/presets.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -128,138 +131,20 @@ let isSelecting = false;
 
 const ROTATE_SENSITIVITY = 0.3;
 
-const PRESET_KEY = 'astrography-presets';
-const PRESET_SCHEMA_VERSION = 2;
-
-function maybeSavePresets() {
-  const chk = document.getElementById('enable-save-presets');
-  if (chk && chk.checked) {
-    savePresets();
-  }
-}
-
-function savePresets() {
-  const form = document.getElementById('filters-form');
-  if (!form) return;
-  const data = {};
-  form.querySelectorAll('input, select, textarea').forEach(el => {
-    if (!el.id) return;
-    if (el.type === 'checkbox' || el.type === 'radio') {
-      data[el.id] = el.checked;
-    } else {
-      data[el.id] = el.value;
-    }
+function persistPresets() {
+  savePresets({
+    starLabelOffsets,
+    starLabelRotations,
+    starLabelScales,
+    constellationLabelOffsets,
+    galacticLabelOffsets,
+    removedLineSegments,
+    hiddenLineKeys
   });
-  const edits = {
-    starOffsets: Array.from(starLabelOffsets.entries()),
-    starRotations: Array.from(starLabelRotations.entries()),
-    starScales: Array.from(starLabelScales.entries()),
-    constellationOffsets: Array.from(constellationLabelOffsets.entries()),
-    galacticOffsets: Array.from(galacticLabelOffsets.entries())
-  };
-  const lineEdits = {
-    removedSegments: Array.from(removedLineSegments),
-    hiddenLines: Array.from(hiddenLineKeys)
-  };
-  const obj = { schemaVersion: PRESET_SCHEMA_VERSION, remember: true, form: data, edits, lineEdits };
-  localStorage.setItem(PRESET_KEY, JSON.stringify(obj));
 }
 
-function loadPresets() {
-  const str = localStorage.getItem(PRESET_KEY);
-  if (!str) return;
-  let obj;
-  try {
-    obj = JSON.parse(str);
-  } catch {
-    return;
-  }
-  const form = document.getElementById('filters-form');
-  if (obj.remember) {
-    const chk = document.getElementById('enable-save-presets');
-    if (chk) chk.checked = true;
-  }
-  if (obj.schemaVersion && obj.schemaVersion > PRESET_SCHEMA_VERSION) return;
-  if (form && obj.form) {
-    const data = obj.form;
-    for (const [id, val] of Object.entries(data)) {
-      const el = document.getElementById(id);
-      if (!el) continue;
-      if (el.type === 'checkbox' || el.type === 'radio') {
-        el.checked = val;
-        el.dispatchEvent(new Event('change'));
-      } else {
-        el.value = val;
-        el.dispatchEvent(new Event('input'));
-      }
-    }
-  }
-  if (obj.edits) {
-    starLabelOffsets.clear();
-    obj.edits.starOffsets.forEach(([id, off]) => starLabelOffsets.set(id, off));
-    starLabelRotations.clear();
-    obj.edits.starRotations.forEach(([id, rot]) => starLabelRotations.set(id, rot));
-    starLabelScales.clear();
-    obj.edits.starScales.forEach(([id, sc]) => starLabelScales.set(id, sc));
-    constellationLabelOffsets.clear();
-    obj.edits.constellationOffsets.forEach(([id, off]) => constellationLabelOffsets.set(id, off));
-    galacticLabelOffsets.clear();
-    obj.edits.galacticOffsets.forEach(([id, off]) => galacticLabelOffsets.set(id, off));
-  }
-  if (obj.lineEdits) {
-    removedLineSegments.clear();
-    (obj.lineEdits.removedSegments || []).forEach(k => removedLineSegments.add(k));
-    hiddenLineKeys.clear();
-    (obj.lineEdits.hiddenLines || []).forEach(k => hiddenLineKeys.add(k));
-  }
-}
-
-
-function normalizeNumber(value) {
-  const num = typeof value === 'string' ? Number.parseFloat(value) : value;
-  return Number.isFinite(num) ? num : undefined;
-}
-
-function buildStableStarId(star) {
-  return star.Source_id || star.HIP_number || star.HD_catalogue_identifier || `${star.Common_name_of_the_star || 'star'}|${star.RA_in_degrees}|${star.DEC_in_degrees}`;
-}
-
-function normalizeStarRecord(star) {
-  const distance = normalizeNumber(star.distance ?? star.Distance_from_the_Sun);
-  const apparentMagnitude = normalizeNumber(star.apparentMagnitude ?? star.Apparent_magnitude);
-  const absoluteMagnitude = normalizeNumber(star.absoluteMagnitude ?? star.Absolute_magnitude);
-  return {
-    ...star,
-    distance,
-    apparentMagnitude,
-    absoluteMagnitude,
-    starId: star.starId || buildStableStarId(star)
-  };
-}
-
-function captureStellarClassState() {
-  const state = {};
-  const container = document.getElementById('stellar-class-container');
-  if (!container) return state;
-  container.querySelectorAll('input').forEach(el => {
-    state[el.id] = el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value;
-  });
-  return state;
-}
-
-function restoreStellarClassState(state) {
-  const container = document.getElementById('stellar-class-container');
-  if (!container) return;
-  Object.entries(state).forEach(([id, val]) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (el.type === 'checkbox' || el.type === 'radio') {
-      el.checked = val;
-    } else {
-      el.value = val;
-    }
-    el.dispatchEvent(new Event('input'));
-  });
+function maybePersistPresets() {
+  maybeSavePresets(persistPresets);
 }
 
 function angleDiff(a, b) {
@@ -479,33 +364,6 @@ function createMollweideMask(R = 100, segments = 1024) {
   const mesh = new THREE.Mesh(geom, mat);
   mesh.renderOrder = 1000;
   return mesh;
-}
-
-async function loadStarData() {
-  const manifestUrl = 'data/manifest.json';
-  try {
-    const manifestResp = await fetch(manifestUrl);
-    if (!manifestResp.ok) {
-      console.warn(`Manifest file not found: ${manifestUrl}`);
-      return [];
-    }
-    const manifestPayload = await manifestResp.json();
-    const fileNames = Array.isArray(manifestPayload) ? manifestPayload : (manifestPayload.files || []);
-    const dataPromises = fileNames.map(name =>
-      fetch(`data/${name}`).then(resp => {
-        if (!resp.ok) {
-          console.warn(`File not found: data/${name}`);
-          return [];
-        }
-        return resp.json();
-      })
-    );
-    const filesData = await Promise.all(dataPromises);
-    return filesData.flat().map(normalizeStarRecord);
-  } catch (e) {
-    console.warn('Error loading star data:', e);
-    return [];
-  }
 }
 
 function debounce(func, wait) {
@@ -1332,7 +1190,7 @@ function setupMapProjectionToggles() {
     }
     cb.addEventListener('change', () => {
       update();
-      maybeSavePresets();
+      maybePersistPresets();
     });
     update();
   }
@@ -1822,7 +1680,7 @@ function applyLabelEdits(edits) {
     });
   }
   buildAndApplyFilters();
-  maybeSavePresets();
+  maybePersistPresets();
 }
 
 function setupEditIOControls() {
@@ -2099,7 +1957,7 @@ function onLinePointerDown(e) {
         });
         requestRender();
         e.preventDefault();
-        maybeSavePresets();
+        maybePersistPresets();
         return;
       }
     }
@@ -2109,7 +1967,7 @@ function onLinePointerDown(e) {
     if (key) hiddenLineKeys.add(key);
     requestRender();
     e.preventDefault();
-    maybeSavePresets();
+    maybePersistPresets();
   }
 }
 
@@ -2194,7 +2052,7 @@ function onEditPointerUp() {
   updateEditOverlay();
   requestRender();
   initialLabelPos = null;
-  maybeSavePresets();
+  maybePersistPresets();
 }
 
 function setupLabelEditor() {
@@ -2296,7 +2154,7 @@ function setupUndoButton() {
       updateEditOverlay();
     }
     requestRender();
-    maybeSavePresets();
+    maybePersistPresets();
   });
 }
 
@@ -2370,7 +2228,7 @@ function onRotateUp() {
   document.removeEventListener('pointerup', onRotateUp);
   editHistory.push({ type: 'rotateLabel', label: selectedLabel, prevRotation: rotateInitialRotation });
   isRotating = false;
-  maybeSavePresets();
+  maybePersistPresets();
 }
 
 function onScaleMove(e) {
@@ -2398,7 +2256,7 @@ function onScaleUp() {
   document.removeEventListener('pointerup', onScaleUp);
   editHistory.push({ type: 'scaleLabel', label: selectedLabel, prevScale: new THREE.Vector3(scaleStart.sx, scaleStart.sy, 1) });
   isScaling = false;
-  maybeSavePresets();
+  maybePersistPresets();
 }
 
 async function main() {
@@ -2414,18 +2272,26 @@ async function main() {
       const presetsFs = document.getElementById('save-presets-fieldset');
       if (presetsFs) form.appendChild(presetsFs);
     }
-    loadPresets();
+    loadPresets({
+      starLabelOffsets,
+      starLabelRotations,
+      starLabelScales,
+      constellationLabelOffsets,
+      galacticLabelOffsets,
+      removedLineSegments,
+      hiddenLineKeys
+    });
     const debouncedApplyFilters = debounce(buildAndApplyFilters, 150);
     if (form) {
       form.addEventListener('change', () => {
         debouncedApplyFilters();
-        maybeSavePresets();
+        maybePersistPresets();
       });
     }
     const clearBtn = document.getElementById('clear-saved-presets');
     if (clearBtn) {
       clearBtn.addEventListener('click', () => {
-        localStorage.removeItem(PRESET_KEY);
+        clearSavedPresets();
         window.location.reload();
       });
     }
