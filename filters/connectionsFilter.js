@@ -366,3 +366,7 @@ function getGreatCirclePoints(p1, p2, R, segments) {
   }
   return points;
 }
+
+
+// Backward-compatible re-exports for modules that still import these helpers from this file.
+export { createWideLineMaterial, buildWideLineGeometry };
