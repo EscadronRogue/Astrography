@@ -1,6 +1,6 @@
 // script.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { applyFilters, setupFilterUI, generateStellarClassFilters } from './filters/index.js';
+import { applyFilters, setupFilterUI, generateStellarClassFilters, setMapContexts } from './filters/index.js';
 import { createConnectionLines, mergeConnectionLines, setConnectionLineParams, buildWideLineGeometry } from './filters/connectionsFilter.js';
 import { createConstellationBoundariesForGlobe, createConstellationLabelsForGlobe, createConstellationBoundariesForMollweide, updateConstellationBoundariesForMollweide, createConstellationLabelsForMollweide, rebuildConstellationMeshFromSegments } from './filters/constellationFilter.js';
 import { createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './filters/constellationOverlayFilter.js';
@@ -35,6 +35,9 @@ import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
 import { minimalRADifference } from './utils.js';
+import { normalizeStarRecord, getStableStarId } from './utils/starData.js';
+import { PRESET_STORAGE_VERSION, APP_NAME } from './app/config.js';
+import { initFilterUI } from './ui/filterUI.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -158,7 +161,7 @@ function savePresets() {
     removedSegments: Array.from(removedLineSegments),
     hiddenLines: Array.from(hiddenLineKeys)
   };
-  const obj = { remember: true, form: data, edits, lineEdits };
+  const obj = { version: PRESET_STORAGE_VERSION, remember: true, form: data, edits, lineEdits };
   localStorage.setItem(PRESET_KEY, JSON.stringify(obj));
 }
 
@@ -242,12 +245,7 @@ function angleDiff(a, b) {
 }
 
 function getStarId(star) {
-  return (
-    star.Common_name_of_the_star ||
-    star.Common_name_of_the_star_system ||
-    star.HD ||
-    `${star.RA_in_degrees}_${star.DEC_in_degrees}`
-  );
+  return getStableStarId(star);
 }
 
 function getStarTruePosition(star) {
@@ -473,7 +471,7 @@ async function loadStarData() {
       })
     );
     const filesData = await Promise.all(dataPromises);
-    const combinedData = filesData.flat();
+    const combinedData = filesData.flat().map(normalizeStarRecord);
     return combinedData;
   } catch (e) {
     console.warn("Error loading star data:", e);
@@ -649,7 +647,7 @@ async function buildAndApplyFilters() {
   if (showConstellationOverlay) {
     const constellationOverlay = createConstellationOverlayForGlobe();
     constellationOverlay.forEach(mesh => {
-      window.globeMap.scene.add(mesh);
+      globeMap.scene.add(mesh);
     });
     constellationOverlayMoll = createConstellationOverlayForMollweide();
     constellationOverlayMoll.forEach(mesh => {
@@ -1559,84 +1557,87 @@ function exportMollweideMap(format = 'png', rect = null) {
   const baseWidth = mollweideMap.renderer.domElement.width;
   const baseHeight = mollweideMap.renderer.domElement.height;
   const scale = Math.max(1, 7680 / baseWidth, 4320 / baseHeight);
-  scaleMollweideSceneForExport(scale);
-  const exportWidth = Math.round(baseWidth * scale);
-  const exportHeight = Math.round(baseHeight * scale);
   const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
-  exportRenderer.setPixelRatio(1);
-  let cropX = 0;
-  let cropY = 0;
-  let cropW = baseWidth;
-  let cropH = baseHeight;
-  if (rect) {
-    const scaleX = baseWidth / mollweideMap.canvas.clientWidth;
-    const scaleY = baseHeight / mollweideMap.canvas.clientHeight;
-    cropX = Math.round(rect.x * scaleX);
-    cropY = Math.round(rect.y * scaleY);
-    cropW = Math.round(rect.width * scaleX);
-    cropH = Math.round(rect.height * scaleY);
-  }
-  const exportCropW = Math.round(cropW * scale);
-  const exportCropH = Math.round(cropH * scale);
-  const finalCanvas = document.createElement('canvas');
-  finalCanvas.width = exportCropW;
-  finalCanvas.height = exportCropH;
-  const ctx = finalCanvas.getContext('2d');
-  const maxSize = exportRenderer.capabilities.maxTextureSize;
-  const tile = Math.min(Math.floor(maxSize / scale), 8192);
-  for (let y = cropY; y < cropY + cropH; y += tile) {
-    for (let x = cropX; x < cropX + cropW; x += tile) {
-      const tileW = Math.min(tile, cropW - (x - cropX));
-      const tileH = Math.min(tile, cropH - (y - cropY));
-      const tileWScaled = Math.round(tileW * scale);
-      const tileHScaled = Math.round(tileH * scale);
-      exportRenderer.setSize(tileWScaled, tileHScaled, false);
-      const cam = mollweideMap.camera.clone();
-      const aspect = baseWidth / baseHeight;
-      cam.left = (-mollweideMap.frustumSize * aspect) / 2;
-      cam.right = (mollweideMap.frustumSize * aspect) / 2;
-      cam.top = mollweideMap.frustumSize / 2;
-      cam.bottom = -mollweideMap.frustumSize / 2;
-      cam.updateProjectionMatrix();
-      cam.setViewOffset(
-        exportWidth,
-        exportHeight,
-        Math.round(x * scale),
-        Math.round(y * scale),
-        tileWScaled,
-        tileHScaled
-      );
-      exportRenderer.render(mollweideMap.scene, cam);
-      cam.clearViewOffset();
-      ctx.drawImage(
-        exportRenderer.domElement,
-        Math.round((x - cropX) * scale),
-        Math.round((y - cropY) * scale),
-        tileWScaled,
-        tileHScaled
-      );
+  try {
+    scaleMollweideSceneForExport(scale);
+    const exportWidth = Math.round(baseWidth * scale);
+    const exportHeight = Math.round(baseHeight * scale);
+    exportRenderer.setPixelRatio(1);
+    let cropX = 0;
+    let cropY = 0;
+    let cropW = baseWidth;
+    let cropH = baseHeight;
+    if (rect) {
+      const scaleX = baseWidth / mollweideMap.canvas.clientWidth;
+      const scaleY = baseHeight / mollweideMap.canvas.clientHeight;
+      cropX = Math.round(rect.x * scaleX);
+      cropY = Math.round(rect.y * scaleY);
+      cropW = Math.round(rect.width * scaleX);
+      cropH = Math.round(rect.height * scaleY);
     }
-  }
-  restoreMollweideScene(scale);
-  exportRenderer.dispose();
-  if (format === 'pdf') {
-    const imgData = finalCanvas.toDataURL('image/png');
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({
-      orientation: exportCropW >= exportCropH ? 'landscape' : 'portrait',
-      unit: 'px',
-      format: [exportCropW, exportCropH]
-    });
-    pdf.addImage(imgData, 'PNG', 0, 0, exportCropW, exportCropH);
-    pdf.save('mollweide_map.pdf');
-  } else {
-    finalCanvas.toBlob(b => {
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(b);
-      link.download = 'mollweide_map.png';
-      link.click();
-      URL.revokeObjectURL(link.href);
-    }, 'image/png');
+    const exportCropW = Math.round(cropW * scale);
+    const exportCropH = Math.round(cropH * scale);
+    const finalCanvas = document.createElement('canvas');
+    finalCanvas.width = exportCropW;
+    finalCanvas.height = exportCropH;
+    const ctx = finalCanvas.getContext('2d');
+    const maxSize = exportRenderer.capabilities.maxTextureSize;
+    const tile = Math.min(Math.floor(maxSize / scale), 8192);
+    for (let y = cropY; y < cropY + cropH; y += tile) {
+      for (let x = cropX; x < cropX + cropW; x += tile) {
+        const tileW = Math.min(tile, cropW - (x - cropX));
+        const tileH = Math.min(tile, cropH - (y - cropY));
+        const tileWScaled = Math.round(tileW * scale);
+        const tileHScaled = Math.round(tileH * scale);
+        exportRenderer.setSize(tileWScaled, tileHScaled, false);
+        const cam = mollweideMap.camera.clone();
+        const aspect = baseWidth / baseHeight;
+        cam.left = (-mollweideMap.frustumSize * aspect) / 2;
+        cam.right = (mollweideMap.frustumSize * aspect) / 2;
+        cam.top = mollweideMap.frustumSize / 2;
+        cam.bottom = -mollweideMap.frustumSize / 2;
+        cam.updateProjectionMatrix();
+        cam.setViewOffset(
+          exportWidth,
+          exportHeight,
+          Math.round(x * scale),
+          Math.round(y * scale),
+          tileWScaled,
+          tileHScaled
+        );
+        exportRenderer.render(mollweideMap.scene, cam);
+        cam.clearViewOffset();
+        ctx.drawImage(
+          exportRenderer.domElement,
+          Math.round((x - cropX) * scale),
+          Math.round((y - cropY) * scale),
+          tileWScaled,
+          tileHScaled
+        );
+      }
+    }
+    if (format === 'pdf') {
+      const imgData = finalCanvas.toDataURL('image/png');
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({
+        orientation: exportCropW >= exportCropH ? 'landscape' : 'portrait',
+        unit: 'px',
+        format: [exportCropW, exportCropH]
+      });
+      pdf.addImage(imgData, 'PNG', 0, 0, exportCropW, exportCropH);
+      pdf.save('mollweide_map.pdf');
+    } else {
+      finalCanvas.toBlob(b => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(b);
+        link.download = 'mollweide_map.png';
+        link.click();
+        URL.revokeObjectURL(link.href);
+      }, 'image/png');
+    }
+  } finally {
+    restoreMollweideScene(scale);
+    exportRenderer.dispose();
   }
 }
 
@@ -1973,7 +1974,7 @@ function applyStoredLineEdits(root) {
         array[i + 3], array[i + 4], array[i + 5]
       ].join(',');
       if (removedLineSegments.has(segKey)) {
-        for (let j = 0; j < 6; j++) array[i + j] = NaN;
+        for (let j = 0; j < 6; j++) array[i + j] = 0;
         if (alphaAttr) {
           const idx = (i / 3);
           alphaAttr.array[idx] = 0;
@@ -2025,7 +2026,7 @@ function onLinePointerDown(e) {
         if (base + 5 < posAttr.array.length) {
           let removed = true;
           for (let i = 0; i < 6; i++) {
-            if (!Number.isNaN(posAttr.array[base + i])) {
+            if (posAttr.array[base + i] !== 0) {
               removed = false;
               break;
             }
@@ -2052,7 +2053,7 @@ function onLinePointerDown(e) {
           posAttr.array[base], posAttr.array[base + 1], posAttr.array[base + 2],
           posAttr.array[base + 3], posAttr.array[base + 4], posAttr.array[base + 5]
         ];
-        for (let i = 0; i < 6; i++) posAttr.array[base + i] = NaN;
+        for (let i = 0; i < 6; i++) posAttr.array[base + i] = 0;
         posAttr.needsUpdate = true;
         let prevAlpha = null;
         const alphaAttr = obj.geometry.getAttribute('alpha');
@@ -2380,6 +2381,7 @@ async function main() {
   try {
     cachedStars = await loadStarData();
     if (!cachedStars.length) throw new Error('No star data available');
+    initFilterUI();
     await setupFilterUI(cachedStars);
     const form = document.getElementById('filters-form');
     if (form) {
@@ -2405,9 +2407,7 @@ async function main() {
     globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
     mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
     mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap);
-    window.trueCoordinatesMap = trueCoordinatesMap;
-    window.globeMap = globeMap;
-    window.mollweideMap = mollweideMap;
+    setMapContexts({ trueCoordinatesMap, globeMap, mollweideMap });
     cachedStars.forEach(star => {
       star.spherePosition = projectStarGlobe(star);
       star.truePosition = getStarTruePosition(star);
@@ -2443,9 +2443,9 @@ async function main() {
     loader.classList.add('hidden');
   } catch (err) {
     console.error('Error initializing starmap:', err);
-    alert('Initialization failed. Check console for details.');
+    alert(`${APP_NAME} failed to initialize. Check console for details.`);
     loader.classList.add('hidden');
   }
 }
 
-window.onload = main;
+window.addEventListener('DOMContentLoaded', main);

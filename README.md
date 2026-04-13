@@ -1,95 +1,88 @@
-# Astrography
+# Astrography – Mapping Our Stellar Neighborhood 🌌
 
-Astrography is an interactive WebGL atlas for exploring the stellar neighborhood around the Sun. It combines three complementary views of the same dataset:
-- **True Coordinates** for physical 3D placement
-- **Globe** for spherical context
-- **Mollweide** for 2D projection, annotation, and export
+Astrography is a 3D visualization tool focused on performing astrography—the mapping of our local stellar environment. This tool charts stars within 20 light years of the Sun (as of March 2025) and uses density mapping to distinguish “seas” (areas with few stars) from “continents” (clusters of stars). It’s designed to help researchers, educators, and space planners understand our local space geography and assess potential future pathways for exploration and expansion.
 
-The project includes filterable stellar classes, distance and density analysis, connection overlays, constellation boundaries, dust cloud overlays, editable labels, and high-resolution exports.
+---
 
-## Current data scope
+## Key Features ✨
 
-The repository currently ships nearby-star datasets in JSON chunks under `data/` and a manifest file used by the app loader. The live app can visualize stars out to 100 light years, with distance filters used to focus the current view.
+- **Local Focus:**  
+  Explore detailed data on stars within a 20 light-year radius using a comprehensive dataset (`complete_data_stars.json`).
 
-## Project structure
+- **Dual 3D Views:**  
+  - **True Coordinates Map:** Displays stars in their actual 3D positions.  
+  - **Globe Map:** Projects the stellar neighborhood onto a rotating sphere for an intuitive overview.
 
-```text
-.
-├── index.html
-├── styles.css
-├── script.js
-├── cameraControls.js
-├── labelManager.js
-├── tooltips.js
-├── ui/
-├── filters/
-├── utils/
-├── app/
-└── data/
-```
+- **Density Mapping:**  
+  Visualize regions of high and low star density to identify potential "continents" and "seas" in space.
 
-### Notable modules
+- **Interactive Exploration:**  
+  - **Custom Camera Controls:** Rotate, zoom, and pan using mouse or touch.  
+  - **Dynamic Labels & Tooltips:** Click or hover on stars to see detailed information (e.g., star name, distance, spectral type, mass).
 
-- `script.js` — application bootstrap and high-level orchestration
-- `ui/filterUI.js` — DOM wiring for the filter sidebar
-- `filters/index.js` — filter state parsing and derived visualization state
-- `filters/*.js` — rendering and analysis modules for overlays and transformations
-- `labelManager.js` — label creation, caching, and placement
-- `cameraControls.js` — 3D and 2D interaction controls
-- `utils/starData.js` — star normalization helpers
-- `utils/geometryUtils.js` — projection and spherical geometry utilities
+- **Advanced Filtering:**  
+  Refine your view by filtering stars based on spectral class, brightness, size, and spatial connectivity for in-depth astrographic studies.
 
-## Running locally
+---
 
-Because the application fetches local JSON files, it must be served from a local web server rather than opened directly from the file system.
+## Getting Started 🚀
 
-### Option 1: Python
+### Prerequisites
 
-```bash
-git clone https://github.com/EscadronRogue/Astrography.git
-cd Astrography
-python -m http.server 8000
-```
+- **Browser:** A modern WebGL-compatible browser (Chrome, Firefox, Edge, etc.).
+- **Local Web Server:** Run a local server (e.g., Python’s `http.server` or similar) to serve the files.
 
-Then open `http://localhost:8000`.
+### Installation
 
-### Option 2: Any static-file server
+1. **Clone the Repository:**
 
-Any static HTTP server works as long as it serves the repository root and preserves the relative paths in `data/`, `filters/`, `ui/`, and `utils/`.
+   ```bash
+   git clone https://github.com/yourusername/astrography.git
+   cd astrography
+   ```
 
-## Editing and exports
+2. **Run a Local Server:**
 
-The Mollweide map includes tools for:
-- editing star labels
-- rotating and scaling labels
-- hiding line segments
-- undoing edits
-- exporting selected regions as PNG or PDF
+   For example, with Python 3:
+   ```bash
+   python -m http.server 8000
+   ```
 
-Saved presets and edits are stored locally in the browser.
+3. **Open in Browser:**
 
-## Data and provenance
+   Navigate to [http://localhost:8000](http://localhost:8000) to launch Astrography.
 
-This repository includes source files for:
-- nearby star records
-- constellation boundaries and centers
-- stellar classification metadata
-- dust cloud overlay datasets
+---
 
-If you extend or replace the data, keep the schema stable or update the normalization logic in `utils/starData.js`.
+## Use Cases 🎯
 
-## Known limitations
+- **Astrography & Space Geography:**  
+  Create a “map” of our local stellar neighborhood to understand the spatial layout and connectivity of nearby stars.
 
-- The application still uses vanilla JavaScript modules and browser-loaded CDN dependencies rather than a packaged build system.
-- Some analysis overlays can become expensive when many layers are enabled at once.
-- The visualization is optimized for desktop exploration first, with responsive behavior for smaller screens.
+- **Future Space Planning:**  
+  Identify potential routes, obstacles, and clusters that could influence future interstellar exploration and astropolitical strategies.
 
-## Attribution
+- **Research & Analysis:**  
+  Compare spectral types, brightness, and other stellar parameters in a focused area for targeted astronomical studies.
 
-If you use Astrography in your own work, please credit:
+- **Educational Outreach:**  
+  Use the interactive 3D maps as a teaching tool to explain concepts like star density, spectral classification, and spatial distribution in the cosmos.
 
-> This work utilizes Astrography, developed by Antoine Paulet.
+---
 
-## Contributing
 
-Improvements, bug fixes, and data corrections are welcome. When contributing, prefer small focused changes and keep rendering, UI, and data-normalization logic separated where possible.
+## License & Attribution ⚖️
+
+Astrography is free to use for any purpose. If you use Astrography in your work, please include the following attribution:
+
+> *"This work utilizes Astrography, developed by Antoine Paulet."*
+
+---
+
+## Contributions & Feedback 🤝
+
+Contributions, suggestions, and bug reports are welcome. Feel free to fork the repository and submit pull requests to help improve Astrography.
+
+---
+
+Explore our local stellar neighborhood and contribute to mapping the future of space exploration with Astrography. Enjoy your journey into the cosmos!

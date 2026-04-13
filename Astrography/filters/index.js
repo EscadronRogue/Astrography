@@ -17,11 +17,18 @@ import { initIsolationFilter, updateIsolationFilter } from './isolationFilter.js
 import { initDensityFilter, updateDensityFilter } from './densityFilter.js';
 import { createCloudDensityOverlay, updateCloudDensityOverlay } from './cloudDensityFilter.js';
 import { bindAdditionalOpacitySliders } from '../ui/filterUI.js';
+import { makeCollapsibleSection } from '../app/uiHelpers.js';
 
 let filterForm = null;
 let isolationOverlay = null;
 let densityOverlay = null;
 let cloudDensityOverlays = [];
+
+let mapContexts = { trueCoordinatesMap: null, globeMap: null, mollweideMap: null };
+
+export function setMapContexts(contexts) {
+  mapContexts = { ...mapContexts, ...contexts };
+}
 
 // Helper to compute a grid size from the isolationGridSize slider value.
 function computeIsolationGridSize(sliderValue) {
@@ -42,16 +49,7 @@ export async function setupFilterUI(allStars) {
   await loadStellarClassData();
   scGenerate(allStars);
   const mainLegends = filterForm.querySelectorAll('legend.collapsible');
-  mainLegends.forEach(legend => {
-    const fc = legend.nextElementSibling;
-    if (fc) fc.style.maxHeight = '0px';
-    legend.addEventListener('click', () => {
-      legend.classList.toggle('active');
-      const isActive = legend.classList.contains('active');
-      legend.setAttribute('aria-expanded', isActive);
-      if (fc) fc.style.maxHeight = isActive ? fc.scrollHeight + 'px' : '0px';
-    });
-  });
+  mainLegends.forEach(legend => makeCollapsibleSection(legend, legend.nextElementSibling));
   addConstellationsFieldset();
   addGlobeSurfaceFieldset();
   addPlanesFieldset();
@@ -70,12 +68,7 @@ function addConstellationsFieldset() {
   const contentDiv = document.createElement('div');
   contentDiv.classList.add('filter-content', 'scrollable-category');
   contentDiv.style.maxHeight = '0px';
-  legend.addEventListener('click', () => {
-    legend.classList.toggle('active');
-    const isActive = legend.classList.contains('active');
-    legend.setAttribute('aria-expanded', isActive);
-    contentDiv.style.maxHeight = isActive ? contentDiv.scrollHeight + 'px' : '0px';
-  });
+  makeCollapsibleSection(legend, contentDiv);
   const boundaryDiv = document.createElement('div');
   boundaryDiv.classList.add('filter-item');
   const boundaryChk = document.createElement('input');
@@ -284,12 +277,7 @@ function addGlobeSurfaceFieldset() {
   const contentDiv = document.createElement('div');
   contentDiv.classList.add('filter-content');
   contentDiv.style.maxHeight = '0px';
-  legend.addEventListener('click', () => {
-    legend.classList.toggle('active');
-    const isActive = legend.classList.contains('active');
-    legend.setAttribute('aria-expanded', isActive);
-    contentDiv.style.maxHeight = isActive ? contentDiv.scrollHeight + 'px' : '0px';
-  });
+  makeCollapsibleSection(legend, contentDiv);
   const surfDiv = document.createElement('div');
   surfDiv.classList.add('filter-item');
   const surfChk = document.createElement('input');
@@ -317,12 +305,7 @@ function addPlanesFieldset() {
   const contentDiv = document.createElement('div');
   contentDiv.classList.add('filter-content');
   contentDiv.style.maxHeight = '0px';
-  legend.addEventListener('click', () => {
-    legend.classList.toggle('active');
-    const isActive = legend.classList.contains('active');
-    legend.setAttribute('aria-expanded', isActive);
-    contentDiv.style.maxHeight = isActive ? contentDiv.scrollHeight + 'px' : '0px';
-  });
+  makeCollapsibleSection(legend, contentDiv);
 
   const galDiv = document.createElement('div');
   galDiv.classList.add('filter-item');
@@ -547,7 +530,7 @@ export function applyFilters(allStars) {
   if (filters.showConstellationOverlay) {
     const constellationOverlay = createConstellationOverlayForGlobe();
     constellationOverlay.forEach(mesh => {
-      window.globeMap.scene.add(mesh);
+      mapContexts.globeMap.scene.add(mesh);
     });
   }
 
@@ -565,42 +548,42 @@ export function applyFilters(allStars) {
       // Remove any existing meshes.
       if (isolationOverlay) {
         isolationOverlay.cubesData.forEach(cell => {
-          if (window.trueCoordinatesMap.scene.children.includes(cell.tcMesh)) {
-            window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+          if (mapContexts.trueCoordinatesMap.scene.children.includes(cell.tcMesh)) {
+            mapContexts.trueCoordinatesMap.scene.remove(cell.tcMesh);
           }
-          if (window.mollweideMap.scene.children.includes(cell.mollweideMesh)) {
-            window.mollweideMap.scene.remove(cell.mollweideMesh);
+          if (mapContexts.mollweideMap.scene.children.includes(cell.mollweideMesh)) {
+            mapContexts.mollweideMap.scene.remove(cell.mollweideMesh);
           }
         });
         isolationOverlay.adjacentLines.forEach(obj => {
-          if (window.globeMap.scene.children.includes(obj.line)) {
-            window.globeMap.scene.remove(obj.line);
+          if (mapContexts.globeMap.scene.children.includes(obj.line)) {
+            mapContexts.globeMap.scene.remove(obj.line);
           }
-          if (window.mollweideMap.scene.children.includes(obj.lineM)) {
-            window.mollweideMap.scene.remove(obj.lineM);
+          if (mapContexts.mollweideMap.scene.children.includes(obj.lineM)) {
+            mapContexts.mollweideMap.scene.remove(obj.lineM);
           }
         });
       }
       isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       // Add new meshes.
       isolationOverlay.cubesData.forEach(cell => {
-        window.trueCoordinatesMap.scene.add(cell.tcMesh);
+        mapContexts.trueCoordinatesMap.scene.add(cell.tcMesh);
       });
       isolationOverlay.adjacentLines.forEach(obj => {
-        window.globeMap.scene.add(obj.line);
-        window.mollweideMap.scene.add(obj.lineM);
+        mapContexts.globeMap.scene.add(obj.line);
+        mapContexts.mollweideMap.scene.add(obj.lineM);
       });
     }
-    updateIsolationFilter(allStars, isolationOverlay, window.trueCoordinatesMap.scene, window.globeMap.scene, window.mollweideMap.scene);
+    updateIsolationFilter(allStars, isolationOverlay, mapContexts.trueCoordinatesMap.scene, mapContexts.globeMap.scene, mapContexts.mollweideMap.scene);
   } else {
     if (isolationOverlay) {
       isolationOverlay.cubesData.forEach(cell => {
-        window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-        window.mollweideMap.scene.remove(cell.mollweideMesh);
+        mapContexts.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        mapContexts.mollweideMap.scene.remove(cell.mollweideMesh);
       });
       isolationOverlay.adjacentLines.forEach(obj => {
-        window.globeMap.scene.remove(obj.line);
-        window.mollweideMap.scene.remove(obj.lineM);
+        mapContexts.globeMap.scene.remove(obj.line);
+        mapContexts.mollweideMap.scene.remove(obj.lineM);
       });
       isolationOverlay = null;
     }
@@ -617,32 +600,32 @@ export function applyFilters(allStars) {
     ) {
       if (densityOverlay) {
         densityOverlay.cubesData.forEach(cell => {
-          window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+          mapContexts.trueCoordinatesMap.scene.remove(cell.tcMesh);
         });
         densityOverlay.adjacentLines.forEach(obj => {
-          window.globeMap.scene.remove(obj.line);
+          mapContexts.globeMap.scene.remove(obj.line);
         });
-        window.mollweideMap.scene.remove(densityOverlay.textureMesh);
+        mapContexts.mollweideMap.scene.remove(densityOverlay.textureMesh);
       }
       densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
       densityOverlay.cubesData.forEach(cell => {
-        window.trueCoordinatesMap.scene.add(cell.tcMesh);
+        mapContexts.trueCoordinatesMap.scene.add(cell.tcMesh);
       });
       densityOverlay.adjacentLines.forEach(obj => {
-        window.globeMap.scene.add(obj.line);
+        mapContexts.globeMap.scene.add(obj.line);
       });
-      window.mollweideMap.scene.add(densityOverlay.textureMesh);
+      mapContexts.mollweideMap.scene.add(densityOverlay.textureMesh);
     }
-    updateDensityFilter(allStars, densityOverlay, window.trueCoordinatesMap.scene, window.globeMap.scene, window.mollweideMap.scene);
+    updateDensityFilter(allStars, densityOverlay, mapContexts.trueCoordinatesMap.scene, mapContexts.globeMap.scene, mapContexts.mollweideMap.scene);
   } else {
     if (densityOverlay) {
       densityOverlay.cubesData.forEach(cell => {
-        window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+        mapContexts.trueCoordinatesMap.scene.remove(cell.tcMesh);
       });
       densityOverlay.adjacentLines.forEach(obj => {
-        window.globeMap.scene.remove(obj.line);
+        mapContexts.globeMap.scene.remove(obj.line);
       });
-      window.mollweideMap.scene.remove(densityOverlay.textureMesh);
+      mapContexts.mollweideMap.scene.remove(densityOverlay.textureMesh);
       densityOverlay = null;
     }
   }

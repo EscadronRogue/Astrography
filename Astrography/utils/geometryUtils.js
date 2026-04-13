@@ -5,6 +5,16 @@ import { minimalRADifference } from '../utils.js';
 // Global central meridian for Mollweide projection
 let mollweideLambda0 = 0;
 
+const MAX_GEOMETRY_CACHE_SIZE = 5000;
+
+function setBoundedCache(cache, key, value) {
+  if (cache.size >= MAX_GEOMETRY_CACHE_SIZE) {
+    const firstKey = cache.keys().next().value;
+    cache.delete(firstKey);
+  }
+  cache.set(key, value);
+}
+
 export function setMollweideLambda0(lambda0) {
   mollweideLambda0 = lambda0;
 }
@@ -204,7 +214,7 @@ export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda
     return radToMollweideCache.get(key).clone();
   }
   const vec = radToMollweide(ra, dec, R, lambda0);
-  radToMollweideCache.set(key, vec.clone());
+  setBoundedCache(radToMollweideCache, key, vec.clone());
   return vec;
 }
 
@@ -263,11 +273,7 @@ export function splitMollweideWrap(p1, p2) {
   const iy = left.y + dy * t;
   const edgeLeft = new THREE.Vector3(ix, iy, 0);
   const edgeRight = new THREE.Vector3(-ix, iy, 0);
-  if (!swapped) {
-    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
-  } else {
-    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
-  }
+  return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
 }
 
 /**

@@ -1,90 +1,64 @@
-function ensureTooltipClickHandler(tooltip) {
-  if (tooltip.hasAttribute('data-stop-propagation')) return;
-  tooltip.addEventListener('click', event => {
-    event.stopPropagation();
-  });
-  tooltip.setAttribute('data-stop-propagation', 'true');
-}
-
-function setTextRow(parent, id, label, value) {
-  const row = document.createElement('div');
-  row.id = id;
-  const strong = document.createElement('strong');
-  strong.textContent = `${label}: `;
-  row.appendChild(strong);
-  row.appendChild(document.createTextNode(value));
-  parent.appendChild(row);
-}
-
-function buildTooltipContent(tooltip, star) {
-  tooltip.replaceChildren();
-  setTextRow(tooltip, 'tooltip-starName', 'Name', star.Common_name_of_the_star || 'Unknown Star');
-  setTextRow(tooltip, 'tooltip-systemName', 'System', star.Common_name_of_the_star_system || 'Unknown System');
-  setTextRow(tooltip, 'tooltip-distance', 'Distance', star.Distance_from_the_Sun !== undefined ? `${star.Distance_from_the_Sun.toFixed(2)} LY` : 'N/A');
-  setTextRow(tooltip, 'tooltip-constellation', 'Constellation', star.Constellation || 'N/A');
-  setTextRow(tooltip, 'tooltip-stellarClass', 'Stellar Class', star.Stellar_class || 'N/A');
-  setTextRow(tooltip, 'tooltip-mass', 'Mass', star.Mass !== undefined ? String(star.Mass) : 'N/A');
-  setTextRow(tooltip, 'tooltip-size', 'Size', star.Size !== undefined ? String(star.Size) : 'N/A');
-  setTextRow(tooltip, 'tooltip-absoluteMag', 'Absolute Mag', star.Absolute_magnitude !== undefined ? String(star.Absolute_magnitude) : 'N/A');
-  setTextRow(tooltip, 'tooltip-parallax', 'Parallax', star.Parallax !== undefined ? String(star.Parallax) : 'N/A');
-
-  const catalogRow = document.createElement('div');
-  catalogRow.id = 'tooltip-catalogLink';
-  const strong = document.createElement('strong');
-  strong.textContent = 'Catalog: ';
-  catalogRow.appendChild(strong);
-  if (star.Catalog_link) {
-    try {
-      const url = new URL(star.Catalog_link, window.location.href);
-      const link = document.createElement('a');
-      link.href = url.href;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = 'Catalog';
-      catalogRow.appendChild(link);
-    } catch {
-      catalogRow.appendChild(document.createTextNode('N/A'));
-    }
-  } else {
-    catalogRow.appendChild(document.createTextNode('N/A'));
-  }
-  tooltip.appendChild(catalogRow);
-}
-
-function positionTooltip(tooltip, x, y) {
-  const offset = 15;
-  tooltip.style.left = '0px';
-  tooltip.style.top = '0px';
-  const tooltipWidth = tooltip.offsetWidth;
-  const tooltipHeight = tooltip.offsetHeight;
-  const maxLeft = window.innerWidth - tooltipWidth - 8;
-  const maxTop = window.innerHeight - tooltipHeight - 8;
-  const left = Math.max(8, Math.min(x + offset, maxLeft));
-  const top = Math.max(8, Math.min(y + offset, maxTop));
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
-}
-
+/**
+ * Displays the tooltip with star information at the specified coordinates.
+ * Builds the entire tooltip innerHTML so that all requested details appear.
+ * @param {number} x - The X-coordinate on the screen.
+ * @param {number} y - The Y-coordinate on the screen.
+ * @param {Object} star - The star object containing information to display.
+ */
 export function showTooltip(x, y, star) {
-  const tooltip = document.getElementById('tooltip');
-  if (!tooltip) {
-    console.warn('Tooltip container not found in DOM.');
-    return;
-  }
-
-  tooltip.style.pointerEvents = 'auto';
-  ensureTooltipClickHandler(tooltip);
-  buildTooltipContent(tooltip, star);
-  tooltip.classList.add('visible');
-  tooltip.classList.remove('hidden');
-  positionTooltip(tooltip, x, y);
+    const tooltip = document.getElementById('tooltip');
+    if (!tooltip) {
+        console.warn("Tooltip container not found in DOM.");
+        return;
+    }
+    
+    // Ensure the tooltip can receive pointer events.
+    tooltip.style.pointerEvents = 'auto';
+    
+    // Attach a click event listener (if not already attached) so that clicks inside
+    // the tooltip do not propagate further.
+    if (!tooltip.hasAttribute('data-stop-propagation')) {
+        tooltip.addEventListener('click', (event) => {
+            event.stopPropagation();
+        });
+        tooltip.setAttribute('data-stop-propagation', 'true');
+    }
+    
+    // Build the tooltip content with all fields.
+    tooltip.innerHTML = `
+      <div id="tooltip-starName"><strong>Name:</strong> ${star.Common_name_of_the_star || 'Unknown Star'}</div>
+      <div id="tooltip-systemName"><strong>System:</strong> ${star.Common_name_of_the_star_system || 'Unknown System'}</div>
+      <div id="tooltip-distance"><strong>Distance:</strong> ${star.Distance_from_the_Sun !== undefined ? star.Distance_from_the_Sun.toFixed(2) + ' LY' : 'N/A'}</div>
+      <div id="tooltip-constellation"><strong>Constellation:</strong> ${star.Constellation || 'N/A'}</div>
+      <div id="tooltip-stellarClass"><strong>Stellar Class:</strong> ${star.Stellar_class || 'N/A'}</div>
+      <div id="tooltip-mass"><strong>Mass:</strong> ${star.Mass !== undefined ? star.Mass : 'N/A'}</div>
+      <div id="tooltip-size"><strong>Size:</strong> ${star.Size !== undefined ? star.Size : 'N/A'}</div>
+      <div id="tooltip-absoluteMag"><strong>Absolute Mag:</strong> ${star.Absolute_magnitude !== undefined ? star.Absolute_magnitude : 'N/A'}</div>
+      <div id="tooltip-parallax"><strong>Parallax:</strong> ${star.Parallax !== undefined ? star.Parallax : 'N/A'}</div>
+      <div id="tooltip-catalogLink">
+        <strong>Catalog:</strong> 
+        ${star.Catalog_link 
+            ? `<a href="${star.Catalog_link}" target="_blank" style="color: #ff6f61; text-decoration: underline;">Catalog</a>` 
+            : 'N/A'}
+      </div>
+    `;
+    
+    // Position tooltip near the cursor with a slight offset.
+    tooltip.style.left = `${x + 15}px`;
+    tooltip.style.top = `${y + 15}px`;
+    tooltip.classList.add('visible');
+    tooltip.classList.remove('hidden');
 }
 
+/**
+ * Hides the tooltip.
+ */
 export function hideTooltip() {
-  const tooltip = document.getElementById('tooltip');
-  if (tooltip) {
-    tooltip.classList.remove('visible');
-    tooltip.classList.add('hidden');
-    tooltip.style.pointerEvents = 'none';
-  }
+    const tooltip = document.getElementById('tooltip');
+    if (tooltip) {
+       tooltip.classList.remove('visible');
+       tooltip.classList.add('hidden');
+       // Disable pointer events when hidden so that underlying canvas events work.
+       tooltip.style.pointerEvents = 'none';
+    }
 }

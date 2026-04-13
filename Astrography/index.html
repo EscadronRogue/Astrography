@@ -4,23 +4,24 @@
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Starmap Visualization</title>
+  <title>Astrography</title>
   <link href="https://fonts.googleapis.com/css2?family=Oswald&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <!-- Loader -->
   <div id="loader" class="active">Loading Stars...</div>
 
   <!-- Header with Menu Toggle Button -->
   <header>
-    <button id="menu-toggle" aria-label="Toggle Menu">☰</button>
-    <h1>Starmap Visualization</h1>
+    <button id="menu-toggle" aria-label="Toggle Menu" aria-expanded="false" aria-controls="filters-sidebar">☰</button>
+    <h1>Astrography</h1>
   </header>
 
   <!-- Main Container -->
   <div class="main-container">
-    <aside class="sidebar">
+    <aside class="sidebar" id="filters-sidebar">
       <h2>Filters</h2>
       <form id="filters-form">
         <!-- Map Projection Filter Fieldset -->
@@ -287,7 +288,7 @@
     </aside>
 
     <!-- Maps Section -->
-    <section class="maps-section">
+    <section class="maps-section" id="main-content" tabindex="-1">
       <div class="map-container">
         <h2>True Coordinates Map</h2>
         <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">⤢</button>
@@ -334,11 +335,5 @@
   <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script type="module" src="script.js"></script>
-  <script type="module">
-    import { initFilterUI } from './ui/filterUI.js';
-    window.addEventListener('DOMContentLoaded', () => {
-      initFilterUI();
-    });
-  </script>
 </body>
 </html>

@@ -19,9 +19,13 @@ export class ThreeDControls {
      * @param {THREE.PerspectiveCamera} camera - The Three.js camera to control.
      * @param {HTMLElement} domElement - The DOM element to attach event listeners to.
      */
-    constructor(camera, domElement) {
+    constructor(camera, domElement, options = {}) {
         this.camera = camera;
         this.domElement = domElement;
+        this.minZoom = options.minZoom ?? 0.5;
+        this.maxZoom = options.maxZoom ?? 8;
+        this.minDistance = options.minDistance ?? 5;
+        this.maxDistance = options.maxDistance ?? 5000;
 
         // Rotation parameters
         this.isRotating = false;
@@ -49,8 +53,8 @@ export class ThreeDControls {
 
         // Attach event listeners for mouse events
         this.domElement.addEventListener('mousedown', this.onMouseDown, false);
-        this.domElement.addEventListener('mousemove', this.onMouseMove, false);
-        this.domElement.addEventListener('mouseup', this.onMouseUp, false);
+        window.addEventListener('mousemove', this.onMouseMove, false);
+        window.addEventListener('mouseup', this.onMouseUp, false);
         this.domElement.addEventListener('wheel', this.onWheel, false);
 
         // Attach event listeners for touch events
@@ -134,9 +138,9 @@ export class ThreeDControls {
         direction.copy(this.camera.position).normalize();
 
         const distance = this.camera.position.length();
-        const newDistance = distance + delta * zoomSpeed * (distance / 100); // Adjust zoom speed based on distance
+        const unclampedDistance = distance + delta * zoomSpeed * (distance / 100);
+        const newDistance = Math.min(this.maxDistance, Math.max(this.minDistance, unclampedDistance));
 
-        // Removed limits on newDistance
         this.camera.position.set(
             direction.x * newDistance,
             direction.y * newDistance,
@@ -190,7 +194,8 @@ export class ThreeDControls {
             const direction = new THREE.Vector3();
             direction.copy(this.camera.position).normalize();
             const distance = this.camera.position.length();
-            const newDistance = distance - deltaDistance * zoomSpeed * (distance / 100);
+            const unclampedDistance = distance - deltaDistance * zoomSpeed * (distance / 100);
+            const newDistance = Math.min(this.maxDistance, Math.max(this.minDistance, unclampedDistance));
             this.camera.position.set(
                 direction.x * newDistance,
                 direction.y * newDistance,
@@ -255,8 +260,8 @@ export class ThreeDControls {
      */
     dispose() {
         this.domElement.removeEventListener('mousedown', this.onMouseDown, false);
-        this.domElement.removeEventListener('mousemove', this.onMouseMove, false);
-        this.domElement.removeEventListener('mouseup', this.onMouseUp, false);
+        window.removeEventListener('mousemove', this.onMouseMove, false);
+        window.removeEventListener('mouseup', this.onMouseUp, false);
         this.domElement.removeEventListener('wheel', this.onWheel, false);
 
         this.domElement.removeEventListener('touchstart', this.onTouchStart, false);
@@ -277,6 +282,8 @@ export class TwoDControls {
     constructor(camera, domElement, options = {}) {
         this.camera = camera;
         this.domElement = domElement;
+        this.minZoom = options.minZoom ?? 0.5;
+        this.maxZoom = options.maxZoom ?? 8;
 
         this.leftCallback = options.leftCallback || null;
         this.rightCallback = options.rightCallback || null;
@@ -298,8 +305,8 @@ export class TwoDControls {
         this.onTouchEnd = this.onTouchEnd.bind(this);
 
         domElement.addEventListener('mousedown', this.onMouseDown, false);
-        domElement.addEventListener('mousemove', this.onMouseMove, false);
-        domElement.addEventListener('mouseup', this.onMouseUp, false);
+        window.addEventListener('mousemove', this.onMouseMove, false);
+        window.addEventListener('mouseup', this.onMouseUp, false);
         domElement.addEventListener('wheel', this.onWheel, false);
         this.contextMenuHandler = (e) => e.preventDefault();
         domElement.addEventListener('contextmenu', this.contextMenuHandler);
@@ -360,7 +367,7 @@ export class TwoDControls {
     onWheel(event) {
         event.preventDefault();
         const zoomFactor = event.deltaY < 0 ? 1.1 : 0.9;
-        this.camera.zoom *= zoomFactor;
+        this.camera.zoom = Math.min(this.maxZoom, Math.max(this.minZoom, this.camera.zoom * zoomFactor));
         this.camera.updateProjectionMatrix();
         if (window.requestRender) window.requestRender();
     }
@@ -387,7 +394,7 @@ export class TwoDControls {
             const currentDistance = this.getTouchDistance(event.touches[0], event.touches[1]);
             const delta = currentDistance - this.touchStartDistance;
             const zoomFactor = 1 + delta / 200;
-            this.camera.zoom *= zoomFactor;
+            this.camera.zoom = Math.min(this.maxZoom, Math.max(this.minZoom, this.camera.zoom * zoomFactor));
             this.camera.updateProjectionMatrix();
             this.touchStartDistance = currentDistance;
             if (window.requestRender) window.requestRender();
@@ -408,8 +415,8 @@ export class TwoDControls {
 
     dispose() {
         this.domElement.removeEventListener('mousedown', this.onMouseDown, false);
-        this.domElement.removeEventListener('mousemove', this.onMouseMove, false);
-        this.domElement.removeEventListener('mouseup', this.onMouseUp, false);
+        window.removeEventListener('mousemove', this.onMouseMove, false);
+        window.removeEventListener('mouseup', this.onMouseUp, false);
         this.domElement.removeEventListener('wheel', this.onWheel, false);
 
         this.domElement.removeEventListener('touchstart', this.onTouchStart, false);
