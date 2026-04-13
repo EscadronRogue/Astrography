@@ -1974,7 +1974,7 @@ function applyStoredLineEdits(root) {
         array[i + 3], array[i + 4], array[i + 5]
       ].join(',');
       if (removedLineSegments.has(segKey)) {
-        for (let j = 0; j < 6; j++) array[i + j] = NaN;
+        for (let j = 0; j < 6; j++) array[i + j] = 0;
         if (alphaAttr) {
           const idx = (i / 3);
           alphaAttr.array[idx] = 0;
@@ -2026,7 +2026,7 @@ function onLinePointerDown(e) {
         if (base + 5 < posAttr.array.length) {
           let removed = true;
           for (let i = 0; i < 6; i++) {
-            if (!Number.isNaN(posAttr.array[base + i])) {
+            if (posAttr.array[base + i] !== 0) {
               removed = false;
               break;
             }
@@ -2053,7 +2053,7 @@ function onLinePointerDown(e) {
           posAttr.array[base], posAttr.array[base + 1], posAttr.array[base + 2],
           posAttr.array[base + 3], posAttr.array[base + 4], posAttr.array[base + 5]
         ];
-        for (let i = 0; i < 6; i++) posAttr.array[base + i] = NaN;
+        for (let i = 0; i < 6; i++) posAttr.array[base + i] = 0;
         posAttr.needsUpdate = true;
         let prevAlpha = null;
         const alphaAttr = obj.geometry.getAttribute('alpha');

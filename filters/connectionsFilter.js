@@ -60,11 +60,18 @@ export function buildWideLineGeometry(points, width) {
   const vertices = [];
   const sides = [];
   const along = [];
-  for (let i = 0; i < points.length; i += 2) {
+  const safeWidth = Math.max(0.0001, Number.isFinite(width) ? width : 1);
+  for (let i = 0; i + 1 < points.length; i += 2) {
     const p1 = points[i];
     const p2 = points[i + 1];
-    const dir = new THREE.Vector2(p2.x - p1.x, p2.y - p1.y).normalize();
-    const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(width / 2);
+    if (!p1 || !p2) continue;
+    const values = [p1.x, p1.y, p1.z, p2.x, p2.y, p2.z];
+    if (values.some(v => !Number.isFinite(v))) continue;
+
+    const rawDir = new THREE.Vector2(p2.x - p1.x, p2.y - p1.y);
+    if (rawDir.lengthSq() < 1e-12) continue;
+    const dir = rawDir.normalize();
+    const perp = new THREE.Vector2(-dir.y, dir.x).multiplyScalar(safeWidth / 2);
     const a1 = new THREE.Vector3(p1.x + perp.x, p1.y + perp.y, p1.z);
     const a2 = new THREE.Vector3(p1.x - perp.x, p1.y - perp.y, p1.z);
     const b1 = new THREE.Vector3(p2.x + perp.x, p2.y + perp.y, p2.z);
@@ -77,7 +84,16 @@ export function buildWideLineGeometry(points, width) {
     sides.push(1, -1, 1);
     along.push(-1, 1, 1);
   }
+
   const geom = new THREE.BufferGeometry();
+  if (vertices.length === 0) {
+    geom.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
+    geom.setAttribute('side', new THREE.Float32BufferAttribute([0], 1));
+    geom.setAttribute('along', new THREE.Float32BufferAttribute([0], 1));
+    geom.setDrawRange(0, 0);
+    return geom;
+  }
+
   geom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geom.setAttribute('side', new THREE.Float32BufferAttribute(sides, 1));
   geom.setAttribute('along', new THREE.Float32BufferAttribute(along, 1));
