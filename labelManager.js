@@ -3,6 +3,25 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { interpolateColor } from './utils.js';
 
+function hashStringToUnit(value) {
+  const str = String(value ?? '');
+  let hash = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) % 10000) / 10000;
+}
+
+function disposeObject3D(obj) {
+  if (!obj) return;
+  if (obj.geometry) obj.geometry.dispose();
+  const material = obj.material;
+  if (material?.map) material.map.dispose();
+  if (Array.isArray(material)) material.forEach(m => m.dispose());
+  else if (material) material.dispose();
+}
+
 /**
  * Returns a ShaderMaterial that renders a texture double‑sided without mirroring.
  */
@@ -76,8 +95,8 @@ export class LabelManager {
 
     if (needsRebuild) {
       // Remove old objects if present
-      if (labelObj) this.scene.remove(labelObj);
-      if (lineObj) this.scene.remove(lineObj);
+      if (labelObj) { this.scene.remove(labelObj); disposeObject3D(labelObj); }
+      if (lineObj) { this.scene.remove(lineObj); disposeObject3D(lineObj); }
 
       // Create the canvas-based label texture
       const baseFontSize = (this.mapType === 'Globe'
@@ -197,7 +216,7 @@ export class LabelManager {
           labelObj.material.rotation = star.mollLabelRotation;
         }
         if (star.mollLabelScale) {
-          labelObj.scale.multiply(star.mollLabelScale);
+          labelObj.scale.set(star.mollLabelScale.x, star.mollLabelScale.y, 1);
         }
       }
 
@@ -246,7 +265,7 @@ export class LabelManager {
       if (angle === undefined) {
         const existing = Array.from(starMap.values());
         for (let attempt = 0; attempt < 10; attempt++) {
-          const candidate = Math.random() * Math.PI * 2;
+          const candidate = ((hashStringToUnit(`${system}:${star.id}:${attempt}`) * Math.PI * 2) + attempt * 0.15) % (Math.PI * 2);
           const valid = existing.every(a => {
             const diff = Math.abs(candidate - a) % (Math.PI * 2);
             const minDiff = Math.min(diff, Math.PI * 2 - diff);
@@ -257,7 +276,7 @@ export class LabelManager {
             break;
           }
         }
-        if (angle === undefined) angle = Math.random() * Math.PI * 2;
+        if (angle === undefined) angle = hashStringToUnit(`${system}:${star.id}`) * Math.PI * 2;
         starMap.set(star, angle);
       }
 
@@ -272,7 +291,7 @@ export class LabelManager {
       tangent.cross(normal).normalize();
       const bitangent = normal.clone().cross(tangent).normalize();
       // Random angle around the star
-      const angle = Math.random() * Math.PI * 2;
+      const angle = hashStringToUnit(star.id || star.displayName || 'globe-label') * Math.PI * 2;
       const baseDistance = 2;
       const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
       return tangent.clone().multiplyScalar(Math.cos(angle))
@@ -299,10 +318,12 @@ export class LabelManager {
     this.sprites.forEach((labelObj, star) => {
       if (!inNewSet.has(star) || !star.displayVisible) {
         this.scene.remove(labelObj);
+        disposeObject3D(labelObj);
         this.sprites.delete(star);
         const line = this.lines.get(star);
         if (line) {
           this.scene.remove(line);
+          disposeObject3D(line);
           this.lines.delete(star);
         }
         this.labelCache.delete(star);
@@ -314,8 +335,8 @@ export class LabelManager {
    * Removes all labels from the scene.
    */
   removeAllLabels() {
-    this.sprites.forEach(obj => this.scene.remove(obj));
-    this.lines.forEach(obj => this.scene.remove(obj));
+    this.sprites.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
+    this.lines.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
     this.sprites.clear();
     this.lines.clear();
     this.labelCache.clear();

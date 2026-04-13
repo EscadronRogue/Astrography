@@ -1,38 +1,49 @@
 # Astrography
 
-Astrography is an interactive mapping tool for the local stellar neighborhood. It renders nearby stars in three complementary views:
+Astrography is an interactive WebGL atlas for exploring the stellar neighborhood around the Sun. It combines three complementary views of the same dataset:
+- **True Coordinates** for physical 3D placement
+- **Globe** for spherical context
+- **Mollweide** for 2D projection, annotation, and export
 
-- **True Coordinates** for spatial position
-- **Globe** for an intuitive spherical overview
-- **Mollweide** for a projection-friendly analytical map
+The project includes filterable stellar classes, distance and density analysis, connection overlays, constellation boundaries, dust cloud overlays, editable labels, and high-resolution exports.
 
-The project is aimed at exploration, education, and visual analysis of nearby stellar structure.
+## Current data scope
 
-## Current focus
-
-This revision improves the project in four areas:
-
-- safer and more predictable UI behavior
-- cleaner accessibility and layout defaults
-- deterministic label placement instead of random placement
-- more stable camera, tooltip, and geometry utilities
+The repository currently ships nearby-star datasets in JSON chunks under `data/` and a manifest file used by the app loader. The live app can visualize stars out to 100 light years, with distance filters used to focus the current view.
 
 ## Project structure
 
-- `index.html` – static shell, canvases, and top-level controls
-- `script.js` – application bootstrap and map orchestration
-- `styles.css` – layout, controls, overlays, and responsive styling
-- `cameraControls.js` – custom 3D and 2D camera interactions
-- `labelManager.js` – label creation, caching, layout, and connector lines
-- `tooltips.js` – tooltip rendering and positioning
-- `filters/` – filters, overlays, and projection-specific visual layers
-- `ui/` – filter UI wiring and generated filter panels
-- `utils/` – geometry and projection helpers
-- `data/` – star and cloud data files
+```text
+.
+├── index.html
+├── styles.css
+├── script.js
+├── cameraControls.js
+├── labelManager.js
+├── tooltips.js
+├── ui/
+├── filters/
+├── utils/
+├── app/
+└── data/
+```
+
+### Notable modules
+
+- `script.js` — application bootstrap and high-level orchestration
+- `ui/filterUI.js` — DOM wiring for the filter sidebar
+- `filters/index.js` — filter state parsing and derived visualization state
+- `filters/*.js` — rendering and analysis modules for overlays and transformations
+- `labelManager.js` — label creation, caching, and placement
+- `cameraControls.js` — 3D and 2D interaction controls
+- `utils/starData.js` — star normalization helpers
+- `utils/geometryUtils.js` — projection and spherical geometry utilities
 
 ## Running locally
 
-Serve the repository with a local web server.
+Because the application fetches local JSON files, it must be served from a local web server rather than opened directly from the file system.
+
+### Option 1: Python
 
 ```bash
 git clone https://github.com/EscadronRogue/Astrography.git
@@ -42,21 +53,43 @@ python -m http.server 8000
 
 Then open `http://localhost:8000`.
 
-## Notes on data
+### Option 2: Any static-file server
 
-Astrography uses repository data files under `data/` together with supporting constellation and stellar-class metadata in the repository root. If you expand the dataset or add derived data, keep the source files, derived files, and schema notes clearly separated.
+Any static HTTP server works as long as it serves the repository root and preserves the relative paths in `data/`, `filters/`, `ui/`, and `utils/`.
 
-## Development priorities
+## Editing and exports
 
-The codebase is still evolving from prototype to maintainable application. The next worthwhile steps are:
+The Mollweide map includes tools for:
+- editing star labels
+- rotating and scaling labels
+- hiding line segments
+- undoing edits
+- exporting selected regions as PNG or PDF
 
-1. split `script.js` into feature modules
-2. move filter parsing toward a single state model
-3. make overlay controllers independent from direct DOM reads
-4. document the data schema and refresh workflow
+Saved presets and edits are stored locally in the browser.
+
+## Data and provenance
+
+This repository includes source files for:
+- nearby star records
+- constellation boundaries and centers
+- stellar classification metadata
+- dust cloud overlay datasets
+
+If you extend or replace the data, keep the schema stable or update the normalization logic in `utils/starData.js`.
+
+## Known limitations
+
+- The application still uses vanilla JavaScript modules and browser-loaded CDN dependencies rather than a packaged build system.
+- Some analysis overlays can become expensive when many layers are enabled at once.
+- The visualization is optimized for desktop exploration first, with responsive behavior for smaller screens.
 
 ## Attribution
 
-If you use Astrography in your work, please include:
+If you use Astrography in your own work, please credit:
 
 > This work utilizes Astrography, developed by Antoine Paulet.
+
+## Contributing
+
+Improvements, bug fixes, and data corrections are welcome. When contributing, prefer small focused changes and keep rendering, UI, and data-normalization logic separated where possible.
