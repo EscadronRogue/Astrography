@@ -1,744 +1,840 @@
-# Astrography — Updated Code Audit
+# Applied refactor update — April 14, 2026
+
+This audit has now been partially executed in code. The following high-risk items from the action list are no longer pending:
+
+- Mollweide export logic was extracted from `script.js` into `script/exportManager.js`.
+- Mollweide label/line editing logic was extracted from `script.js` into `script/editManager.js`.
+- Opacity values are now normalized at the form boundary and propagated internally as 0–1 values.
+- Distance-based sizing/isolation/density/cloud code now uses normalized distance access instead of scattered legacy reads.
+
+The previous highest-priority architectural item has now been addressed: the `script.js` state facade was replaced with a plain application state object, and map/bootstrap responsibilities were split into dedicated modules. The next refactor target is deeper lifecycle cleanup and reducing remaining DOM coupling inside filter modules.
+
+---
+
+# Astrography — Code Audit (replacement)
 
 **Date:** April 14, 2026  
-**Scope reviewed:** every non-data file in the repository plus data-format checks for JSON/TXT data assets.  
-**Goal:** professionalism, efficiency, consistency.  
-**This document supersedes the previous `CODE_AUDIT.md`.**
+**Scope:** all non-data source files reviewed directly; large data assets reviewed for format and contract only.  
+**Standard applied:** professionalism, efficiency, consistency.  
+**Purpose:** this file is intended to replace the existing `CODE_AUDIT.md`.
 
 ---
 
-## What changed since the previous audit
+# What is already fixed relative to older audit notes
 
-The previous audit is partially outdated. The following items are already fixed in the current tree and should **not** remain on the active issue list:
+The repository is not in the same state as the earlier audit baseline. These points are already improved and should not remain on an active issue list:
 
-- `loadConstellationFullNames()` now exists in `filters/constellationFilter.js`.
-- shared modules now exist for constants, colors, form state, stellar-class parsing, star helpers, and UI helpers:
-  - `shared/constants.js`
-  - `shared/colorUtils.js`
-  - `shared/formUtils.js`
-  - `shared/starUtils.js`
-  - `shared/stellarClassUtils.js`
-  - `shared/uiFactory.js`
-- the broken CSS selectors in `styles.css` were fixed.
-- many `canvas.getContext('2d')` call sites now have null checks.
-- `dustCloudDataCache.js` now has a bounded cache instead of an unbounded map.
-- `connectionsFilter.js` no longer uses the old O(n²) all-pairs scan for all stars; it now uses a spatial grid.
+- `script_backup_before_split.js` is gone.
+- constellation visuals are now rebuilt through `script/constellationManager.js` instead of the earlier duplicate mutation path.
+- `filters/filterOverlayState.js` no longer reaches into `window.*` maps; scenes are passed in explicitly.
+- `cameraControls.js` no longer depends on `window.requestRender`; it uses `shared/renderScheduler.js`.
+- `filters/colorFilter.js` now uses `getPrimaryClass()` for stellar-class coloring.
+- `styles.css` is syntactically healthier than the older broken-selector version.
+- several 2D canvas call sites now guard against missing contexts.
+- `dustCloudDataCache.js` has a bounded cache instead of an unbounded forever-growing map.
+- the general nearest-neighbor connection path is no longer the old naïve all-pairs scan.
 
-Those are real improvements. The remaining work is now more architectural and integration-oriented.
+Those are meaningful improvements. The remaining issues are mostly about finishing the refactor consistently and reducing architectural drag.
 
 ---
 
-# Active findings by file
+# Repository-wide findings
+
+## 1. The main technical debt is now orchestration debt, not missing utility debt
+The codebase already has the right direction: shared constants, shared color helpers, shared star helpers, a render scheduler, and dedicated managers for planes and constellations. The problem is that those abstractions are adopted unevenly. Some modules use normalized fields and shared helpers correctly; others still read legacy raw fields directly or perform DOM lookups from deep inside rendering/filter modules.
+
+## 2. `script.js` is still the largest maintainability risk
+The file remains the single biggest source of complexity. It still owns bootstrap, map classes, render invalidation, export selection, label editing, line editing, preset persistence coordination, and startup wiring. The file is no longer the only place where logic lives, but it is still the file where too many subsystems are tied together.
+
+## 3. Internal value conventions are still inconsistent
+This is the most pervasive consistency problem left in the tree:
+
+- opacity is still represented as 0–100 in form state, then divided by 100 later in the pipeline
+- distance is normalized into `star.distance`, but multiple modules still use `Distance_from_the_Sun`
+- some modules use shared stellar-class parsing, some still carry their own local class assumptions
+
+## 4. DOM and runtime state are still too interleaved
+Several modules are still not really “logic modules”; they are logic-plus-DOM modules. This makes them harder to test, harder to reuse, and more fragile during future UI changes.
+
+## 5. Performance work is partially done, but hotspot allocation remains
+The big connection-path improvement is real. The remaining performance issues are now more localized:
+
+- repeated dispose-and-recreate paths for overlays and labels
+- repeated full rebuilds of dynamic UI fragments
+- repeated temporary allocation inside geometry-heavy overlay code
+- repeated `new FormData(form)` and repeated document lookups in orchestration code
+
+---
+
+# File-by-file audit
 
 ## Root files
 
 ### `.gitattributes`
 **Status:** acceptable.  
-**Notes:** simple LF normalization only. No change needed.
+**What is fine**
+- simple LF normalization only
+
+**Improve**
+- no urgent change needed
 
 ### `.gitignore`
-**Status:** needs improvement.  
+**Status:** too minimal for a browser-heavy visualization repo.  
 **Issues**
-- `script_backup_before_split.js` is not ignored and is currently committed as a large dead backup file. That file materially increases maintenance cost and review noise.
-- generated export artifacts are not ignored. If this repo is used locally for PNG/PDF export experiments, accidental commits are likely.
+- export artifacts are not ignored even though the app has PNG/PDF export flows
+- common local caches and test artifacts are not covered beyond generic build folders
+- no ignore rule exists for temporary downloaded audit/output files that are likely to appear during local review
 
-**Recommendation**
-- either delete `script_backup_before_split.js` from the repository or move it outside source control.
-- add explicit ignore rules for local export output if those files are generated during development.
+**Improve**
+- add ignores for local export outputs, screenshots, generated PDFs/PNGs, and any review scratch files
+- keep the file aligned with the actual developer workflow rather than a generic starter ignore list
 
 ### `README.md`
-**Status:** decent but incomplete.  
-**Issues**
-- The startup flow is accurate at a high level, but the document does not explain the current split between `script.js`, `script/filterPipeline.js`, `script/planeManager.js`, and `script/constellationManager.js`.
-- It does not document the remaining global coupling (`window.*` scene references and `window.requestRender`).
-- It does not mention that many modules still consume legacy raw star fields (`Distance_from_the_Sun`, `Stellar_class`) alongside normalized fields (`distance`, `apparentMagnitude`, `absoluteMagnitude`).
+**Status:** improved, but still too light for the current architecture.  
+**What is good**
+- the normalized star contract is now documented
+- startup flow is short and readable
+- data/reference distinctions are partly documented
 
-**Recommendation**
-- add a short “runtime architecture” section.
-- document normalized-vs-legacy star fields and define one canonical field set.
+**Issues**
+- it still does not explain the split of responsibilities between `script.js`, `script/filterPipeline.js`, `script/constellationManager.js`, `script/planeManager.js`, `filters/index.js`, and `ui/filterUI.js`
+- it does not describe the edit/export subsystems at all even though they are substantial runtime features
+- it says shared rendering helpers live in `utils/renderUtils.js`, but there are also critical shared helpers in `shared/*`; the architecture description is incomplete
+- it does not state that some rendering/filter modules still consume legacy raw fields for compatibility
+
+**Improve**
+- add a “runtime architecture” section
+- document the actual canonical data contract and explicitly call out remaining compatibility reads
+- document where filter state, scene state, and edit state live
+
+### `HIGH_RISK_REFACTOR_NOTES.md`
+**Status:** useful, but now partially transitional.  
+**What is good**
+- it records real completed refactor work
+- it correctly notes the removal of earlier hidden global dependencies
+
+**Issues**
+- it is written as a point-in-time follow-up memo and can drift quickly
+- after this audit is updated, some wording about “the current audit” becomes stale unless kept synchronized
+
+**Improve**
+- either keep this as a dated changelog note or fold the same information into the audit and shorten this file
 
 ### `index.html`
-**Status:** functional, but it still carries structural debt.  
+**Status:** functional, but still structurally inconsistent.  
 **Issues**
-- The file is large and contains a lot of static filter markup while other filter sections are generated dynamically in JS. This hybrid approach makes the UI difficult to reason about and increases ID/name drift risk.
-- Many form controls encode business rules directly in HTML defaults instead of being driven by a central schema.
-- Accessibility is only partial: toggle buttons have labels, but the sidebar and dynamically generated controls do not have a stronger accessibility model.
-- The file hardcodes external CDN dependencies without integrity/crossorigin metadata.
-- The app title still says “Starmap Visualization”, while the project is “Astrography”; this is a presentation inconsistency.
+- the filter UI is still split between large static HTML and dynamically generated sections; that hybrid model increases drift risk
+- defaults and ranges are encoded in markup while related logic also exists in JS helpers and constants
+- the visible title still says **Starmap Visualization** instead of matching the project name **Astrography**
+- external CDN imports do not use integrity metadata
+- accessibility is only partial: there are labels and legends, but the dynamic sidebar model is not documented with a coherent accessibility strategy
+- the document is large enough that future filter additions are likely to reintroduce ID drift and duplicated markup rules
 
-**Recommendation**
-- either move to a fully declarative static form schema or fully generate the filter UI from configuration.
-- add subresource integrity where possible.
-- align the visible application naming with the repository/project name.
+**Improve**
+- choose one UI ownership model: schema-driven generation or mostly static declarative markup
+- align branding/title with repository naming
+- add SRI where possible for CDN assets
+- audit control naming and ARIA behavior systematically, not piecemeal
 
 ### `styles.css`
-**Status:** improved, but inconsistent.  
+**Status:** valid and usable, but still monolithic.  
 **Issues**
-- The stylesheet is now syntactically healthier, but it remains a monolith with mixed responsibilities: layout, theme, form controls, map containers, export UI, and editing overlays all live in one file.
-- Many visual constants are repeated instead of centralized as CSS custom properties.
-- Several sizing values are hardcoded for a single layout regime, which will make responsive refinement harder.
+- one file still owns layout, theme, controls, map containers, overlay handles, export UI, tooltip styling, fullscreen behavior, and responsive tweaks
+- colors and spacing are repeated many times instead of being centralized as CSS custom properties
+- breakpoint/layout sizing still assumes a narrow range of page shapes
+- state styles are largely class-name based and imperative rather than driven by a clearer component structure
 
-**Recommendation**
-- split into `base`, `layout`, `filters`, `maps`, `editor/export`.
-- promote repeated colors and spacing into CSS variables.
+**Improve**
+- split into base/layout/sidebar/maps/editor/export modules
+- promote repeated values into CSS variables
+- tighten naming so styles map more clearly to runtime UI components
 
 ### `tooltips.js`
-**Status:** generally solid.  
-**Issues**
-- The formatting logic is tightly coupled to specific source field names and the current tooltip DOM.
-- The module is imperative and DOM-bound, so it is hard to test without a browser context.
-- URL sanitization is local to this file instead of being shared if link sanitization is needed elsewhere.
+**Status:** solid utility with clear remaining coupling.  
+**What is good**
+- formatting and position logic are straightforward
+- URL sanitization exists
 
-**Recommendation**
-- isolate a pure tooltip view-model builder from DOM rendering.
+**Issues**
+- star-field formatting is tightly coupled to the current raw/normalized mixed schema
+- DOM construction and data formatting live in the same module
+- the module still hardcodes tooltip row IDs and assumes a single global tooltip element
+
+**Improve**
+- split pure tooltip view-model construction from DOM rendering
+- use normalized/shared schema helpers where possible
+- make the element a passed dependency rather than a global lookup target
 
 ### `utils.js`
-**Status:** partially obsolete.  
+**Status:** partly redundant.  
 **Issues**
-- This file still contains color helpers (`interpolateColor`, `hexToRgb`, `hexToRGBA`) that now overlap with `shared/colorUtils.js`.
-- Utility scope is too broad: constellation palette generation, color conversion, geometry-adjacent helpers, DOM sizing, and RA normalization live together.
-- `resizeCanvas()` assumes `parentElement` exists.
-- The file now competes conceptually with both `shared/colorUtils.js` and `utils/geometryUtils.js`.
+- it still overlaps conceptually with `shared/colorUtils.js`
+- it mixes color conversion, constellation palette generation, RA normalization, and canvas sizing in one bucket
+- `resizeCanvas()` still assumes `parentElement` exists
+- this file weakens the shared-layer cleanup because developers now have two plausible places to put generic helpers
 
-**Recommendation**
-- remove duplicated color helpers and import from `shared/colorUtils.js`.
-- keep only truly generic utilities here, or split by concern.
+**Improve**
+- remove color/helper overlap with `shared/colorUtils.js`
+- either narrow the file to a very small purpose or split it by concern
+- null-guard `parentElement`
 
 ### `script.js`
-**Status:** the main architectural bottleneck.  
-**Issues**
-- This is still the highest-risk file in the project. It remains very large and state-heavy.
-- The code replaced many naked globals with a `state` object, but that object is implemented through `Object.defineProperties` wrappers around the original module-level globals. That is not real simplification; it is a compatibility layer that preserves the original complexity.
-- `script.js` still exports application behavior to globals (`window.updateMollweideView`, `window.trueCoordinatesMap`, `window.globeMap`, `window.mollweideMap` later in the file). This keeps cross-module dependencies implicit.
-- Several helpers are now just wrappers around shared helpers (`getStarId`, `getStarTruePosition`, `projectStarGlobe`, `projectStarMollweide`, `precalcMollweideData`). That indirection adds noise without real value.
-- Hardcoded rendering constants remain inside the file (`R = 100`, `segments = 1024`, large export constants, border colors).
-- The file still mixes bootstrap, map construction, export logic, editing state, render invalidation, and projection helpers.
-- Dead or near-dead state is still present (`dragOffset`, `editPointer` were already suspicious in the old audit and still are not meaningful central abstractions).
+**Status:** still the core architectural bottleneck.  
+**What is improved**
+- some responsibilities were extracted into submodules
+- render scheduling now has a shared path
+- hidden global scene coupling is reduced compared with older versions
 
-**Recommendation**
-- make `state` a real plain object, not a proxy layer over dozens of top-level variables.
-- move bootstrap, export, and edit subsystems out of `script.js`.
-- eliminate wrapper helpers that only forward to shared modules.
-- stop publishing maps on `window`.
+**Remaining issues**
+- the file is now materially smaller and cleaner, but it still remains the top-level orchestration hub
+- the old `Object.defineProperties` compatibility facade is gone; state now lives in `script/appState.js` as a plain tree
+- `MapManager` and map rendering helpers now live in `script/mapManager.js`
+- startup and feature-manager wiring now live in `script/bootstrapManager.js`
+- the remaining burden in this file is orchestration and cross-module coordination rather than raw implementation bulk
+- several wrapper helpers still exist and can be reduced further once downstream modules consume the shared contracts more directly
 
-### `script_backup_before_split.js`
-**Status:** should be removed from the codebase.  
-**Issues**
-- It is a full historical duplicate of the application entrypoint.
-- It is not imported anywhere, but it is large enough to confuse audits, code search, and future refactors.
-- It guarantees stale logic will keep resurfacing during maintenance.
-
-**Recommendation**
-- delete it from the repository. If historical reference is needed, use version control.
+**Improve**
+- continue trimming wrapper helpers that only forward to shared helpers
+- reduce DOM/event wiring further by pushing more setup concerns into dedicated bootstrap modules
+- keep `script.js` as a thin composition root rather than letting behavior drift back into it
 
 ---
 
 ## App layer
 
 ### `app/presets.js`
-**Status:** improved, but still not fully hardened.  
+**Status:** useful and materially better than an ad hoc persistence file, but still under-validated.  
 **What is good**
-- shared form-state helpers are now used.
-- `localStorage` access is wrapped in `try/catch`.
+- schema versioning exists
+- `localStorage` operations are wrapped in `try/catch`
+- form state and edit state are both persisted coherently
 
 **Issues**
-- Schema versioning is shallow. Old payload compatibility is only partially handled; there is no migration path, only accept/reject.
-- Failure handling is console-only. The user is not informed when preset persistence fails.
-- The module still queries DOM by ID directly instead of receiving the form element or checkbox element from the caller.
-- `deserializeMap()` and `deserializeSet()` trust payload shape more than they should.
+- there is still no migration path, only accept/reject logic
+- DOM lookup of the remember checkbox and form is still internal to the module
+- `deserializeMap()` and `deserializeSet()` trust payload structure too much
+- persistence failures are logged only to console and not surfaced to the user
 
-**Recommendation**
-- inject the form and “remember” checkbox from the caller.
-- add payload validation and optional migration.
-- surface persistence failures to the UI.
+**Improve**
+- inject the form and remember checkbox from callers
+- validate payload shapes before applying them
+- add a lightweight migration layer for future schema changes
 
 ### `app/starData.js`
-**Status:** important but under-specified.  
+**Status:** important improvement layer, but error semantics are still weak.  
 **What is good**
-- normalization of `distance`, `apparentMagnitude`, `absoluteMagnitude`, and `starId` is a real improvement.
+- normalization of `distance`, `apparentMagnitude`, `absoluteMagnitude`, and `starId` is the right move
+- manifest-driven loading is cleaner than a hardcoded bucket list
 
 **Issues**
-- On any load failure, the module returns `[]`. That makes “no data” indistinguishable from “manifest fetch failed” or “one bucket failed”.
-- Mixed field strategy remains: normalized fields are created, but many downstream modules still consume raw legacy fields, so the normalization contract is not enforced.
-- `buildStableStarId()` still depends partly on unstable fallback material (human names and coordinates).
-- Network work is not cached inside the loader; repeated startup/reload flows will refetch everything.
+- load failure still collapses to `[]`, which makes “no data” indistinguishable from “data failed to load”
+- one missing bucket silently becomes `[]` and the app continues with partial data without surfacing that fact
+- `buildStableStarId()` still falls back to human-readable fields plus coordinates, which is only semi-stable
+- there is no session-level memoization of already-loaded data
 
-**Recommendation**
-- throw typed errors or return `{ stars, errors }`.
-- define one canonical star schema and migrate consumers to it.
-- cache or memoize manifest/bucket loads for the current session.
+**Improve**
+- return `{ stars, warnings, errors }` or throw typed errors upward
+- memoize successful loads for the current session
+- make the canonical star schema stronger and migrate consumers fully to it
 
 ### `app/stellarClassState.js`
-**Status:** small, but too thin.  
+**Status:** tiny convenience wrapper, but too DOM-specific to justify its own module in current form.  
 **Issues**
-- This file is essentially a wrapper around DOM lookups plus shared form utilities.
-- It hardcodes `document.getElementById('stellar-class-container')`, which makes it fragile and hard to reuse/test.
+- it hardcodes `document.getElementById('stellar-class-container')`
+- the abstraction value is low because the module is basically two one-liners around shared helpers
 
-**Recommendation**
-- either inline it into the caller or turn it into pure functions that accept a container element.
+**Improve**
+- either inline this at the call site or convert it to functions that accept the container element explicitly
 
 ---
 
 ## Shared layer
 
 ### `shared/constants.js`
-**Status:** good addition, but incomplete adoption.  
-**Issues**
-- The file is the right direction, but many modules still hardcode values that should live here (`100`, `32`, `1024`, palette values, border colors).
-- Some constants here represent UI slider ranges, others are rendering constants, others are string literals. The file should eventually be split by concern.
+**Status:** strong addition, but not fully adopted.  
+**What is good**
+- central render/domain constants now exist
+- the file already removes a lot of magic-number pressure from the rest of the tree
 
-**Recommendation**
-- continue migrating all remaining hardcoded render constants into this module.
-- consider `renderingConstants`, `uiDefaults`, and `domainConstants` split later.
+**Issues**
+- adoption is incomplete: many modules still hardcode `100`, `180`, `200`, line widths, or projection defaults instead of importing these constants
+- the file mixes domain constants, UI constants, parser constants, and render constants in one place
+- `STELLAR_CLASSES` excludes `'Other'`, but other parts of the UI/state logic still explicitly use `'Other'`
+
+**Improve**
+- continue migrating remaining hardcoded values into the shared layer
+- split by concern later: `render`, `ui`, `domain`, `data-contract`
+- define a first-class constant for the “other/unclassified” bucket if the UI will keep using it
 
 ### `shared/colorUtils.js`
-**Status:** good module, not fully adopted.  
-**Issues**
-- The project still has overlapping color functions in `utils.js`.
-- `getCloudNameFromFileUrl()` still embeds its own regex instead of using `CLOUD_FILE_REGEX` from `shared/constants.js`.
-- The module mixes cloud-specific naming logic with generic color math.
+**Status:** good module with a slight responsibility mismatch.  
+**What is good**
+- interpolation and color conversion helpers are sensible and reusable
 
-**Recommendation**
-- deduplicate with `utils.js`.
-- either use the shared regex constant or remove that constant.
+**Issues**
+- cloud-file naming logic sits next to general color math, which is not the same concern
+- overlap with `utils.js` still exists conceptually
+- if `CLOUD_FILE_REGEX` is a shared constant, all cloud-file parsing should use it consistently
+
+**Improve**
+- deduplicate utility ownership with `utils.js`
+- consider moving cloud-name parsing out of color utilities
 
 ### `shared/formUtils.js`
 **Status:** useful foundation.  
 **Issues**
-- DOM warnings are emitted with `console.warn`, but callers cannot react programmatically.
-- `restoreFormState()` restores raw values without schema validation, which is fine for trusted local state but weak for imported/edited payloads.
+- warnings are console-based only, so callers cannot respond programmatically
+- `restoreFormState()` is permissive, which is acceptable for trusted local state but weak for imported/edited payloads
 
-**Recommendation**
-- allow an optional validation callback or schema map for robust restores.
+**Improve**
+- allow optional validation hooks or schema maps
+- return structured warnings/errors instead of only logging
+
+### `shared/renderScheduler.js`
+**Status:** simple and good.  
+**Issues**
+- single global callback storage is acceptable here, but it still limits future multi-root rendering or more formal scheduler ownership
+
+**Improve**
+- no urgent change needed for current app scale
+- document intended lifecycle and single-owner assumption
 
 ### `shared/starUtils.js`
-**Status:** valuable module, incompletely integrated.  
-**Issues**
-- Shared helpers exist, but `script.js` still wraps them instead of using them directly.
-- `getStarId()` fallback order is still based partly on human-readable fields.
-- `precalcMollweideData()` still hardcodes `1e-10` instead of using the shared epsilon constant.
-- Some consumers still bypass these helpers and manually read raw fields.
+**Status:** important shared module, not yet authoritative enough across the codebase.  
+**What is good**
+- it centralizes coordinate derivation and projection helper behavior
+- normalized distance access exists
 
-**Recommendation**
-- make this the only source of truth for star ID/coordinate/position derivation.
-- import `EPSILON` instead of embedding the convergence threshold.
+**Issues**
+- `getStarId()` still falls back to mutable/human-readable identifiers after `starId`
+- `precalcMollweideData()` still embeds `1e-10` instead of using `EPSILON`
+- some consumers still bypass this module and read raw star fields manually
+
+**Improve**
+- make this the single source of truth for star coordinates, IDs, and normalized field access
+- import `EPSILON`
+- migrate remaining raw-field consumers onto these helpers
 
 ### `shared/stellarClassUtils.js`
-**Status:** correct direction.  
-**Issues**
-- `getPrimaryClass()` is good, but `filters/colorFilter.js` still bypasses it and reads `star.Stellar_class` directly.
-- Returning `'Other'` is reasonable, but the rest of the UI and defaults should treat `'Other'` as a first-class category consistently.
+**Status:** good direction.  
+**What is good**
+- central parsing of primary class is now in place
 
-**Recommendation**
-- require all stellar-class consumers to use this helper.
+**Issues**
+- the repository still has multiple places where class lists or fallbacks are defined separately
+- the relationship between `STELLAR_CLASSES` and the UI’s `'Other'` bucket is still implicit rather than formalized
+
+**Improve**
+- align all stellar-class lists and fallback categories with this module and `shared/constants.js`
 
 ### `shared/uiFactory.js`
-**Status:** useful, but the UI layer is still fragmented.  
-**Issues**
-- Good factory coverage exists for fieldsets, checkboxes, range controls, and slider sync, but `ui/filterUI.js` and `filters/filterUISetup.js` still do a lot of manual DOM composition around them.
-- `syncSliderPair()` still performs DOM lookups by ID rather than accepting concrete elements.
-- `sanitizeName()` is UI-specific string shaping and should not be shared unless more modules depend on it.
+**Status:** genuinely useful, but still not the sole UI-construction path.  
+**What is good**
+- fieldset, checkbox, range-control, and sync helpers reduce a lot of duplication
 
-**Recommendation**
-- pass elements, not IDs, where possible.
-- use this factory more aggressively to eliminate remaining bespoke UI wiring.
+**Issues**
+- `syncSliderPair()` still depends on global DOM IDs rather than concrete element references
+- not all UI creation goes through this factory yet, so the UI layer remains fragmented
+- some helpers are generic UI factory primitives, others are Astrography-specific shaping helpers
+
+**Improve**
+- pass elements rather than IDs where feasible
+- keep pushing remaining bespoke dynamic controls toward this layer
 
 ---
 
 ## Filters
 
 ### `filters/filterDefaults.js`
-**Status:** okay, but still reinforces scale inconsistency.  
+**Status:** serviceable schema-like defaults, but still tied to mixed units.  
 **Issues**
-- Opacity defaults are still expressed in 0–100 UI scale, which means every consumer must remember to divide later.
-- The defaults object is long and mostly untyped; it is effectively part of the application schema but is not documented as such.
+- opacity-related defaults are still expressed in UI percent scale
+- the object behaves like application schema but is not treated/documented as such
 
-**Recommendation**
-- normalize opacity at the form boundary and store 0–1 internally.
+**Improve**
+- normalize opacity at the form boundary
+- document this file as the default filter-state contract
 
 ### `filters/filterFormState.js`
-**Status:** central, but inconsistent with the shared layer.  
+**Status:** central and important, but still inconsistent with the shared layer.  
 **Issues**
-- It redefines `STELLAR_CLASSES` locally instead of importing the shared class list.
-- It returns opacity-like values in 0–100 scale, preserving the scale ambiguity the previous audit flagged.
-- The file mixes parsing, defaults, and domain policy in one function.
-- Cloud visibility is inferred from checked files only; there is no explicit “enable cloud overlay” control, which is acceptable UX-wise but should be intentional/documented.
+- it still redefines `STELLAR_CLASSES` locally instead of importing the shared list
+- it still returns percent-like values in 0–100 scale, leaving the pipeline to normalize later
+- it mixes parsing, fallback policy, and domain choices in a single function
+- cloud visibility is inferred from selected files rather than from an explicit enable flag; that is acceptable, but it should be treated as intentional behavior
 
-**Recommendation**
-- import `STELLAR_CLASSES` from `shared/constants.js`.
-- normalize percentages here before returning filter state.
+**Improve**
+- import class constants from `shared/constants.js`
+- normalize percentages here and keep internal state numeric conventions consistent
+- consider exposing a typed filter-state object contract
 
 ### `filters/filterOverlayState.js`
-**Status:** cleaner than before, but still globally coupled.  
-**Issues**
-- The module still resolves scenes from `window.trueCoordinatesMap`, `window.globeMap`, and `window.mollweideMap`. That is the same hidden dependency problem as before, only concentrated in one file.
-- Overlay lifetime is maintained in module-level singletons (`isolationOverlay`, `densityOverlay`) instead of inside application state.
-- `needsRebuild()` only considers min distance, max distance, and grid size. If other overlay-affecting parameters are introduced later, this logic will be easy to break.
+**Status:** improved meaningfully.  
+**What is good**
+- scenes are passed in explicitly now
+- overlay add/remove logic is centralized and clearer than the older global-coupled version
 
-**Recommendation**
-- move overlay ownership into app state and pass scene references in explicitly.
+**Issues**
+- overlay ownership still lives in module-level singletons rather than application state
+- `needsRebuild()` only keys on min distance, max distance, and grid size; overlay behavior can silently become stale if new structural overlay inputs are introduced later
+- the module is still stateful and therefore harder to test in isolation
+
+**Improve**
+- move overlay instances into application state
+- make rebuild keys explicit and future-proof
 
 ### `filters/filterUISetup.js`
-**Status:** improved substantially, but still incomplete.  
+**Status:** materially improved, still doing too much.  
 **What is good**
-- the previous “tons of repeated fieldset boilerplate” problem is materially reduced through shared UI factory helpers.
+- shared UI helpers have removed a large amount of repeated boilerplate
 
 **Issues**
-- The module still owns side effects, data preloading, legend binding, and fieldset generation all at once.
-- It queries `#filters-form` directly and caches it globally.
-- The setup path still mixes view generation and data loading (`loadConstellationBoundaries`, `loadConstellationCenters`).
-- The naming is a little confusing because `generateStellarClassFilters` is re-exported from a different module.
+- the module still combines DOM lookup, data preload, legend behavior, and fieldset generation
+- it still owns side effects and runtime initialization ordering
+- the naming relationship between this file and the filter entry file is still a little confusing because UI concerns are re-exported through `filters/index.js`
 
-**Recommendation**
-- separate data preload from UI construction.
-- inject the target form element instead of globally looking it up.
+**Improve**
+- separate preload/setup concerns from DOM construction
+- inject the target form rather than resolving it globally
 
 ### `filters/index.js`
-**Status:** contains one of the clearest remaining integration bugs.  
-**Issues**
-- **Bug:** when `showConstellationOverlay` is true, `applyFilters()` adds globe overlay meshes directly to `window.globeMap.scene` at lines 58–63, but `script/constellationManager.js` also rebuilds and adds constellation overlay meshes later. That creates duplicate responsibilities and can lead to duplicate meshes, inconsistent cleanup, or render-order confusion.
-- The module still fetches the filter form by ID globally.
-- It still imports and exports UI concerns from the filter entry module, which keeps “filter logic” and “filter UI wiring” partially entangled.
+**Status:** improved, but still not cleanly pure.  
+**What is good**
+- the earlier duplicate constellation scene mutation path is gone
+- the filter application sequence is readable
 
-**Recommendation**
-- remove direct scene mutation from this file entirely.
-- make this module return pure filter results only.
+**Issues**
+- the module still caches the filter form by DOM ID globally
+- UI setup/generation is still re-exported from the filter entry module, which keeps filter logic and filter UI tangled conceptually
+- overlay updates and globe-surface side effects still happen inside what should ideally become a purer filter composition layer
+
+**Improve**
+- keep this module focused on filter computation and explicit side-effect boundaries
+- stop letting the filter entry point be both logic API and UI wiring API
 
 ### `filters/colorFilter.js`
-**Status:** needs consistency cleanup.  
-**Issues**
-- It still derives the primary class with `star.Stellar_class ? star.Stellar_class.charAt(0).toUpperCase() : 'G'` instead of using `getPrimaryClass()`.
-- The fallback class `'G'` is a policy decision that differs from the shared helper’s `'Other'`.
-- Galactic-plane coloring hardcodes `'#ffffff'` instead of using `DEFAULT_STAR_COLOR`.
-- The file is small, but it bypasses the very abstraction that was created to unify stellar-class parsing.
+**Status:** improved and mostly consistent now.  
+**What is good**
+- it now uses `getPrimaryClass()`
+- it uses shared constants for default color and epsilon
 
-**Recommendation**
-- use `getPrimaryClass()` and one consistent fallback policy.
+**Remaining issues**
+- galactic-plane mode still hardcodes `'#ffffff'` instead of using `DEFAULT_STAR_COLOR`
+- it mutates stars in place, which is fine for performance here, but it should be an intentional documented convention across all filters
+
+**Improve**
+- use the shared default color in all branches
+- document in-place mutation as the expected filter contract
 
 ### `filters/distanceFilter.js`
 **Status:** good.  
-**Issues**
-- Minimal and correct. No urgent change needed.
-- Minor note: this module is one of the few places that fully trusts the normalized `distance` field; the rest of the codebase should follow this pattern.
+**What is good**
+- small, clear, and already based on normalized `distance`
+
+**Improve**
+- use this file as the consistency target for other distance-consuming modules
 
 ### `filters/opacityFilter.js`
-**Status:** still symptomatic of the scale problem.  
+**Status:** acceptable, but still preserving mixed-unit debt.  
 **Issues**
-- The comment and implementation explicitly preserve mixed opacity scales: “if value > 1, assume 0–100”. That is defensive, but it also cements inconsistency.
-- Absolute-magnitude opacity is internal 0–1, while fixed opacity may arrive in 0–100. The normalization boundary is still unclear.
+- the “if value > 1 assume percent” logic is pragmatic but it also cements internal inconsistency
+- fixed opacity and magnitude-derived opacity still come from different assumptions about units
 
-**Recommendation**
-- delete the “value > 1” fallback once form state is normalized.
+**Improve**
+- remove mixed-scale fallback once `filterFormState` normalizes values
 
 ### `filters/sizeFilter.js`
-**Status:** improved, but still inconsistent with normalized data.  
+**Status:** still inconsistent with normalized data usage.  
 **Issues**
-- The main processing loop is much cleaner than before, but the distance-size calculation still uses `Distance_from_the_Sun` rather than normalized `distance`.
-- If any star record is missing `Distance_from_the_Sun` but has normalized `distance`, this file will behave inconsistently relative to `distanceFilter.js`.
+- size-by-distance still uses `Distance_from_the_Sun`
+- `Math.min(...stars.map(...))` and `Math.max(...stars.map(...))` assume the raw field exists and is numeric everywhere
+- this diverges from the normalized contract already established in `app/starData.js`
 
-**Recommendation**
-- switch entirely to `star.distance`.
+**Improve**
+- switch completely to `star.distance`
+- harden against missing/invalid values without falling back to legacy raw fields in scattered places
 
 ### `filters/starsShownFilter.js`
 **Status:** good.  
-**Issues**
-- It reads normalized `apparentMagnitude` correctly.
-- No urgent action beyond general schema consolidation.
+**What is good**
+- it uses normalized `apparentMagnitude`
+- the file is small and consistent
 
 ### `filters/globeSurfaceFilter.js`
-**Status:** trivial.  
+**Status:** tiny wrapper, acceptable.  
 **Issues**
-- Very small wrapper module; acceptable, though it may be unnecessary abstraction depending on the final architecture.
+- could become unnecessary depending on where globe-surface state ultimately belongs
 
 ### `filters/stellarClassData.js`
-**Status:** acceptable, but simple.  
+**Status:** acceptable loader with weak validation.  
 **Issues**
-- Error handling is console-only.
-- There is no validation of the loaded JSON structure before storing it.
+- error handling is console-only
+- loaded JSON shape is not validated before being stored as shared runtime data
 
-**Recommendation**
-- validate the shape of `stellar_class.json` once at load time.
+**Improve**
+- validate the dictionary structure once at load time
 
 ### `filters/stellarClassFilter.js`
-**Status:** much better than the old audit suggested, but still heavy.  
+**Status:** much better than older versions, still heavy.  
 **What is good**
-- The giant duplicated “Other” section was removed; the UI is now built through `buildSubcategoryUI()` and shared helpers.
-- Grouping now uses `groupStarsByClass()`.
+- duplication was reduced
+- grouping and UI creation are more structured
 
 **Issues**
-- The file is still doing two jobs: filtering display state and generating a large dynamic sub-UI.
-- `generateStellarClassFilters()` rebuilds the entire container each time. Depending on how often the pipeline reruns, this can become expensive and can reset transient UI state unless carefully restored.
-- The module still depends on direct DOM lookups (`stellar-class-container`, `filters-form`).
-- Individual per-star controls can become very large for dense classes; there is no virtualization or lazy rendering.
+- the file still mixes filtering behavior with large dynamic UI generation responsibilities
+- the entire stellar-class UI container is rebuilt, which is simple but potentially expensive and easy to disrupt transient UI state
+- the module still reaches directly into the DOM
+- large class groups can produce very large control trees without virtualization or lazy rendering
 
-**Recommendation**
-- split filtering logic from DOM generation.
-- consider incremental updates or memoized rendering for the stellar-class UI.
+**Improve**
+- separate class-filter logic from UI generation
+- move toward incremental or memoized UI updates
 
 ### `filters/constellationFilter.js`
-**Status:** functionally rich, but still uneven.  
+**Status:** feature-rich, but still uneven.  
 **Issues**
-- It still logs directly to console during normal successful operation.
-- Rendering constants remain local in several functions (`const R = 100` in multiple places) instead of using the shared radius constant.
-- Label generation still uses canvas text creation inline instead of a shared label/sprite helper.
-- The loader methods silently replace failed data with empty arrays/maps, which can conceal load regressions.
+- successful data loads still log to console during normal operation
+- shared render constants are still not fully adopted
+- label creation logic still duplicates canvas-text sprite creation patterns found elsewhere
+- failed loads often degrade to empty collections, which keeps the app alive but can hide data regressions
 
-**Recommendation**
-- remove routine success `console.log`.
-- finish constant extraction and centralize text-sprite/label creation.
+**Improve**
+- remove routine success logging
+- centralize repeated label sprite generation
+- surface load failures more explicitly
 
 ### `filters/constellationOverlayFilter.js`
-**Status:** one of the most computationally expensive modules and still under-refactored.  
-**Issues**
-- It still hardcodes `const R = 100`.
-- Globe and Mollweide overlay creation still duplicate the boundary grouping and ordering logic, even though the old audit already identified that pattern.
-- The file allocates heavily in hot geometry paths (`clone()`, `new Vector3()`, repeated conversions).
-- Greedy color assignment is acceptable, but palette and tolerance values are embedded locally rather than centralized.
-- `lambda0` is computed in `createConstellationOverlayForGlobe()` but unused.
-
-**Recommendation**
-- extract shared ordering/grouping logic.
-- centralize render constants.
-- preallocate temporary vectors where possible.
-
-### `filters/connectionsFilter.js`
-**Status:** materially improved.  
-**What is good**
-- The spatial hash replaced the old all-pairs scan for the general star set.
-- Position caching via symbol is a real performance improvement.
-
-**Remaining issues**
-- Rendering configuration is still managed through module-level mutable variables (`connectionMaxWidth`, `connectionFadePower`, `connectionLabelSize`), which makes the module stateful and harder to test.
-- `GC_SEGMENTS` remains local even though circle/arc segment constants now exist centrally.
-- There is still significant geometry allocation during render/update paths.
-
-**Recommendation**
-- move line configuration into explicit parameters or a passed config object.
-
-### `filters/cloudsFilter.js`
-**Status:** workable, but still inefficient and partly hardcoded.  
-**Issues**
-- The overlay still hardcodes a 100 LY cap (`if (distance > 100) return;`) instead of using the current distance filter or a named constant.
-- For each cloud star, the file still computes neighbors with an O(n²) scan inside the cloud subset.
-- The file retains local comments and behavior around “three nearest neighbors”, but the code actually uses `Math.min(4, neighbors.length)` and pushes four neighbors, not three.
-- `greatCircleToMollweide(..., 100, ...)` still hardcodes the radius.
-- Error handling during overlay update is `console.error(e)` only.
-
-**Recommendation**
-- fix the comment/code mismatch.
-- replace local `100` usages with the shared radius or a named cloud-range constant.
-- consider spatial indexing for cloud subsets if datasets grow.
-
-### `filters/cloudDensityFilter.js`
-**Status:** improved but still contains duplicated geometry/projection logic.  
-**Issues**
-- This class still duplicates a lot of the same grid/projection/heatmap logic found in `densityFilter.js`.
-- Even after partial constant extraction, there are still embedded transform details and repeated overlay creation logic.
-- The module imports `getDustCloudColor` but uses `uniqueColorFromName()` for the actual cloud color path, so imports are not fully clean.
-- It allocates many cloned materials/meshes per cell.
-
-**Recommendation**
-- factor out a shared grid-overlay base or shared geometry builders with `densityFilter.js`.
-- remove unused imports.
-
-### `filters/densityColorUtils.js`
-**Status:** acceptable.  
-**Issues**
-- The file still mixes generic color transformations with label-material creation.
-- That is manageable now, but it is a concern-boundary smell.
-
-**Recommendation**
-- keep color math and material factories separate when the rendering layer is cleaned up.
-
-### `filters/densityData.js`
-**Status:** simple but weakly typed.  
-**Issues**
-- On failure, it silently falls back to `[]`.
-- Callers cannot distinguish missing density reference data from load failure.
-
-**Recommendation**
-- use explicit error reporting or a status object.
-
-### `filters/densityFilter.js`
-**Status:** still a major refactor candidate.  
-**Issues**
-- This class remains large and handles grid generation, density computation, edge rendering, and texture generation together.
-- Although constants were partially extracted, `mollXFactor` and `mollY` still use literal `100` at lines 108–109.
-- The module still does heavy per-cell object/material creation.
-- DOM-independent render logic is mixed with off-screen canvas texture logic, which reduces testability.
-- Like isolation/cloud-density overlays, this should eventually become a composition of smaller focused parts.
-
-**Recommendation**
-- continue extracting shared projection/grid code.
-- replace remaining literal `100` values with `GLOBE_RADIUS`.
-
-### `filters/densitySegmentation.js`
-**Status:** partly improved, partly still inefficient.  
-**What is good**
-- `buildCellMap()` and `neighbors()` now use `Map`, which fixes one of the old audit’s concerns.
-
-**Remaining issues**
-- `segmentOceanCandidate()` still performs repeated linear scans over candidate sets (`filter`, `includes`, nested comparisons).
-- `computeInterconnectedCell()` remains O(n²) inside a cluster.
-- The module still mixes geometry helpers and segmentation heuristics in one file.
-
-**Recommendation**
-- continue the Map/set-based optimization work into the segmentation routines.
-
-### `filters/dustCloudColors.js`
-**Status:** good.  
-**Issues**
-- Clean and efficient enough.
-- Only minor point: if cloud names are ever normalized more aggressively elsewhere, keep the normalization strategy aligned.
-
-### `filters/dustCloudDataCache.js`
-**Status:** fixed relative to the old audit.  
-**Issues**
-- Bounded cache is good.
-- There is still no cache invalidation by version or source freshness; acceptable for local static assets, but note it if the data becomes dynamic.
-
-### `filters/isolationFilter.js`
 **Status:** still one of the heaviest modules.  
 **Issues**
-- This file still mixes geometry, overlay construction, DOM reads, segmentation, and constellation assignment in one class/module.
-- It still contains many hardcoded radius values (`100`) and projection constants instead of using the shared constants.
-- It still performs direct DOM lookups in the update path (`isolation-slider`, `isolation-tolerance-slider`).
-- Several geometry/update sections still allocate aggressively with clones/new vectors.
-- Comments indicate assumed availability of constellation helpers; that coupling should be cleaner.
+- hardcoded radius/segment-style values remain local
+- globe and Mollweide paths still duplicate some grouping/ordering work
+- there is still a lot of temporary vector allocation in geometry-heavy code
+- local palette/tolerance choices are embedded instead of shared
+- there are still signs of uneven cleanup from earlier iterations, such as locally computed values that do not clearly justify their presence
 
-**Recommendation**
-- split into grid construction, rendering, and labeling/assignment units.
-- remove direct DOM reads from update logic.
-- finish constant extraction.
+**Improve**
+- extract shared boundary ordering/grouping logic
+- centralize render constants and palette choices
+- reduce hot-path allocation where practical
+
+### `filters/connectionsFilter.js`
+**Status:** materially improved and one of the stronger performance-oriented modules now.  
+**What is good**
+- the general O(n²) path is gone for the main use case
+- cached projected positions are a real improvement
+
+**Remaining issues**
+- rendering config still lives in mutable module-level variables
+- geometry-heavy update paths still allocate noticeably
+- some constants still live locally instead of in shared configuration
+
+**Improve**
+- pass explicit config into line-building/update logic
+- continue trimming allocation in hot render/update paths
+
+### `filters/cloudsFilter.js`
+**Status:** workable, but still one of the more expensive and assumption-heavy overlays.  
+**Issues**
+- cloud-star neighbor computation is still quadratic inside cloud subsets
+- the 100 LY cutoff is still hardcoded
+- comments and behavior are not perfectly aligned in the neighbor-count logic
+- projection constants are still hardcoded in some Mollweide calls
+- error handling is still mostly `console.error` without broader runtime signaling
+
+**Improve**
+- replace hardcoded distance limits with named/shared policy
+- align comments and behavior precisely
+- revisit neighbor search strategy for larger cloud subsets
+
+### `filters/cloudDensityFilter.js`
+**Status:** useful specialized overlay, still quite imperative.  
+**Issues**
+- it still does a lot of canvas/texture work inline
+- scene mutation responsibilities remain embedded in the overlay update path
+- some projection/render constants are still local
+
+**Improve**
+- separate overlay data computation from scene attachment/update
+- centralize remaining constants
+
+### `filters/densityColorUtils.js`
+**Status:** acceptable helper module.  
+**Issues**
+- color-hash policy is local and undocumented
+- if stable palette semantics matter, this should be documented as contract rather than incidental behavior
+
+### `filters/densityData.js`
+**Status:** very small loader; acceptable.  
+**Issues**
+- error handling is console-only
+- loaded structure is not validated
+
+### `filters/densityFilter.js`
+**Status:** still a large mixed-responsibility module.  
+**Issues**
+- the file still mixes data segmentation, canvas rendering, overlay object mutation, and DOM reads
+- it still reads sliders directly from the DOM inside update logic
+- it still uses `Distance_from_the_Sun` in the segmentation/update path
+- it remains expensive because substantial work is redone when controls change
+
+**Improve**
+- split pure density computation from overlay rendering
+- remove DOM reads from the core update path
+- use normalized `distance`
+
+### `filters/densitySegmentation.js`
+**Status:** useful algorithmic helper, but still tightly tied to current overlay assumptions.  
+**Issues**
+- segmentation behavior should be documented more explicitly because it materially affects displayed analysis results
+
+### `filters/dustCloudColors.js`
+**Status:** acceptable static mapping.  
+**Issues**
+- if these colors are part of product identity, they should move into shared config/documentation rather than remain an isolated map
+
+### `filters/dustCloudDataCache.js`
+**Status:** improved.  
+**What is good**
+- bounded cache is a real improvement over the previous unbounded approach
+
+**Remaining issues**
+- cache policy is simple and undocumented; if cloud usage grows, explicit policy comments would help
+
+### `filters/isolationFilter.js`
+**Status:** still large and still one of the hardest files to reason about.  
+**Issues**
+- the file still combines grid building, geometry generation, labeling/segmentation concerns, DOM reads, and update behavior
+- it still uses `Distance_from_the_Sun` in multiple places
+- warning/error behavior is still mostly console-driven
+- the mental model is difficult because data computation and scene-product construction are tightly interleaved
+
+**Improve**
+- split pure isolation-analysis logic from overlay/render output
+- migrate fully to normalized distance access
+- reduce DOM dependence and make configuration explicit
 
 ### `filters/planesFilter.js`
-**Status:** mixed quality.  
-**What is good**
-- Context checks for canvas creation are now present.
-- The module is feature-rich and mathematically coherent.
-
+**Status:** featureful but still repetitive.  
 **Issues**
-- Plane construction and label creation are still tightly mixed.
-- Text sprite/plane creation logic is duplicated between `createTextSprite()` and `createTextPlane()`; the old “sprite utility” idea is still not fully realized.
-- Default radius values remain local in many exported functions.
-- The mathematical constants and transform basis are not documented with provenance.
+- hardcoded `100`, `180`, `200`, widths, and colors still appear in multiple places
+- text sprite/plane creation is still duplicated inline
+- the mathematical basis is not documented, even briefly, despite being core visualization logic
 
-**Recommendation**
-- extract shared text-rendering helper(s).
-- centralize radius defaults and document coordinate-conversion sources.
+**Improve**
+- move remaining constants into shared config
+- centralize text label generation helpers
+- document the coordinate/projection assumptions in code comments
 
 ### `filters/ConcaveGeometry.js`
-**Status:** still risky by design.  
+**Status:** isolated but inherently expensive.  
 **Issues**
-- The brute-force tetrahedra approach remains expensive for larger point sets.
-- The file is isolated enough that the performance concern is manageable if inputs are guaranteed small, but that assumption should be documented in-code.
+- brute-force tetrahedra generation remains expensive for larger point sets
+- the file assumes small-enough input without stating acceptable bounds clearly
 
-**Recommendation**
-- add a hard guard or an explicit comment documenting expected point-count bounds.
+**Improve**
+- document expected point-count limits explicitly
+- add defensive guards if large input is ever possible
 
 ---
 
 ## Script submodules
 
 ### `script/filterPipeline.js`
-**Status:** good refactor step, but not yet cleanly pure.  
+**Status:** a useful extraction step, but still orchestration-heavy.  
 **What is good**
-- This file successfully removed a lot of orchestration work from `script.js`.
+- it removed a substantial amount of coordination code from `script.js`
+- constellation and plane responsibilities are now delegated to dedicated managers
 
 **Issues**
-- It still reads the DOM directly (`document.getElementById('filters-form')`) in cloud overlay paths.
-- It still converts many opacities from 0–100 to 0–1 on the fly, which proves the normalization problem is unresolved.
-- It writes many flags back into app state, including flags that duplicate the current filter result. That state synchronization burden is still high.
-- It contains cloud overlay mutation, constellation rebuild triggers, plane updates, and map refreshes all in one pipeline.
+- it still reads the DOM directly for cloud and cloud-density selections
+- it still converts many percent values to 0–1 on the fly, proving normalization is still unresolved upstream
+- it captures and restores stellar-class UI state around a full rebuild, which is pragmatic but also a sign that the UI update path is too coarse-grained
+- it still owns many side effects at once: filters, overlays, constellations, planes, map refreshes, cloud refreshes
 
-**Recommendation**
-- move DOM extraction up to the form-state layer.
-- normalize percentages before they ever reach this pipeline.
+**Improve**
+- push DOM extraction higher up
+- normalize values before this layer
+- reduce full dynamic UI rebuild pressure
 
 ### `script/constellationManager.js`
-**Status:** generally better than direct handling in `script.js`, but it exposes an integration flaw elsewhere.  
-**Issues**
-- The manager correctly owns rebuild/clear logic, but its responsibility overlaps with `filters/index.js`, which is still adding overlay meshes directly. The manager should be the only place mutating constellation scene objects.
-- Mollweide refresh logic rebuilds labels/overlays by dispose-and-recreate; acceptable, but expensive.
+**Status:** much cleaner ownership than before.  
+**What is good**
+- this is now the single place that owns constellation scene mutation
+- cleanup helpers are straightforward
 
-**Recommendation**
-- make this the sole owner of constellation visuals.
+**Remaining issues**
+- Mollweide refresh still recreates labels/overlay meshes rather than performing finer-grained updates
+- object lifecycle is correct enough, but potentially expensive when users rotate frequently with overlays enabled
+
+**Improve**
+- explore incremental update paths for Mollweide-only changes where possible
 
 ### `script/planeManager.js`
-**Status:** cleaner than before, but still has constant leakage.  
+**Status:** cleaner than earlier direct handling, still leaking constants.  
 **Issues**
-- It still embeds hardcoded globe radius values (`100`) in config lambdas instead of importing the shared radius.
-- Configuration is cleaner than the old duplicated plane setup, but the manager still owns too much knowledge about concrete plane constructors.
+- config lambdas still embed `100` and `200`
+- the manager still knows concrete constructor details for every plane type instead of relying on a more uniform descriptor/config contract
 
-**Recommendation**
-- import `GLOBE_RADIUS`.
-- consider passing a projection config rather than hardwiring constructor calls here.
+**Improve**
+- import shared radius/size constants
+- keep simplifying the plane descriptor model
 
 ### `script/starInteractions.js`
-**Status:** usable, but tightly coupled to map internals.  
+**Status:** usable, but still map-implementation-coupled.  
 **Issues**
-- It depends on specific structure (`map.starGroup.children`, `map.starObjects`, `map.camera`, `map.canvas`) instead of a clearer interaction interface.
-- Click/hover both re-implement the same picking logic with mostly duplicated code.
-- Tooltip hit-testing via `document.getElementById('tooltip')` is local and imperative.
+- it still depends on concrete map internals such as `starGroup.children`, `starObjects`, `camera`, and `canvas`
+- hover/click picking logic is still quite close conceptually and could share more structure
+- tooltip element lookup is still global/local rather than injected
 
-**Recommendation**
-- extract shared pick logic.
-- define a thinner map adapter interface for interactions.
+**Improve**
+- define a thinner interaction adapter surface for map implementations
+- extract shared picking logic
 
 ---
 
-## Rendering/utilities
+## Rendering and utility modules
 
 ### `cameraControls.js`
-**Status:** functional, but still globally coupled.  
-**Issues**
-- Both control classes still call `window.requestRender?.()` instead of receiving a render invalidation callback.
-- Optional chaining on pointer capture/release is acceptable, but this file is another example of hidden dependency on global render invalidation.
+**Status:** improved; the most important global-coupling issue is fixed.  
+**What is good**
+- render invalidation now goes through `shared/renderScheduler.js`
+- the control classes are readable and self-contained
 
-**Recommendation**
-- inject `requestRender` into the control constructors.
+**Remaining issues**
+- pointerdown behavior does not appear to distinguish mouse buttons explicitly
+- event listener lifecycle is manual and repetitive; `AbortController` could simplify teardown
+- the file still assumes direct DOM ownership rather than receiving a more formal host interface
+
+**Improve**
+- add explicit input-policy checks
+- consider modernized listener registration/cleanup patterns
 
 ### `labelManager.js`
-**Status:** featureful, but still expensive and somewhat ad hoc.  
+**Status:** feature-rich, but still expensive and conceptually dense.  
 **Issues**
-- The 2D canvas null check is fixed, but label generation still rebuilds canvas textures often.
-- The manager keys rendered objects by star object identity while caching rebuild metadata by derived string key. That split keying model is workable, but it increases conceptual overhead.
-- The file still creates many temporary vectors per update.
-- Globe/Mollweide/TrueCoordinates behavior branches are all intertwined in one method.
+- label generation still does a lot of canvas texture work
+- multiple projection behaviors are still intertwined in one manager
+- it still creates many temporary vectors during refresh/update paths
+- object identity and cache-key identity are both used, which works but increases cognitive load
 
-**Recommendation**
-- split projection-specific label placement into dedicated helpers.
-- consider memoizing label texture generation more aggressively.
+**Improve**
+- split projection-specific placement into smaller helpers
+- expand texture memoization where safe
+- clarify caching strategy in comments
 
 ### `utils/geometryUtils.js`
-**Status:** important core module, still with adoption gaps.  
+**Status:** important core math module with remaining adoption gaps.  
 **Issues**
-- Many default values remain hardcoded in function signatures (`R = 100`, `segments = 32`).
-- Some of those should now import shared constants.
-- The cache maps are unbounded. For a browser app with repeated rotations/projections this may be acceptable, but it is still a memory-growth vector.
-- The module is doing projection math, parsing, subdivision, wrapping, and caching all together.
+- many default values are still hardcoded in signatures and internal calls
+- cache maps are still unbounded
+- the file owns projection math, caching, wrap splitting, and coordinate helpers all together
 
-**Recommendation**
-- centralize defaults through shared constants.
-- consider cache pruning if the app is used for very long sessions.
+**Improve**
+- centralize more defaults via shared constants
+- consider bounded caches if very long sessions matter
+- document cache assumptions and invalidation strategy
 
 ### `utils/renderUtils.js`
-**Status:** good utility layer.  
+**Status:** one of the cleaner modules in the tree.  
 **Issues**
-- This is one of the cleaner files.
-- Minor note: `disposeMaterial()` iterates over object values broadly; it works, but it is slightly aggressive/introspective and should be documented carefully.
+- `disposeMaterial()` is intentionally broad and should be documented carefully because it walks object values generically
+
+**Improve**
+- keep as is, but document disposal assumptions more clearly
 
 ---
 
-## Data/reference assets (format review only)
+## Data and reference assets (format review only)
 
 ### `stellar_class.json`
-**Format:** stable mapping from stellar class letter to `{ color, size, hierarchy }`.  
-**Assessment:** good format.  
-**Improvement**
-- validate it at load time in `filters/stellarClassData.js`.
+**Format:** mapping of class letter to `{ color, size, hierarchy }`.  
+**Assessment:** good runtime format.  
+**Improve**
+- validate on load in `filters/stellarClassData.js`
 
 ### `constellation_center.json`
-**Format:** array of `{ name, raDeg, decDeg }`.  
+**Format:** array of center records with name and coordinates.  
 **Assessment:** good runtime format.
 
 ### `constellation_boundaries.json`
-**Format:** array of polygon/boundary objects with constellation identifiers and RA/Dec sequences.  
-**Assessment:** good runtime format, but large enough that load failure should be surfaced clearly.
+**Format:** structured constellation boundary geometry data.  
+**Assessment:** usable runtime format; load failure should be surfaced more clearly because downstream visual features depend on it.
 
 ### `constellation_full_names.json`
 **Format:** abbreviation/full-name mapping.  
-**Assessment:** fine.
+**Assessment:** good.
 
 ### `constellation_center.txt`
-**Format:** reference/raw text source.  
-**Assessment:** acceptable as source/reference asset.  
-**Improvement**
-- README should state whether it is authoritative input or historical raw data only.
+**Format:** raw/reference text source.  
+**Assessment:** acceptable.  
+**Improve**
+- document whether it is authoritative input or archival source material only
 
 ### `constellation_boundaries.txt`
-**Format:** raw/reference boundary input.  
-**Assessment:** acceptable as source/reference asset.  
-**Improvement**
-- same as above: document authority and generation path.
+**Format:** raw/reference text source.  
+**Assessment:** acceptable.  
+**Improve**
+- document generation/authority path in `README.md`
 
 ### `data/manifest.json`
-**Format:** object with `version`, `generatedBy`, and `files`.  
-**Assessment:** good.  
-**Improvement**
-- `app/starData.js` should validate `version` and `files` more explicitly.
+**Format:** manifest object with version-ish metadata and file list.  
+**Assessment:** good structure.  
+**Improve**
+- validate version/files explicitly in `app/starData.js`
 
 ### `data/stars_0_20_LY.json` through `data/stars_90_100_LY.json`
 **Format:** arrays of star records with raw catalog-style fields.  
 **Assessment:** format is consistent enough for current use.  
-**Improvement**
-- the project should eventually either normalize these offline or commit to the runtime-normalization contract and stop using raw legacy fields in the rendering/filter code.
+**Improve**
+- either normalize offline or finish the runtime normalization migration so the rest of the code stops reading legacy raw fields directly
 
 ### `data/*cloud*.json`
-**Files reviewed by format only**
-- `Aquila_cloud_data.json`
-- `Auriga_cloud_data.json`
-- `Blue_cloud_data.json`
-- `Ceti_cloud_data.json`
-- `Dorado_cloud_data.json`
-- `Eridani_cloud_data.json`
-- `Galactic_cloud_data.json`
-- `Gemini_cloud_data.json`
-- `Hyades_cloud_data.json`
-- `Leo_cloud_data.json`
-- `Local_interstellar_cloud.json`
-- `Microscopi_cloud_data.json`
-- `North_Galactic_Pole_cloud_data.json`
-- `Ophiucus_cloud_data.json`
-- `Vela_cloud_data.json`
-
-**Format:** arrays of cloud-observation rows with star identifiers, distances/velocities, cloud labels, and RA/DEC.  
-**Assessment:** format is usable and consistent enough.  
-**Improvement**
-- if cloud matching becomes more important, add a normalization step for cloud star names/IDs during load rather than normalizing repeatedly in overlay code.
+**Format:** arrays of cloud-observation rows with star names/IDs, coordinates, cloud labels, and related values.  
+**Assessment:** usable and broadly consistent.  
+**Improve**
+- add normalization for cloud-name/star-name matching at load time rather than repeatedly inside overlay code
 
 ---
 
-# Priority fixes to do next
+# Highest-priority work next
 
-## Priority 1 — correctness / architecture
-1. **Remove direct scene mutation from `filters/index.js`** and let `script/constellationManager.js` own constellation visuals exclusively.
-2. **Delete `script_backup_before_split.js`** from the repository.
-3. **Eliminate `window.*` scene and render coupling** in:
-   - `filters/filterOverlayState.js`
-   - `cameraControls.js`
-   - `script.js`
-4. **Replace `Object.defineProperties` state wrapping in `script.js`** with a real application state object.
+## Priority 1 — finish the internal consistency work
+1. Normalize opacity values to 0–1 in `filters/filterFormState.js` and keep them normalized thereafter.
+2. Finish the normalized star-schema migration:
+   - replace remaining `Distance_from_the_Sun` reads with `distance`
+   - keep class parsing centralized through shared helpers
+3. Replace the `Object.defineProperties` compatibility state facade in `script.js` with a real state tree.
 
-## Priority 2 — consistency
-5. **Normalize all opacity values to 0–1 inside `filters/filterFormState.js`.**
-6. **Use normalized star fields consistently**:
-   - prefer `distance` over `Distance_from_the_Sun`
-   - prefer `apparentMagnitude` / `absoluteMagnitude`
-   - use `getPrimaryClass()` everywhere
-7. **Finish constant extraction** for remaining `100`, segment counts, border values, and palette/tolerance constants.
+## Priority 2 — reduce orchestration complexity
+4. Extract export logic from `script.js`.
+5. Extract label/line editing logic from `script.js`.
+6. Push DOM reads out of `script/filterPipeline.js`, `filters/densityFilter.js`, `filters/isolationFilter.js`, and related modules.
 
-## Priority 3 — maintainability / performance
-8. **Split large hybrid modules**:
-   - `script.js`
-   - `filters/isolationFilter.js`
-   - `filters/densityFilter.js`
-   - `filters/constellationOverlayFilter.js`
-9. **Deduplicate remaining helper logic**:
-   - `utils.js` vs `shared/colorUtils.js`
-   - inline text sprite/plane creation in `filters/planesFilter.js` and `filters/constellationFilter.js`
-10. **Reduce repeated DOM lookups and full UI rebuilds**, especially in the filter pipeline and stellar-class UI generation.
+## Priority 3 — finish constant and helper consolidation
+7. Continue migrating remaining hardcoded render constants into `shared/constants.js`.
+8. Deduplicate `utils.js` vs `shared/colorUtils.js` responsibilities.
+9. Centralize repeated text-sprite/text-plane creation helpers.
+
+## Priority 4 — performance cleanup after architecture cleanup
+10. Reduce full rebuilds of dynamic stellar-class UI.
+11. Reduce hot-path allocation in heavy overlay modules.
+12. Revisit quadratic neighbor work in cloud overlays.
 
 ---
 
-# Replacement verdict
+# Bottom-line verdict
 
-This codebase is in a **meaningfully better state** than the previous audit claimed, because several of the earlier structural recommendations have already been implemented. The current problems are less about obvious missing utilities and more about **finishing the refactor consistently**.
-
-The main theme now is:
+This project is **meaningfully better structured than the older audit baseline**, and several important high-risk issues have already been fixed. The codebase is no longer suffering primarily from missing helper modules or obvious broken coupling. The real remaining problem is **incomplete convergence**:
 
 - the shared abstractions exist,
-- but too many modules still bypass them,
-- and the application still relies on hidden global coupling at the orchestration layer.
+- but not every module follows them yet,
+- and `script.js` still carries too much orchestration burden.
 
-That is where the next cleanup pass should focus.
+The next refactor pass should therefore be disciplined rather than broad:
+
+- finish the data/opacity conventions,
+- shrink `script.js`,
+- remove remaining DOM reads from lower layers,
+- then optimize hotspot modules.
+
+That sequence will improve professionalism, efficiency, and consistency much more than another round of isolated helper extraction.

@@ -1,4 +1,5 @@
 // /filters/isolationFilter.js
+import { getStarDistance } from '../shared/starUtils.js';
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densityColorUtils.js';
@@ -141,7 +142,7 @@ class IsolationGridOverlay {
     }
     // Compute distances using an extended star set.
     const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+      const d = getStarDistance(star);
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
@@ -246,7 +247,7 @@ class IsolationGridOverlay {
 
     // Recalculate distances for each cell based on an extended set of stars.
     const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+      const d = getStarDistance(star);
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
@@ -553,4 +554,3 @@ export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe, s
   if (!overlay) return;
   overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll);
 }
-

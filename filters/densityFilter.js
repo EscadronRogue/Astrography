@@ -11,6 +11,7 @@ import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
 import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../utils/renderUtils.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../shared/constants.js';
+import { getStarDistance } from '../shared/starUtils.js';
 
 class DensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2) {
@@ -275,7 +276,7 @@ class DensityGridOverlay {
     }
 
     const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+      const d = getStarDistance(star);
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
 

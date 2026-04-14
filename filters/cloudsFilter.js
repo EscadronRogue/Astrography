@@ -54,7 +54,7 @@ export async function createCloudOverlay(
   const cloudStars = [];
 
   completeStarList.forEach(star => {
-    const distance = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
+    const distance = star.distance;
     if (distance > 100) return;
     if (cloudNames.has(normalizeCloudStarName(star.Common_name_of_the_star))) {
       if (mapType === 'TrueCoordinates' && star.truePosition) {
