@@ -12,8 +12,9 @@ import { STELLAR_CLASS_SET } from './constants.js';
  * @returns {string} Single uppercase letter (O, B, A, F, G, K, M, L, T, Y) or 'Other'.
  */
 export function getPrimaryClass(star) {
-  if (star.Stellar_class && typeof star.Stellar_class === 'string') {
-    const candidate = star.Stellar_class.charAt(0).toUpperCase();
+  const rawClass = star?.primaryClass || star?.spectralClass || star?.Stellar_class;
+  if (typeof rawClass === 'string' && rawClass.length > 0) {
+    const candidate = rawClass.charAt(0).toUpperCase();
     return STELLAR_CLASS_SET.has(candidate) ? candidate : 'Other';
   }
   return 'Other';

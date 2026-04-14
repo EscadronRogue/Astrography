@@ -79,3 +79,13 @@ export const DEFAULT_CONNECTION_COUNT = 7;
 
 /** Data directory path prefix. */
 export const DATA_BASE_PATH = 'data';
+
+
+/** Size in pixels for the generated star sprite texture. */
+export const STAR_TEXTURE_SIZE = 64;
+
+/** Default radius for true-coordinate/ecliptic/galactic guide meshes. */
+export const GUIDE_SPHERE_RADIUS = 200;
+
+/** Segment count for Mollweide ellipse geometry. */
+export const MOLLWEIDE_ELLIPSE_SEGMENTS = 1024;

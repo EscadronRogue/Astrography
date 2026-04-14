@@ -141,7 +141,7 @@ class IsolationGridOverlay {
     }
     // Compute distances using an extended star set.
     const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+      const d = getStarDistance(star, Number.POSITIVE_INFINITY);
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
@@ -246,7 +246,7 @@ class IsolationGridOverlay {
 
     // Recalculate distances for each cell based on an extended set of stars.
     const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+      const d = getStarDistance(star, Number.POSITIVE_INFINITY);
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
