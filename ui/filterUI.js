@@ -185,7 +185,7 @@ function addCloudDensityFieldset() {
     const allChecked = Array.from(chks).every(c => c.checked);
     chks.forEach(c => {
       c.checked = !allChecked;
-      c.dispatchEvent(new Event('change'));
+      c.dispatchEvent(new Event('change', { bubbles: true }));
     });
   });
   toggleDiv.appendChild(toggleBtn);
