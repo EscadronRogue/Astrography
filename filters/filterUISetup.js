@@ -16,8 +16,9 @@ let filterForm = null;
 
 function bindCollapsibleLegend(legend) {
   const content = legend?.nextElementSibling;
-  if (!legend || !content) return;
+  if (!legend || !content || legend.dataset.collapsibleBound === 'true') return;
   content.style.maxHeight = '0px';
+  legend.dataset.collapsibleBound = 'true';
   legend.addEventListener('click', () => {
     legend.classList.toggle('active');
     const isActive = legend.classList.contains('active');
