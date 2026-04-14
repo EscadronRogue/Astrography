@@ -102,8 +102,12 @@ function createMollweideMask(R = 100, segments = 1024) {
   canvas.height = texH;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2D canvas context unavailable');
+
   ctx.clearRect(0, 0, texW, texH);
-  ctx.fillStyle = 'white';
+  ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+  ctx.fillRect(0, 0, texW, texH);
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
   ctx.beginPath();
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2;
@@ -114,23 +118,24 @@ function createMollweideMask(R = 100, segments = 1024) {
   }
   ctx.closePath();
   ctx.fill();
-  const alphaTex = new THREE.CanvasTexture(canvas);
-  alphaTex.minFilter = THREE.LinearFilter;
-  alphaTex.magFilter = THREE.LinearFilter;
-  alphaTex.wrapS = THREE.ClampToEdgeWrapping;
-  alphaTex.wrapT = THREE.ClampToEdgeWrapping;
+  ctx.restore();
+
+  const matteTex = new THREE.CanvasTexture(canvas);
+  matteTex.minFilter = THREE.LinearFilter;
+  matteTex.magFilter = THREE.LinearFilter;
+  matteTex.wrapS = THREE.ClampToEdgeWrapping;
+  matteTex.wrapT = THREE.ClampToEdgeWrapping;
+
   const planeMat = new THREE.MeshBasicMaterial({
-    color: 0xffffff,
-    alphaMap: alphaTex,
+    map: matteTex,
     transparent: true,
-    depthWrite: true,
-    depthTest: true,
-    opacity: 0.999,
+    depthWrite: false,
+    depthTest: false,
     side: THREE.DoubleSide
   });
   const mask = new THREE.Mesh(planeGeom, planeMat);
-  mask.position.set(0, 0, 0.001);
-  mask.renderOrder = 1;
+  mask.position.set(0, 0, 0.5);
+  mask.renderOrder = 5;
   return mask;
 }
 
@@ -207,6 +212,7 @@ export class MapManager {
       canvas: this.canvas,
       antialias: true
     });
+    this.renderer.setClearColor(0x000000, 1);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
     this.starOpacity = 1.0;
