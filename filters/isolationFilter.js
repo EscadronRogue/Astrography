@@ -5,6 +5,7 @@ import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densi
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, vectorToRaDec } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries, loadConstellationFullNames } from './constellationFilter.js';
+import { getStarDistance } from '../shared/starUtils.js';
 
 // Helper to create line materials that support color and opacity gradients.
 function createGradientLineMaterial() {

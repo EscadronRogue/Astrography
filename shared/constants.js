@@ -37,16 +37,16 @@ export const STELLAR_CLASS_SET = new Set(STELLAR_CLASSES);
 
 /** Human-readable names for each stellar class. */
 export const STELLAR_CLASS_NAMES = Object.freeze({
-  O: 'Blue Giant',
-  B: 'Blue-White Dwarf',
-  A: 'White Dwarf',
-  F: 'Yellow-White Dwarf',
-  G: 'Yellow Dwarf',
-  K: 'Orange Dwarf',
-  M: 'Red Dwarf',
-  L: 'Brown Dwarf',
-  T: 'Cool Brown Dwarf',
-  Y: 'Ultra Cool Brown Dwarf'
+  O: 'Blue',
+  B: 'Blue-White',
+  A: 'White',
+  F: 'Yellow-White',
+  G: 'Yellow',
+  K: 'Orange',
+  M: 'Red',
+  L: 'Brown',
+  T: 'Cool Brown',
+  Y: 'Ultra-Cool Brown'
 });
 
 /** Newton-Raphson iteration limit for Mollweide theta convergence. */
