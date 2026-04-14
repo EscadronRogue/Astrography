@@ -7,7 +7,6 @@ import { applyStarsShownFilter } from './starsShownFilter.js';
 import { computeConnectionPairs } from './connectionsFilter.js';
 import { applyStellarClassLogic } from './stellarClassFilter.js';
 import { applyGlobeSurfaceFilter } from './globeSurfaceFilter.js';
-import { createConstellationOverlayForGlobe } from './constellationOverlayFilter.js';
 import { applyDistanceFilter } from './distanceFilter.js';
 import { createDefaultFilterResult } from './filterDefaults.js';
 import { computeAdaptiveGridSize, readFilterState } from './filterFormState.js';
@@ -26,7 +25,7 @@ function getFilterForm() {
 
 export { setupFilterUI, generateStellarClassFilters };
 
-export function applyFilters(allStars) {
+export function applyFilters(allStars, context = {}) {
   const form = getFilterForm();
   if (!form) {
     return createDefaultFilterResult(allStars);
@@ -55,14 +54,12 @@ export function applyFilters(allStars) {
 
   applyGlobeSurfaceFilter(filters);
 
-  if (filters.showConstellationOverlay) {
-    const constellationOverlay = createConstellationOverlayForGlobe();
-    constellationOverlay.forEach(mesh => {
-      window.globeMap.scene.add(mesh);
-    });
-  }
-
-  const overlayState = updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize);
+  const overlayState = updateDerivedOverlays(
+    allStars,
+    filters,
+    computeAdaptiveGridSize,
+    context.scenes
+  );
 
   return {
     ...filters,

@@ -8,15 +8,11 @@ import { initDensityFilter, updateDensityFilter } from './densityFilter.js';
 let isolationOverlay = null;
 let densityOverlay = null;
 
-/**
- * Retrieves the three map scenes from window globals.
- * @returns {{ tc: THREE.Scene, globe: THREE.Scene, moll: THREE.Scene }}
- */
-function getScenes() {
+function normalizeScenes(scenes = {}) {
   return {
-    tc: window.trueCoordinatesMap?.scene,
-    globe: window.globeMap?.scene,
-    moll: window.mollweideMap?.scene
+    tc: scenes.tc ?? null,
+    globe: scenes.globe ?? null,
+    moll: scenes.moll ?? null
   };
 }
 
@@ -25,22 +21,22 @@ function getScenes() {
  * @param {Object|null} overlay - The overlay object with cubesData and adjacentLines.
  * @param {Object} meshConfig - Maps overlay property paths to scene keys.
  */
-function removeOverlayFromScenes(overlay, meshConfig) {
+function removeOverlayFromScenes(overlay, meshConfig, scenes) {
   if (!overlay) return;
-  const scenes = getScenes();
+  const normalizedScenes = normalizeScenes(scenes);
   meshConfig.cubes.forEach(({ prop, scene }) => {
     overlay.cubesData?.forEach(cell => {
-      scenes[scene]?.remove(cell[prop]);
+      normalizedScenes[scene]?.remove(cell[prop]);
     });
   });
   meshConfig.lines.forEach(({ prop, scene }) => {
     overlay.adjacentLines?.forEach(obj => {
-      scenes[scene]?.remove(obj[prop]);
+      normalizedScenes[scene]?.remove(obj[prop]);
     });
   });
   if (meshConfig.extra) {
     meshConfig.extra.forEach(({ prop, scene }) => {
-      if (overlay[prop]) scenes[scene]?.remove(overlay[prop]);
+      if (overlay[prop]) normalizedScenes[scene]?.remove(overlay[prop]);
     });
   }
 }
@@ -90,14 +86,14 @@ function needsRebuild(overlay, filters, gridSize) {
  * Adds an isolation overlay's meshes to the appropriate scenes.
  * @param {Object} overlay
  */
-function addIsolationToScenes(overlay) {
-  const scenes = getScenes();
+function addIsolationToScenes(overlay, scenes) {
+  const normalizedScenes = normalizeScenes(scenes);
   overlay.cubesData.forEach(cell => {
-    scenes.tc?.add(cell.tcMesh);
+    normalizedScenes.tc?.add(cell.tcMesh);
   });
   overlay.adjacentLines.forEach(obj => {
-    scenes.globe?.add(obj.line);
-    scenes.moll?.add(obj.lineM);
+    normalizedScenes.globe?.add(obj.line);
+    normalizedScenes.moll?.add(obj.lineM);
   });
 }
 
@@ -105,15 +101,15 @@ function addIsolationToScenes(overlay) {
  * Adds a density overlay's meshes to the appropriate scenes.
  * @param {Object} overlay
  */
-function addDensityToScenes(overlay) {
-  const scenes = getScenes();
+function addDensityToScenes(overlay, scenes) {
+  const normalizedScenes = normalizeScenes(scenes);
   overlay.cubesData.forEach(cell => {
-    scenes.tc?.add(cell.tcMesh);
+    normalizedScenes.tc?.add(cell.tcMesh);
   });
   overlay.adjacentLines.forEach(obj => {
-    scenes.globe?.add(obj.line);
+    normalizedScenes.globe?.add(obj.line);
   });
-  scenes.moll?.add(overlay.textureMesh);
+  normalizedScenes.moll?.add(overlay.textureMesh);
 }
 
 /**
@@ -124,22 +120,22 @@ function addDensityToScenes(overlay) {
  * @param {Function} computeAdaptiveGridSize - Grid size computation function.
  * @returns {{ isolationOverlay: Object|null, densityOverlay: Object|null }}
  */
-export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize) {
-  const scenes = getScenes();
+export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize, scenes) {
+  const normalizedScenes = normalizeScenes(scenes);
 
   // --- Isolation overlay ---
   if (filters.enableIsolationFilter) {
     const gridSize = computeAdaptiveGridSize(filters.isolationGridSize);
 
     if (needsRebuild(isolationOverlay, filters, gridSize)) {
-      removeOverlayFromScenes(isolationOverlay, ISOLATION_MESH_CONFIG);
+      removeOverlayFromScenes(isolationOverlay, ISOLATION_MESH_CONFIG, normalizedScenes);
       isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
-      addIsolationToScenes(isolationOverlay);
+      addIsolationToScenes(isolationOverlay, normalizedScenes);
     }
 
-    updateIsolationFilter(allStars, isolationOverlay, scenes.tc, scenes.globe, scenes.moll);
+    updateIsolationFilter(allStars, isolationOverlay, normalizedScenes.tc, normalizedScenes.globe, normalizedScenes.moll);
   } else {
-    removeOverlayFromScenes(isolationOverlay, ISOLATION_MESH_CONFIG);
+    removeOverlayFromScenes(isolationOverlay, ISOLATION_MESH_CONFIG, normalizedScenes);
     isolationOverlay = null;
   }
 
@@ -148,14 +144,14 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
     const gridSize = computeAdaptiveGridSize(filters.densityGridSize);
 
     if (needsRebuild(densityOverlay, filters, gridSize)) {
-      removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG);
+      removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG, normalizedScenes);
       densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
-      addDensityToScenes(densityOverlay);
+      addDensityToScenes(densityOverlay, normalizedScenes);
     }
 
-    updateDensityFilter(allStars, densityOverlay, scenes.tc, scenes.globe, scenes.moll);
+    updateDensityFilter(allStars, densityOverlay, normalizedScenes.tc, normalizedScenes.globe, normalizedScenes.moll);
   } else {
-    removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG);
+    removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG, normalizedScenes);
     densityOverlay = null;
   }
 
