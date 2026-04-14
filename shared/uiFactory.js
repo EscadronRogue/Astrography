@@ -22,6 +22,7 @@ export function createCollapsibleFieldset(title, { contentClasses = [] } = {}) {
   contentDiv.classList.add('filter-content', ...contentClasses);
   contentDiv.style.maxHeight = '0px';
 
+  legend.dataset.collapsibleBound = 'true';
   legend.addEventListener('click', () => {
     legend.classList.toggle('active');
     const isActive = legend.classList.contains('active');
