@@ -244,6 +244,7 @@ export function updateCelestialEquatorMollweide(line) {
 function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable');
   ctx.font = `${fontSize}px Oswald`;
   const textWidth = ctx.measureText(text).width;
   canvas.width = textWidth + 20;
@@ -262,6 +263,7 @@ function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150
 function createTextPlane(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable');
   ctx.font = `${fontSize}px Oswald`;
   const textWidth = ctx.measureText(text).width;
   canvas.width = textWidth + 20;

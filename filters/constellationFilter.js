@@ -7,6 +7,7 @@ import { getDoubleSidedLabelMaterial } from './densityColorUtils.js';
 
 let boundaryData = [];
 let centerData = [];
+let fullNameData = null;
 
 /**
  * Loads constellation boundary data asynchronously.
@@ -54,6 +55,23 @@ export async function loadConstellationCenters() {
     console.error('Error loading constellation centers:', err);
     centerData = [];
   }
+}
+
+
+/**
+ * Loads mapping from IAU constellation abbreviations to full names.
+ */
+export async function loadConstellationFullNames() {
+  if (fullNameData) return fullNameData;
+  try {
+    const resp = await fetch('constellation_full_names.json');
+    if (!resp.ok) throw new Error(`Failed to load constellation_full_names.json: ${resp.status}`);
+    fullNameData = await resp.json();
+  } catch (err) {
+    console.error('Error loading constellation full names:', err);
+    fullNameData = {};
+  }
+  return fullNameData;
 }
 
 /**
@@ -273,6 +291,7 @@ export function createConstellationLabelsForGlobe(opacity = 0.8) {
     const baseFontSize = 300; // Very large base font size
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable');
     ctx.font = `${baseFontSize}px Oswald`;
     const textWidth = ctx.measureText(c.name).width;
     canvas.width = textWidth + 20;
@@ -311,6 +330,7 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
     const baseFontSize = 300;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable');
     ctx.font = `${baseFontSize}px Oswald`;
     const textWidth = ctx.measureText(c.name).width;
     canvas.width = textWidth + 20;

@@ -50,7 +50,7 @@ export function applyFilters(allStars) {
   if (filters.enableConnections) {
     connections = computeConnectionPairs(filteredStars, filters.connections);
     globeConnections = computeConnectionPairs(nonSolStars, filters.connections);
-    mollweideConnections = computeConnectionPairs(nonSolStars, filters.connections);
+    mollweideConnections = globeConnections;
   }
 
   applyGlobeSurfaceFilter(filters);

@@ -38,6 +38,7 @@ export class LabelManager {
       const fontSize = baseFontSize * scaleFactor;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable');
       ctx.font = `${fontSize}px Oswald`;
       const textWidth = ctx.measureText(displayName).width;
       const paddingX = 10;
