@@ -14,6 +14,7 @@ import { maybeSavePresets, savePresets, loadPresets, clearSavedPresets } from '.
 import { getStarId as getSharedStarId, getStarTruePosition as getSharedStarTruePosition, getStarGlobePosition, getStarMollweidePosition, precalcMollweideData as precalcSharedMollweideData } from './shared/starUtils.js';
 import { buildAndApplyFilters as runFilterPipeline, updateMollweideView as refreshMollweideMap } from './script/filterPipeline.js';
 import { initStarInteractions } from './script/starInteractions.js';
+import { setRenderRequester, requestRenderIfAvailable } from './shared/renderScheduler.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -175,7 +176,6 @@ async function buildAndApplyFilters() {
 async function updateMollweideView() {
   return refreshMollweideMap(appContext);
 }
-window.updateMollweideView = updateMollweideView;
 
 function persistPresets() {
   savePresets({
@@ -679,7 +679,7 @@ class MapManager {
       this.instancedMesh.instanceColor.needsUpdate = true;
     }
     this.starObjects = stars;
-    if (window.requestRender) window.requestRender();
+    requestRenderIfAvailable();
   }
 
   updateConnections(stars, connectionObjs, opacity = 0.5) {
@@ -701,13 +701,13 @@ class MapManager {
     }
     this.scene.add(this.connectionGroup);
     applyStoredLineEdits(this.connectionGroup);
-    if (window.requestRender) window.requestRender();
+    requestRenderIfAvailable();
   }
 
   updateConnectionPositions(stars, connectionObjs) {
     if (!this.connectionGroup) return;
     this.updateConnections(stars, connectionObjs, this.connectionOpacity);
-    if (window.requestRender) window.requestRender();
+    requestRenderIfAvailable();
   }
 
   setStarOpacity(opacity) {
@@ -760,7 +760,7 @@ class MapManager {
       }
     }
     border.userData.baseOpacity = sanitizedOpacity;
-    if (window.requestRender) window.requestRender();
+    requestRenderIfAvailable();
   }
 
   updateMap(stars, connectionObjs) {
@@ -786,7 +786,7 @@ class MapManager {
       this.points.material.uniforms.cameraZoom.value = zoomVal;
     }
     this.renderer.setSize(w, h);
-    if (window.requestRender) window.requestRender();
+    requestRenderIfAvailable();
   }
 
   render() {
@@ -811,7 +811,7 @@ function requestRender() {
     });
   }
 }
-window.requestRender = requestRender;
+setRenderRequester(requestRender);
 
 function setupMapProjectionToggles() {
   const mapsSection = document.querySelector('.maps-section');
@@ -1774,9 +1774,6 @@ async function main() {
     globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe' });
     mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide' });
     mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap);
-    window.trueCoordinatesMap = trueCoordinatesMap;
-    window.globeMap = globeMap;
-    window.mollweideMap = mollweideMap;
     cachedStars.forEach(star => {
       star.spherePosition = projectStarGlobe(star);
       star.truePosition = getStarTruePosition(star);

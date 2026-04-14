@@ -112,7 +112,6 @@ async function refreshCloudDensityOverlays(ctx, options) {
       options.cloudDensityOpacity / 100
     );
     state.cloudDensityOverlays.push(overlay);
-    mollweideMap.scene.add(overlay.textureMesh);
   }
 }
 
@@ -120,7 +119,14 @@ export async function buildAndApplyFilters(ctx) {
   const { state } = ctx;
   if (!state.cachedStars) return;
 
-  const filters = applyFilters(state.cachedStars);
+  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const filters = applyFilters(state.cachedStars, {
+    scenes: {
+      tc: trueCoordinatesMap?.scene,
+      globe: globeMap?.scene,
+      moll: mollweideMap?.scene
+    }
+  });
   const previousStellarClassState = captureStellarClassState();
   generateStellarClassFilters(filters.filteredStars);
   restoreStellarClassState(previousStellarClassState);
