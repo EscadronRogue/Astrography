@@ -232,7 +232,7 @@ header h1 {
   border: 2px solid #fff;
   transition: background 0.3s;
 }
-filter-item input[type="range"]::-moz-range-thumb {
+.filter-item input[type="range"]::-moz-range-thumb {
   width: 16px;
   height: 16px;
   background: #ff6f61;
@@ -242,13 +242,13 @@ filter-item input[type="range"]::-moz-range-thumb {
   border: 2px solid #fff;
   transition: background 0.3s;
 }
-filter-item input[type="range"]:hover {
+.filter-item input[type="range"]:hover {
   background: #666;
 }
-filter-item input[type="range"]::-webkit-slider-thumb:hover {
+.filter-item input[type="range"]::-webkit-slider-thumb:hover {
   background: #ff8566;
 }
-filter-item input[type="range"]::-moz-range-thumb:hover {
+.filter-item input[type="range"]::-moz-range-thumb:hover {
   background: #ff8566;
 }
 

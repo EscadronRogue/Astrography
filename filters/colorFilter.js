@@ -1,6 +1,17 @@
+/**
+ * @file Applies color mode to stars based on stellar class, constellation, or galactic plane.
+ */
 import { getStellarClassData } from './stellarClassData.js';
 import { getStableConstellationColor } from './densityColorUtils.js';
+import { interpolateHex } from '../shared/colorUtils.js';
+import { DEFAULT_STAR_COLOR, EPSILON } from '../shared/constants.js';
 
+/**
+ * Applies the selected color mode to each star's displayColor property.
+ * @param {Array} stars - Array of star objects.
+ * @param {Object} filters - Filter state containing the selected color mode.
+ * @returns {Array} The same stars array with displayColor set.
+ */
 export function applyColorFilter(stars, filters) {
   const stellarClassData = getStellarClassData();
 
@@ -8,14 +19,14 @@ export function applyColorFilter(stars, filters) {
     stars.forEach(star => {
       const primaryClass = star.Stellar_class ? star.Stellar_class.charAt(0).toUpperCase() : 'G';
       const classData = stellarClassData[primaryClass];
-      star.displayColor = classData ? classData.color : '#FFFFFF';
+      star.displayColor = classData ? classData.color : DEFAULT_STAR_COLOR;
     });
   } else if (filters.color === 'constellation') {
     stars.forEach(star => {
-      star.displayColor = getStableConstellationColor((star.Constellation || '').toUpperCase()) || '#FFFFFF';
+      star.displayColor = getStableConstellationColor((star.Constellation || '').toUpperCase()) || DEFAULT_STAR_COLOR;
     });
   } else if (filters.color === 'galactic-plane') {
-    const maxZ = Math.max(1e-9, ...stars.map(s => Math.abs(Number.isFinite(s.z_coordinate) ? s.z_coordinate : 0)));
+    const maxZ = Math.max(EPSILON, ...stars.map(s => Math.abs(Number.isFinite(s.z_coordinate) ? s.z_coordinate : 0)));
     stars.forEach(star => {
       const z = Number.isFinite(star.z_coordinate) ? star.z_coordinate : 0;
       const factor = Math.abs(z) / maxZ;
@@ -25,26 +36,8 @@ export function applyColorFilter(stars, filters) {
     });
   } else {
     stars.forEach(star => {
-      if (!star.displayColor) star.displayColor = '#FFFFFF';
+      if (!star.displayColor) star.displayColor = DEFAULT_STAR_COLOR;
     });
   }
   return stars;
-}
-
-function interpolateHex(hex1, hex2, factor) {
-  const c1 = hexToRgb(hex1);
-  const c2 = hexToRgb(hex2);
-  const r = Math.round(c1.r + factor * (c2.r - c1.r));
-  const g = Math.round(c1.g + factor * (c2.g - c1.g));
-  const b = Math.round(c1.b + factor * (c2.b - c1.b));
-  return rgbToHex(r, g, b);
-}
-function hexToRgb(hex) {
-  const normalized = hex.replace('#', '');
-  const bigint = parseInt(normalized, 16);
-  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
-}
-function rgbToHex(r, g, b) {
-  const componentToHex = c => c.toString(16).padStart(2, '0');
-  return '#' + componentToHex(r) + componentToHex(g) + componentToHex(b);
 }

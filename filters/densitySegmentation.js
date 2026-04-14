@@ -30,6 +30,7 @@ function isPointInSphericalPolygon(point, polygon) {
 export { subdivideGeometry };
 
 function computeConnectedComponents(cells) {
+  const cellMap = buildCellMap(cells);
   const visited = new Set();
   const components = [];
   cells.forEach(cell => {
@@ -41,7 +42,7 @@ function computeConnectedComponents(cells) {
       if (visited.has(cur.id)) continue;
       visited.add(cur.id);
       comp.push(cur);
-      const nbrs = neighbors(cur, cells);
+      const nbrs = neighbors(cur, cellMap);
       nbrs.forEach(n => {
         if (!visited.has(n.id)) {
           stack.push(n);
@@ -53,19 +54,34 @@ function computeConnectedComponents(cells) {
   return components;
 }
 
-function neighbors(cell, cells) {
+/**
+ * Builds an O(1) lookup map from grid coordinates to cells.
+ * @param {Array} cells
+ * @returns {Map<string, Object>}
+ */
+function buildCellMap(cells) {
+  const map = new Map();
+  cells.forEach(cell => {
+    map.set(`${cell.grid.ix},${cell.grid.iy},${cell.grid.iz}`, cell);
+  });
+  return map;
+}
+
+/**
+ * Finds all adjacent cells (26-connected neighborhood) using O(1) Map lookup.
+ * @param {Object} cell
+ * @param {Map<string, Object>} cellMap - Pre-built coordinate lookup map.
+ * @returns {Array}
+ */
+function neighbors(cell, cellMap) {
   const result = [];
   for (let dx = -1; dx <= 1; dx++) {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dz = -1; dz <= 1; dz++) {
         if (dx === 0 && dy === 0 && dz === 0) continue;
-        const nx = cell.grid.ix + dx;
-        const ny = cell.grid.iy + dy;
-        const nz = cell.grid.iz + dz;
-        const neigh = cells.find(cc => cc.grid.ix === nx && cc.grid.iy === ny && cc.grid.iz === nz);
-        if (neigh) {
-          result.push(neigh);
-        }
+        const key = `${cell.grid.ix + dx},${cell.grid.iy + dy},${cell.grid.iz + dz}`;
+        const neigh = cellMap.get(key);
+        if (neigh) result.push(neigh);
       }
     }
   }

@@ -13,6 +13,7 @@ import { createDefaultFilterResult } from './filterDefaults.js';
 import { computeAdaptiveGridSize, readFilterState } from './filterFormState.js';
 import { setupFilterUI, generateStellarClassFilters } from './filterUISetup.js';
 import { updateDerivedOverlays } from './filterOverlayState.js';
+import { SOL_STAR_NAME } from '../shared/constants.js';
 
 let filterForm = null;
 
@@ -40,8 +41,7 @@ export function applyFilters(allStars) {
   filteredStars = applyColorFilter(filteredStars, filters);
   filteredStars = applyOpacityFilter(filteredStars, filters);
 
-  const globeFilteredStars = filteredStars.filter(star => star.Common_name_of_the_star !== 'Sol');
-  const mollweideFilteredStars = filteredStars.filter(star => star.Common_name_of_the_star !== 'Sol');
+  const nonSolStars = filteredStars.filter(star => star.Common_name_of_the_star !== SOL_STAR_NAME);
 
   let connections = [];
   let globeConnections = [];
@@ -49,8 +49,8 @@ export function applyFilters(allStars) {
 
   if (filters.enableConnections) {
     connections = computeConnectionPairs(filteredStars, filters.connections);
-    globeConnections = computeConnectionPairs(globeFilteredStars, filters.connections);
-    mollweideConnections = computeConnectionPairs(mollweideFilteredStars, filters.connections);
+    globeConnections = computeConnectionPairs(nonSolStars, filters.connections);
+    mollweideConnections = computeConnectionPairs(nonSolStars, filters.connections);
   }
 
   applyGlobeSurfaceFilter(filters);
@@ -68,11 +68,10 @@ export function applyFilters(allStars) {
     ...filters,
     filteredStars,
     connections,
-    globeFilteredStars,
+    globeFilteredStars: nonSolStars,
     globeConnections,
-    mollweideFilteredStars,
+    mollweideFilteredStars: nonSolStars,
     mollweideConnections,
-    ...overlayState,
-    cloudDensityOverlays: []
+    ...overlayState
   };
 }

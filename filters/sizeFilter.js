@@ -1,62 +1,47 @@
 // filters/sizeFilter.js
 
 import { getStellarClassData } from './stellarClassData.js';
+import { getPrimaryClass } from '../shared/stellarClassUtils.js';
+import { DISTANCE_SIZE_SCALE } from '../shared/constants.js';
 
 /**
  * Applies size-related filters to the given stars array.
+ * Handles size-by-distance, size-by-stellar-class, and per-class overrides in a single pass.
  * @param {Array} stars - The array of star objects.
  * @param {Object} filters - The overall filter object.
  * @returns {Array} - The updated array of stars.
  */
 export function applySizeFilter(stars, filters) {
-  // We'll get the loaded stellar class data
   const stellarClassData = getStellarClassData();
 
+  // Pre-compute distance range if needed
+  let minDistance, maxDistance;
   if (filters.size === 'distance') {
-    // Distance to the sun: smaller distance => bigger star
-    const minDistance = Math.min(...stars.map(s => s.Distance_from_the_Sun));
-    const maxDistance = Math.max(...stars.map(s => s.Distance_from_the_Sun));
-
-    stars.forEach(star => {
-      // Invert distance: closer stars are larger
-      star.displaySize =
-        5 * (maxDistance - star.Distance_from_the_Sun) / (maxDistance - minDistance + 1) + 1;
-    });
-  } else if (filters.size === 'stellar-class') {
-    // Map class to size from stellarClassData
-    const recognizedClasses = new Set(['O','B','A','F','G','K','M','L','T','Y']);
-    stars.forEach(star => {
-      let primaryClass = 'Other';
-      if (star.Stellar_class && typeof star.Stellar_class === 'string') {
-        const candidate = star.Stellar_class.charAt(0).toUpperCase();
-        primaryClass = recognizedClasses.has(candidate) ? candidate : 'Other';
-      }
-      const classData = stellarClassData[primaryClass];
-      star.displaySize = classData ? classData.size : 1;
-    });
-  } else {
-    // Default if no recognized size filter
-    stars.forEach(star => {
-      if (typeof star.displaySize === 'undefined') {
-        star.displaySize = 2;
-      }
-    });
+    minDistance = Math.min(...stars.map(s => s.Distance_from_the_Sun));
+    maxDistance = Math.max(...stars.map(s => s.Distance_from_the_Sun));
   }
 
-  const recognizedClasses = new Set(['O','B','A','F','G','K','M','L','T','Y']);
   stars.forEach(star => {
-    let primaryClass = 'Other';
-    if (star.Stellar_class && typeof star.Stellar_class === 'string') {
-      const candidate = star.Stellar_class.charAt(0).toUpperCase();
-      primaryClass = recognizedClasses.has(candidate) ? candidate : 'Other';
+    const primaryClass = getPrimaryClass(star);
+
+    // 1) Base size from selected mode
+    if (filters.size === 'distance') {
+      star.displaySize =
+        DISTANCE_SIZE_SCALE * (maxDistance - star.Distance_from_the_Sun) / (maxDistance - minDistance + 1) + 1;
+    } else if (filters.size === 'stellar-class') {
+      const classData = stellarClassData[primaryClass];
+      star.displaySize = classData ? classData.size : 1;
+    } else if (typeof star.displaySize === 'undefined') {
+      star.displaySize = 2;
     }
-    const starSize =
-      filters.stellarClassStarSizes && filters.stellarClassStarSizes[primaryClass];
+
+    // 2) Per-class overrides (from stellar class UI sliders)
+    const starSize = filters.stellarClassStarSizes?.[primaryClass];
     if (starSize !== undefined && !isNaN(starSize)) {
       star.displaySize = starSize;
     }
-    const labelSize =
-      filters.stellarClassLabelSizes && filters.stellarClassLabelSizes[primaryClass];
+
+    const labelSize = filters.stellarClassLabelSizes?.[primaryClass];
     if (labelSize !== undefined && !isNaN(labelSize)) {
       star.displayLabelSize = labelSize;
     } else {

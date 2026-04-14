@@ -1,56 +1,48 @@
 /**
- * Handles "Stellar Class" logic for showing/hiding star names and star objects themselves.
- * Also exports `generateStellarClassFilters` to build the UI subcategories (O,B,A,F,G,K,M,L,T,Y).
+ * @file Handles stellar class visibility logic and builds the UI subcategories.
+ * Each spectral class (O, B, A, F, G, K, M, L, T, Y, Other) gets a collapsible
+ * section with class-level and individual star visibility controls.
  */
 import { getStellarClassData } from './stellarClassData.js';
+import { getPrimaryClass, groupStarsByClass } from '../shared/stellarClassUtils.js';
+import { STELLAR_CLASSES, STELLAR_CLASS_NAMES, STELLAR_CLASS_SET, STELLAR_SIZE_SLIDER, SUBCATEGORY_MAX_HEIGHT } from '../shared/constants.js';
+import { createRangeControl, createCheckbox, createSubcategoryHeader, sanitizeName } from '../shared/uiFactory.js';
 
+/**
+ * Applies stellar class visibility logic to filter stars and set display names.
+ * @param {Array} stars - Array of star objects.
+ * @param {HTMLFormElement} form - The filters form element.
+ * @returns {Array} Filtered array of visible stars.
+ */
 export function applyStellarClassLogic(stars, form) {
-  // Collect checkboxes from the form
   const stellarClassShowName = {};
   const stellarClassShowStar = {};
 
-  // Class-level "Show Name" / "Show Star"
-  const classNameCheckboxes = form.querySelectorAll(`input[name="stellar-class-show-name"]`);
-  classNameCheckboxes.forEach(checkbox => {
-    stellarClassShowName[checkbox.value] = checkbox.checked;
+  form.querySelectorAll('input[name="stellar-class-show-name"]').forEach(cb => {
+    stellarClassShowName[cb.value] = cb.checked;
+  });
+  form.querySelectorAll('input[name="stellar-class-show-star"]').forEach(cb => {
+    stellarClassShowStar[cb.value] = cb.checked;
   });
 
-  const classStarCheckboxes = form.querySelectorAll(`input[name="stellar-class-show-star"]`);
-  classStarCheckboxes.forEach(checkbox => {
-    stellarClassShowStar[checkbox.value] = checkbox.checked;
-  });
-
-  // Individual star-level "Show Name" / "Show Star"
   const individualShowName = {};
   const individualShowStar = {};
 
-  const starNameCheckboxes = form.querySelectorAll(`input[name="star-show-name"]`);
-  starNameCheckboxes.forEach(chk => {
-    individualShowName[chk.value] = chk.checked;
+  form.querySelectorAll('input[name="star-show-name"]').forEach(cb => {
+    individualShowName[cb.value] = cb.checked;
   });
-
-  const starStarCheckboxes = form.querySelectorAll(`input[name="star-show-star"]`);
-  starStarCheckboxes.forEach(chk => {
-    individualShowStar[chk.value] = chk.checked;
+  form.querySelectorAll('input[name="star-show-star"]').forEach(cb => {
+    individualShowStar[cb.value] = cb.checked;
   });
-
-  // Apply logic to each star
-  const recognizedClasses = new Set(['O','B','A','F','G','K','M','L','T','Y']);
 
   stars.forEach(star => {
-    let primaryClass = 'Other';
-    if (star.Stellar_class && typeof star.Stellar_class === 'string') {
-      const candidate = star.Stellar_class.charAt(0).toUpperCase();
-      primaryClass = recognizedClasses.has(candidate) ? candidate : 'Other';
-    }
-
-    // Use only the common name of the individual star for display, ignoring the star system name.
+    const primaryClass = getPrimaryClass(star);
     const starName = star.Common_name_of_the_star || '';
-    // Determine visibility based on checkboxes
-    const classShowStar = stellarClassShowStar.hasOwnProperty(primaryClass)
+
+    const classShowStar = Object.hasOwn(stellarClassShowStar, primaryClass)
       ? stellarClassShowStar[primaryClass]
       : true;
-    const starShowStar = individualShowStar.hasOwnProperty(starName)
+    const starShowStar = Object.hasOwn(individualShowStar, starName)
       ? individualShowStar[starName]
       : true;
 
@@ -61,518 +53,180 @@ export function applyStellarClassLogic(stars, form) {
       return;
     }
 
-    // Decide if star name is displayed based on checkboxes
-    const classShowName = stellarClassShowName.hasOwnProperty(primaryClass)
+    const classShowName = Object.hasOwn(stellarClassShowName, primaryClass)
       ? stellarClassShowName[primaryClass]
       : true;
-    const starShowName = individualShowName.hasOwnProperty(starName)
+    const starShowName = Object.hasOwn(individualShowName, starName)
       ? individualShowName[starName]
       : true;
 
     if (classShowName && starShowName) {
-      if (starName) {
-        star.displayName = starName;
-      } else if (star.Common_name_of_the_star_system) {
-        star.displayName = star.Common_name_of_the_star_system;
-      } else {
-        star.displayName = '';
-      }
+      star.displayName = starName || star.Common_name_of_the_star_system || '';
     } else {
       star.displayName = '';
     }
   });
 
-  // Filter out invisible stars
   return stars.filter(st => st.displayVisible);
 }
 
+// ---------------------------------------------------------------------------
+// UI Generation
+// ---------------------------------------------------------------------------
+
 /**
- * Builds UI for the stellar class subcategories.
- *  - Each subcategory line has:
- *    -> A visually distinct header (subcategory title) that is clickable to expand/collapse the star list.
- *    -> The star list is wrapped in a scrollable sidebar if needed.
+ * Builds the UI for a single stellar class subcategory.
+ * @param {string} cls - Class letter (e.g. 'O') or 'Other'.
+ * @param {string} commonName - Human-readable name.
+ * @param {Array} starsInClass - Stars belonging to this class.
+ * @param {number} defaultSize - Default star/label size from stellar class data.
+ * @param {HTMLElement} container - Parent DOM element to append to.
+ */
+function buildSubcategoryUI(cls, commonName, starsInClass, defaultSize, container) {
+  const subcatDiv = document.createElement('div');
+  subcatDiv.classList.add('stellar-class-subcategory');
+
+  // Star list content (initially collapsed)
+  const subcontentDiv = document.createElement('div');
+  subcontentDiv.classList.add('filter-subcontent', 'subcategory-content');
+  subcontentDiv.style.maxHeight = '0';
+  subcontentDiv.style.overflowY = 'hidden';
+
+  // Header
+  const headerText = commonName
+    ? `${cls} (${commonName}) - ${starsInClass.length}`
+    : `${cls} - ${starsInClass.length}`;
+  const header = createSubcategoryHeader(headerText, subcontentDiv, SUBCATEGORY_MAX_HEIGHT);
+  subcatDiv.appendChild(header);
+
+  // Class-level controls row
+  const classControls = document.createElement('div');
+  classControls.classList.add('class-level-checkboxes');
+
+  // Show Name / Show Star checkboxes
+  const { container: showNameDiv } = createCheckbox(
+    `class-${cls}-name`, 'stellar-class-show-name', 'Show Name', true, cls
+  );
+  classControls.appendChild(showNameDiv);
+
+  const { container: showStarDiv } = createCheckbox(
+    `class-${cls}-star`, 'stellar-class-show-star', 'Show Star', true, cls
+  );
+  classControls.appendChild(showStarDiv);
+
+  // Star size slider
+  const { container: starSizeDiv } = createRangeControl({
+    id: `class-${cls}-star-size-slider`,
+    name: `class-${cls}-star-size`,
+    label: 'Star Size:',
+    min: STELLAR_SIZE_SLIDER.min,
+    max: STELLAR_SIZE_SLIDER.max,
+    step: STELLAR_SIZE_SLIDER.step,
+    value: defaultSize
+  });
+  classControls.appendChild(starSizeDiv);
+
+  // Label size slider
+  const { container: labelSizeDiv } = createRangeControl({
+    id: `class-${cls}-label-size-slider`,
+    name: `class-${cls}-label-size`,
+    label: 'Label Size:',
+    min: STELLAR_SIZE_SLIDER.min,
+    max: STELLAR_SIZE_SLIDER.max,
+    step: STELLAR_SIZE_SLIDER.step,
+    value: defaultSize
+  });
+  classControls.appendChild(labelSizeDiv);
+
+  subcatDiv.appendChild(classControls);
+
+  // Individual star list
+  const individualStarsDiv = document.createElement('div');
+  individualStarsDiv.classList.add('individual-stars');
+
+  starsInClass.forEach(star => {
+    const starContainer = document.createElement('div');
+    starContainer.classList.add('star-container');
+
+    const starNameLabel = document.createElement('span');
+    starNameLabel.textContent = star.Common_name_of_the_star;
+    starNameLabel.classList.add('star-name');
+    starContainer.appendChild(starNameLabel);
+
+    const checkboxesDiv = document.createElement('div');
+    checkboxesDiv.classList.add('star-checkboxes');
+
+    const safeName = sanitizeName(star.Common_name_of_the_star);
+
+    const { container: showNameIndiv } = createCheckbox(
+      `star-${safeName}-name`, 'star-show-name', 'Show Name', true, star.Common_name_of_the_star
+    );
+    checkboxesDiv.appendChild(showNameIndiv);
+
+    const { container: showStarIndiv } = createCheckbox(
+      `star-${safeName}-star`, 'star-show-star', 'Show Star', true, star.Common_name_of_the_star
+    );
+    checkboxesDiv.appendChild(showStarIndiv);
+
+    starContainer.appendChild(checkboxesDiv);
+    individualStarsDiv.appendChild(starContainer);
+  });
+
+  subcontentDiv.appendChild(individualStarsDiv);
+  subcatDiv.appendChild(subcontentDiv);
+  container.appendChild(subcatDiv);
+}
+
+/**
+ * Builds the complete stellar class filter UI with subcategories.
+ * @param {Array} stars - All loaded star objects.
  */
 export function generateStellarClassFilters(stars) {
   const container = document.getElementById('stellar-class-container');
-  container.innerHTML = ''; // Clear previous
-  // Wrap the whole category in a scrollable container (sidebar) if content exceeds a fixed height.
+  if (!container) return;
+  container.innerHTML = '';
   container.classList.add('scrollable-category');
+
   const stellarClassData = getStellarClassData();
 
-  // Master checkboxes to toggle visibility of all star names and stars.
+  // Master toggle checkboxes
   const globalControls = document.createElement('div');
   globalControls.classList.add('class-level-checkboxes');
 
-  const allNamesDiv = document.createElement('div');
-  allNamesDiv.classList.add('filter-item');
-  const allNamesChk = document.createElement('input');
-  allNamesChk.type = 'checkbox';
-  allNamesChk.id = 'all-stellar-names';
-  allNamesChk.checked = true;
-  const allNamesLbl = document.createElement('label');
-  allNamesLbl.htmlFor = 'all-stellar-names';
-  allNamesLbl.textContent = 'Show All Names';
-  allNamesDiv.appendChild(allNamesChk);
-  allNamesDiv.appendChild(allNamesLbl);
+  const { container: allNamesDiv, checkbox: allNamesChk } = createCheckbox(
+    'all-stellar-names', 'all-stellar-names', 'Show All Names', true
+  );
   globalControls.appendChild(allNamesDiv);
 
-  const allStarsDiv = document.createElement('div');
-  allStarsDiv.classList.add('filter-item');
-  const allStarsChk = document.createElement('input');
-  allStarsChk.type = 'checkbox';
-  allStarsChk.id = 'all-stellar-stars';
-  allStarsChk.checked = true;
-  const allStarsLbl = document.createElement('label');
-  allStarsLbl.htmlFor = 'all-stellar-stars';
-  allStarsLbl.textContent = 'Show All Stars';
-  allStarsDiv.appendChild(allStarsChk);
-  allStarsDiv.appendChild(allStarsLbl);
+  const { container: allStarsDiv, checkbox: allStarsChk } = createCheckbox(
+    'all-stellar-stars', 'all-stellar-stars', 'Show All Stars', true
+  );
   globalControls.appendChild(allStarsDiv);
 
   container.appendChild(globalControls);
 
   // Group stars by class
-  const classMap = {};
-  stars.forEach(star => {
-    const primaryClass = (star.Stellar_class && typeof star.Stellar_class === 'string')
-      ? star.Stellar_class.charAt(0).toUpperCase()
-      : 'Other';
-    if (!classMap[primaryClass]) {
-      classMap[primaryClass] = [];
-    }
-    classMap[primaryClass].push(star);
-  });
+  const classMap = groupStarsByClass(stars);
 
-  // List of known classes
-  const stellarClasses = [
-    { class: 'O', commonName: 'Blue Giant' },
-    { class: 'B', commonName: 'Blue-White Dwarf' },
-    { class: 'A', commonName: 'White Dwarf' },
-    { class: 'F', commonName: 'Yellow-White Dwarf' },
-    { class: 'G', commonName: 'Yellow Dwarf' },
-    { class: 'K', commonName: 'Orange Dwarf' },
-    { class: 'M', commonName: 'Red Dwarf' },
-    { class: 'L', commonName: 'Brown Dwarf' },
-    { class: 'T', commonName: 'Cool Brown Dwarf' },
-    { class: 'Y', commonName: 'Ultra Cool Brown Dwarf' }
-  ];
-
-  const recognizedSet = new Set(stellarClasses.map(s => s.class));
-
-  stellarClasses.forEach(clsObj => {
-    const cls = clsObj.class;
-    const cName = clsObj.commonName;
+  // Build UI for each recognized class
+  STELLAR_CLASSES.forEach(cls => {
     const arr = classMap[cls] || [];
-    const starCount = arr.length;
-    const defaultSize = (stellarClassData[cls]?.size) || 1;
-
-    // Outer container for this subcategory
-    const subcatDiv = document.createElement('div');
-    subcatDiv.classList.add('stellar-class-subcategory');
-
-    // 1) The subcategory header (visually distinct)
-    const header = document.createElement('h3');
-    header.classList.add('collapsible-subcategory', 'subcategory-header');
-    header.textContent = `${cls} (${cName}) - ${starCount}`;
-    subcatDiv.appendChild(header);
-
-    // 2) Class-level checkboxes row (always visible)
-    const classCheckboxesDiv = document.createElement('div');
-    classCheckboxesDiv.classList.add('class-level-checkboxes');
-
-    // "Show Name" for the entire class
-    const showNameDiv = document.createElement('div');
-    showNameDiv.classList.add('filter-item');
-    const showNameCheckbox = document.createElement('input');
-    showNameCheckbox.type = 'checkbox';
-    showNameCheckbox.id = `class-${cls}-name`;
-    showNameCheckbox.name = 'stellar-class-show-name';
-    showNameCheckbox.value = cls;
-    showNameCheckbox.checked = true;
-    const showNameLabel = document.createElement('label');
-    showNameLabel.htmlFor = `class-${cls}-name`;
-    showNameLabel.textContent = 'Show Name';
-    showNameDiv.appendChild(showNameCheckbox);
-    showNameDiv.appendChild(showNameLabel);
-    classCheckboxesDiv.appendChild(showNameDiv);
-
-    // "Show Star" for the entire class
-    const showStarDiv = document.createElement('div');
-    showStarDiv.classList.add('filter-item');
-    const showStarCheckbox = document.createElement('input');
-    showStarCheckbox.type = 'checkbox';
-    showStarCheckbox.id = `class-${cls}-star`;
-    showStarCheckbox.name = 'stellar-class-show-star';
-    showStarCheckbox.value = cls;
-    showStarCheckbox.checked = true;
-    const showStarLabel = document.createElement('label');
-    showStarLabel.htmlFor = `class-${cls}-star`;
-    showStarLabel.textContent = 'Show Star';
-    showStarDiv.appendChild(showStarCheckbox);
-    showStarDiv.appendChild(showStarLabel);
-    classCheckboxesDiv.appendChild(showStarDiv);
-
-    // Star size slider
-    const starSizeDiv = document.createElement('div');
-    starSizeDiv.classList.add('filter-item');
-    const starSizeLabel = document.createElement('label');
-    starSizeLabel.htmlFor = `class-${cls}-star-size-slider`;
-    starSizeLabel.textContent = 'Star Size:';
-    const starSizeSlider = document.createElement('input');
-    starSizeSlider.type = 'range';
-    starSizeSlider.id = `class-${cls}-star-size-slider`;
-    starSizeSlider.name = `class-${cls}-star-size`;
-    starSizeSlider.min = '0.1';
-    starSizeSlider.max = '15';
-    starSizeSlider.step = '0.1';
-    starSizeSlider.value = defaultSize;
-    const starSizeNumber = document.createElement('input');
-    starSizeNumber.type = 'number';
-    starSizeNumber.id = `class-${cls}-star-size-number`;
-    starSizeNumber.name = `class-${cls}-star-size`;
-    starSizeNumber.min = '0.1';
-    starSizeNumber.max = '15';
-    starSizeNumber.step = '0.1';
-    starSizeNumber.value = defaultSize;
-    starSizeDiv.appendChild(starSizeLabel);
-    starSizeDiv.appendChild(starSizeSlider);
-    starSizeDiv.appendChild(starSizeNumber);
-    classCheckboxesDiv.appendChild(starSizeDiv);
-
-    starSizeSlider.addEventListener('input', () => {
-      starSizeNumber.value = starSizeSlider.value;
-    });
-    starSizeNumber.addEventListener('input', () => {
-      starSizeSlider.value = starSizeNumber.value;
-    });
-
-    // Label size slider
-    const labelSizeDiv = document.createElement('div');
-    labelSizeDiv.classList.add('filter-item');
-    const labelSizeLabel = document.createElement('label');
-    labelSizeLabel.htmlFor = `class-${cls}-label-size-slider`;
-    labelSizeLabel.textContent = 'Label Size:';
-    const labelSizeSlider = document.createElement('input');
-    labelSizeSlider.type = 'range';
-    labelSizeSlider.id = `class-${cls}-label-size-slider`;
-    labelSizeSlider.name = `class-${cls}-label-size`;
-    labelSizeSlider.min = '0.1';
-    labelSizeSlider.max = '15';
-    labelSizeSlider.step = '0.1';
-    labelSizeSlider.value = defaultSize;
-    const labelSizeNumber = document.createElement('input');
-    labelSizeNumber.type = 'number';
-    labelSizeNumber.id = `class-${cls}-label-size-number`;
-    labelSizeNumber.name = `class-${cls}-label-size`;
-    labelSizeNumber.min = '0.1';
-    labelSizeNumber.max = '15';
-    labelSizeNumber.step = '0.1';
-    labelSizeNumber.value = defaultSize;
-    labelSizeDiv.appendChild(labelSizeLabel);
-    labelSizeDiv.appendChild(labelSizeSlider);
-    labelSizeDiv.appendChild(labelSizeNumber);
-    classCheckboxesDiv.appendChild(labelSizeDiv);
-
-    labelSizeSlider.addEventListener('input', () => {
-      labelSizeNumber.value = labelSizeSlider.value;
-    });
-    labelSizeNumber.addEventListener('input', () => {
-      labelSizeSlider.value = labelSizeNumber.value;
-    });
-
-    subcatDiv.appendChild(classCheckboxesDiv);
-
-    // 3) The star list subcontent (initially closed)
-    const subcontentDiv = document.createElement('div');
-    subcontentDiv.classList.add('filter-subcontent', 'subcategory-content');
-    subcontentDiv.style.maxHeight = '0';
-    subcontentDiv.style.overflowY = 'hidden';
-
-    const individualStarsDiv = document.createElement('div');
-    individualStarsDiv.classList.add('individual-stars');
-
-    arr.forEach(star => {
-      let formattedName = star.Common_name_of_the_star;
-      const starContainer = document.createElement('div');
-      starContainer.classList.add('star-container');
-
-      const starNameLabel = document.createElement('span');
-      starNameLabel.textContent = formattedName;
-      starNameLabel.classList.add('star-name');
-      starContainer.appendChild(starNameLabel);
-
-      const checkboxesDiv = document.createElement('div');
-      checkboxesDiv.classList.add('star-checkboxes');
-
-      // "Show Name"
-      const individualShowNameDiv = document.createElement('div');
-      individualShowNameDiv.classList.add('filter-item');
-      const individualShowNameCheckbox = document.createElement('input');
-      individualShowNameCheckbox.type = 'checkbox';
-      individualShowNameCheckbox.id = `star-${sanitizeName(star.Common_name_of_the_star)}-name`;
-      individualShowNameCheckbox.name = 'star-show-name';
-      individualShowNameCheckbox.value = star.Common_name_of_the_star;
-      individualShowNameCheckbox.checked = true;
-      const individualShowNameLabel = document.createElement('label');
-      individualShowNameLabel.htmlFor = `star-${sanitizeName(star.Common_name_of_the_star)}-name`;
-      individualShowNameLabel.textContent = 'Show Name';
-      individualShowNameDiv.appendChild(individualShowNameCheckbox);
-      individualShowNameDiv.appendChild(individualShowNameLabel);
-      checkboxesDiv.appendChild(individualShowNameDiv);
-
-      // "Show Star"
-      const individualShowStarDiv = document.createElement('div');
-      individualShowStarDiv.classList.add('filter-item');
-      const individualShowStarCheckbox = document.createElement('input');
-      individualShowStarCheckbox.type = 'checkbox';
-      individualShowStarCheckbox.id = `star-${sanitizeName(star.Common_name_of_the_star)}-star`;
-      individualShowStarCheckbox.name = 'star-show-star';
-      individualShowStarCheckbox.value = star.Common_name_of_the_star;
-      individualShowStarCheckbox.checked = true;
-      const individualShowStarLabel = document.createElement('label');
-      individualShowStarLabel.htmlFor = `star-${sanitizeName(star.Common_name_of_the_star)}-star`;
-      individualShowStarLabel.textContent = 'Show Star';
-      individualShowStarDiv.appendChild(individualShowStarCheckbox);
-      individualShowStarDiv.appendChild(individualShowStarLabel);
-      checkboxesDiv.appendChild(individualShowStarDiv);
-
-      starContainer.appendChild(checkboxesDiv);
-      individualStarsDiv.appendChild(starContainer);
-    });
-
-    subcontentDiv.appendChild(individualStarsDiv);
-    subcatDiv.appendChild(subcontentDiv);
-
-    header.addEventListener('click', () => {
-      header.classList.toggle('active');
-      const isActive = header.classList.contains('active');
-      header.setAttribute('aria-expanded', isActive);
-
-      if (isActive) {
-        const contentHeight = subcontentDiv.scrollHeight;
-        if (contentHeight > 300) {
-          subcontentDiv.style.maxHeight = '300px';
-          subcontentDiv.style.overflowY = 'auto';
-        } else {
-          subcontentDiv.style.maxHeight = contentHeight + 'px';
-          subcontentDiv.style.overflowY = 'visible';
-        }
-      } else {
-        subcontentDiv.style.maxHeight = '0';
-        subcontentDiv.style.overflowY = 'hidden';
-      }
-    });
-
-    container.appendChild(subcatDiv);
+    const defaultSize = stellarClassData[cls]?.size || 1;
+    buildSubcategoryUI(cls, STELLAR_CLASS_NAMES[cls], arr, defaultSize, container);
   });
 
-  // Handle any stellar classes not in the known list under an "Other" category.
+  // Build UI for unrecognized classes under "Other"
   const otherStars = [];
   Object.keys(classMap).forEach(key => {
-    if (!recognizedSet.has(key)) {
+    if (!STELLAR_CLASS_SET.has(key)) {
       otherStars.push(...classMap[key]);
     }
   });
-
   if (otherStars.length) {
-    const cls = 'Other';
-    const cName = 'Miscellaneous';
-    const arr = otherStars;
-    const starCount = arr.length;
-    const defaultSize = 1;
-
-    const subcatDiv = document.createElement('div');
-    subcatDiv.classList.add('stellar-class-subcategory');
-
-    const header = document.createElement('h3');
-    header.classList.add('collapsible-subcategory', 'subcategory-header');
-    header.textContent = `${cls} - ${starCount}`;
-    subcatDiv.appendChild(header);
-
-    const classCheckboxesDiv = document.createElement('div');
-    classCheckboxesDiv.classList.add('class-level-checkboxes');
-
-    const showNameDiv = document.createElement('div');
-    showNameDiv.classList.add('filter-item');
-    const showNameCheckbox = document.createElement('input');
-    showNameCheckbox.type = 'checkbox';
-    showNameCheckbox.id = `class-${cls}-name`;
-    showNameCheckbox.name = 'stellar-class-show-name';
-    showNameCheckbox.value = cls;
-    showNameCheckbox.checked = true;
-    const showNameLabel = document.createElement('label');
-    showNameLabel.htmlFor = `class-${cls}-name`;
-    showNameLabel.textContent = 'Show Name';
-    showNameDiv.appendChild(showNameCheckbox);
-    showNameDiv.appendChild(showNameLabel);
-    classCheckboxesDiv.appendChild(showNameDiv);
-
-    const showStarDiv = document.createElement('div');
-    showStarDiv.classList.add('filter-item');
-    const showStarCheckbox = document.createElement('input');
-    showStarCheckbox.type = 'checkbox';
-    showStarCheckbox.id = `class-${cls}-star`;
-    showStarCheckbox.name = 'stellar-class-show-star';
-    showStarCheckbox.value = cls;
-    showStarCheckbox.checked = true;
-    const showStarLabel = document.createElement('label');
-    showStarLabel.htmlFor = `class-${cls}-star`;
-    showStarLabel.textContent = 'Show Star';
-    showStarDiv.appendChild(showStarCheckbox);
-    showStarDiv.appendChild(showStarLabel);
-    classCheckboxesDiv.appendChild(showStarDiv);
-
-    // Star size slider
-    const starSizeDiv = document.createElement('div');
-    starSizeDiv.classList.add('filter-item');
-    const starSizeLabel = document.createElement('label');
-    starSizeLabel.htmlFor = `class-${cls}-star-size-slider`;
-    starSizeLabel.textContent = 'Star Size:';
-    const starSizeSlider = document.createElement('input');
-    starSizeSlider.type = 'range';
-    starSizeSlider.id = `class-${cls}-star-size-slider`;
-    starSizeSlider.name = `class-${cls}-star-size`;
-    starSizeSlider.min = '0.1';
-    starSizeSlider.max = '15';
-    starSizeSlider.step = '0.1';
-    starSizeSlider.value = defaultSize;
-    const starSizeNumber = document.createElement('input');
-    starSizeNumber.type = 'number';
-    starSizeNumber.id = `class-${cls}-star-size-number`;
-    starSizeNumber.name = `class-${cls}-star-size`;
-    starSizeNumber.min = '0.1';
-    starSizeNumber.max = '15';
-    starSizeNumber.step = '0.1';
-    starSizeNumber.value = defaultSize;
-    starSizeDiv.appendChild(starSizeLabel);
-    starSizeDiv.appendChild(starSizeSlider);
-    starSizeDiv.appendChild(starSizeNumber);
-    classCheckboxesDiv.appendChild(starSizeDiv);
-
-    starSizeSlider.addEventListener('input', () => {
-      starSizeNumber.value = starSizeSlider.value;
-    });
-    starSizeNumber.addEventListener('input', () => {
-      starSizeSlider.value = starSizeNumber.value;
-    });
-
-    // Label size slider
-    const labelSizeDiv = document.createElement('div');
-    labelSizeDiv.classList.add('filter-item');
-    const labelSizeLabel = document.createElement('label');
-    labelSizeLabel.htmlFor = `class-${cls}-label-size-slider`;
-    labelSizeLabel.textContent = 'Label Size:';
-    const labelSizeSlider = document.createElement('input');
-    labelSizeSlider.type = 'range';
-    labelSizeSlider.id = `class-${cls}-label-size-slider`;
-    labelSizeSlider.name = `class-${cls}-label-size`;
-    labelSizeSlider.min = '0.1';
-    labelSizeSlider.max = '15';
-    labelSizeSlider.step = '0.1';
-    labelSizeSlider.value = defaultSize;
-    const labelSizeNumber = document.createElement('input');
-    labelSizeNumber.type = 'number';
-    labelSizeNumber.id = `class-${cls}-label-size-number`;
-    labelSizeNumber.name = `class-${cls}-label-size`;
-    labelSizeNumber.min = '0.1';
-    labelSizeNumber.max = '15';
-    labelSizeNumber.step = '0.1';
-    labelSizeNumber.value = defaultSize;
-    labelSizeDiv.appendChild(labelSizeLabel);
-    labelSizeDiv.appendChild(labelSizeSlider);
-    labelSizeDiv.appendChild(labelSizeNumber);
-    classCheckboxesDiv.appendChild(labelSizeDiv);
-
-    labelSizeSlider.addEventListener('input', () => {
-      labelSizeNumber.value = labelSizeSlider.value;
-    });
-    labelSizeNumber.addEventListener('input', () => {
-      labelSizeSlider.value = labelSizeNumber.value;
-    });
-
-    subcatDiv.appendChild(classCheckboxesDiv);
-
-    const subcontentDiv = document.createElement('div');
-    subcontentDiv.classList.add('filter-subcontent', 'subcategory-content');
-    subcontentDiv.style.maxHeight = '0';
-    subcontentDiv.style.overflowY = 'hidden';
-
-    const individualStarsDiv = document.createElement('div');
-    individualStarsDiv.classList.add('individual-stars');
-
-    arr.forEach(star => {
-      const starContainer = document.createElement('div');
-      starContainer.classList.add('star-container');
-
-      const starNameLabel = document.createElement('span');
-      starNameLabel.textContent = star.Common_name_of_the_star;
-      starNameLabel.classList.add('star-name');
-      starContainer.appendChild(starNameLabel);
-
-      const checkboxesDiv = document.createElement('div');
-      checkboxesDiv.classList.add('star-checkboxes');
-
-      const individualShowNameDiv = document.createElement('div');
-      individualShowNameDiv.classList.add('filter-item');
-      const individualShowNameCheckbox = document.createElement('input');
-      individualShowNameCheckbox.type = 'checkbox';
-      individualShowNameCheckbox.id = `star-${sanitizeName(star.Common_name_of_the_star)}-name`;
-      individualShowNameCheckbox.name = 'star-show-name';
-      individualShowNameCheckbox.value = star.Common_name_of_the_star;
-      individualShowNameCheckbox.checked = true;
-      const individualShowNameLabel = document.createElement('label');
-      individualShowNameLabel.htmlFor = `star-${sanitizeName(star.Common_name_of_the_star)}-name`;
-      individualShowNameLabel.textContent = 'Show Name';
-      individualShowNameDiv.appendChild(individualShowNameCheckbox);
-      individualShowNameDiv.appendChild(individualShowNameLabel);
-      checkboxesDiv.appendChild(individualShowNameDiv);
-
-      const individualShowStarDiv = document.createElement('div');
-      individualShowStarDiv.classList.add('filter-item');
-      const individualShowStarCheckbox = document.createElement('input');
-      individualShowStarCheckbox.type = 'checkbox';
-      individualShowStarCheckbox.id = `star-${sanitizeName(star.Common_name_of_the_star)}-star`;
-      individualShowStarCheckbox.name = 'star-show-star';
-      individualShowStarCheckbox.value = star.Common_name_of_the_star;
-      individualShowStarCheckbox.checked = true;
-      const individualShowStarLabel = document.createElement('label');
-      individualShowStarLabel.htmlFor = `star-${sanitizeName(star.Common_name_of_the_star)}-star`;
-      individualShowStarLabel.textContent = 'Show Star';
-      individualShowStarDiv.appendChild(individualShowStarCheckbox);
-      individualShowStarDiv.appendChild(individualShowStarLabel);
-      checkboxesDiv.appendChild(individualShowStarDiv);
-
-      starContainer.appendChild(checkboxesDiv);
-      individualStarsDiv.appendChild(starContainer);
-    });
-
-    subcontentDiv.appendChild(individualStarsDiv);
-    subcatDiv.appendChild(subcontentDiv);
-
-    header.addEventListener('click', () => {
-      header.classList.toggle('active');
-      const isActive = header.classList.contains('active');
-      header.setAttribute('aria-expanded', isActive);
-
-      if (isActive) {
-        const contentHeight = subcontentDiv.scrollHeight;
-        if (contentHeight > 300) {
-          subcontentDiv.style.maxHeight = '300px';
-          subcontentDiv.style.overflowY = 'auto';
-        } else {
-          subcontentDiv.style.maxHeight = contentHeight + 'px';
-          subcontentDiv.style.overflowY = 'visible';
-        }
-      } else {
-        subcontentDiv.style.maxHeight = '0';
-        subcontentDiv.style.overflowY = 'hidden';
-      }
-    });
-
-    container.appendChild(subcatDiv);
+    buildSubcategoryUI('Other', 'Miscellaneous', otherStars, 1, container);
   }
 
-  // Global checkbox listeners to toggle all names or stars at once.
+  // Global checkbox listeners
   const form = document.getElementById('filters-form');
   allNamesChk.addEventListener('change', () => {
     const checked = allNamesChk.checked;
@@ -589,8 +243,4 @@ export function generateStellarClassFilters(stars) {
     });
     if (form) form.dispatchEvent(new Event('change'));
   });
-
-  function sanitizeName(name) {
-    return (name || '').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-]/g, '');
-  }
 }

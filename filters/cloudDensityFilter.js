@@ -4,32 +4,8 @@ import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
 import { getDustCloudColor } from './dustCloudColors.js';
 import { loadCachedCloudData } from './dustCloudDataCache.js';
-
-async function loadCloudData(cloudFileUrl) {
-  return await loadCachedCloudData(cloudFileUrl);
-}
-
-function uniqueColorFromName(name) {
-  const predefined = getDustCloudColor(name);
-  if (predefined) {
-    return new THREE.Color(predefined);
-  }
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = (hash % 360 + 360) % 360;
-  return new THREE.Color(`hsl(${hue}, 70%, 50%)`);
-}
-
-function getCloudNameFromFileUrl(fileUrl) {
-  const parts = fileUrl.split('/');
-  let filename = parts[parts.length - 1];
-  filename = filename
-    .replace(/_cloud_data\.json$/i, '')
-    .replace(/\.json$/i, '');
-  return filename.replace(/_/g, ' ').trim();
-}
+import { uniqueColorFromName, getCloudNameFromFileUrl } from '../shared/colorUtils.js';
+import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../shared/constants.js';
 
 class CloudDensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2, cloudName = '') {
@@ -40,8 +16,8 @@ class CloudDensityGridOverlay {
     this.color = uniqueColorFromName(cloudName);
     this.opacityFactor = 1.0;
 
-    this.canvasWidth = 1024;
-    this.canvasHeight = 512;
+    this.canvasWidth = HEATMAP_CANVAS_WIDTH;
+    this.canvasHeight = HEATMAP_CANVAS_HEIGHT;
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.canvasWidth;
     this.canvas.height = this.canvasHeight;
@@ -54,7 +30,7 @@ class CloudDensityGridOverlay {
       transparent: true,
       depthWrite: false
     });
-    this.textureMesh = new THREE.Mesh(new THREE.PlaneGeometry(400, 200), mat);
+    this.textureMesh = new THREE.Mesh(new THREE.PlaneGeometry(HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT), mat);
     this.textureMesh.renderOrder = 2;
   }
 
@@ -97,26 +73,25 @@ class CloudDensityGridOverlay {
           } else {
             ra = Math.atan2(-posTC.z, -posTC.x);
             dec = Math.asin(posTC.y / distFromCenter);
-            const radius = 100;
             projectedPos = new THREE.Vector3(
-              -radius * Math.cos(dec) * Math.cos(ra),
-               radius * Math.sin(dec),
-              -radius * Math.cos(dec) * Math.sin(ra)
+              -GLOBE_RADIUS * Math.cos(dec) * Math.cos(ra),
+               GLOBE_RADIUS * Math.sin(dec),
+              -GLOBE_RADIUS * Math.cos(dec) * Math.sin(ra)
             );
-            const projMoll = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
+            const projMoll = cachedRadToMollweide(ra, dec, GLOBE_RADIUS, getMollweideLambda0());
             circleMoll.position.copy(projMoll);
           }
           let theta = dec;
-          for (let i = 0; i < 10; i++) {
+          for (let i = 0; i < MOLLWEIDE_MAX_ITERATIONS; i++) {
             const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
               (2 + 2 * Math.cos(2 * theta));
             theta -= delta;
-            if (Math.abs(delta) < 1e-10) break;
+            if (Math.abs(delta) < EPSILON) break;
           }
           const cosT = Math.cos(theta);
           const sinT = Math.sin(theta);
-          const mollXFactor = (2 * 100 / Math.PI) * cosT;
-          const mollY = 100 * sinT;
+          const mollXFactor = (2 * GLOBE_RADIUS / Math.PI) * cosT;
+          const mollY = GLOBE_RADIUS * sinT;
           squareGlobe.position.copy(projectedPos);
           const nrm = projectedPos.clone().normalize();
           let right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), nrm);
@@ -240,7 +215,7 @@ class CloudDensityGridOverlay {
 }
 
 export async function createCloudDensityOverlay(minD, maxD, gridSize, cloudFile, allStars) {
-  const data = await loadCloudData(cloudFile);
+  const data = await loadCachedCloudData(cloudFile);
   const names = new Set(data.map(d => d['Star Name']));
   const positions = [];
   allStars.forEach(star => {

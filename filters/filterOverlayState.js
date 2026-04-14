@@ -1,140 +1,163 @@
+/**
+ * @file Manages creation, rebuilding, and teardown of isolation and density overlays.
+ * Provides updateDerivedOverlays() as the main entry point called each filter cycle.
+ */
 import { initIsolationFilter, updateIsolationFilter } from './isolationFilter.js';
 import { initDensityFilter, updateDensityFilter } from './densityFilter.js';
 
 let isolationOverlay = null;
 let densityOverlay = null;
 
-function removeIsolationOverlay() {
-  if (!isolationOverlay) return;
-  isolationOverlay.cubesData.forEach(cell => {
-    window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-    window.mollweideMap.scene.remove(cell.mollweideMesh);
-  });
-  isolationOverlay.adjacentLines.forEach(object => {
-    window.globeMap.scene.remove(object.line);
-    window.mollweideMap.scene.remove(object.lineM);
-  });
-  isolationOverlay = null;
+/**
+ * Retrieves the three map scenes from window globals.
+ * @returns {{ tc: THREE.Scene, globe: THREE.Scene, moll: THREE.Scene }}
+ */
+function getScenes() {
+  return {
+    tc: window.trueCoordinatesMap?.scene,
+    globe: window.globeMap?.scene,
+    moll: window.mollweideMap?.scene
+  };
 }
 
-function removeDensityOverlay() {
-  if (!densityOverlay) return;
-  densityOverlay.cubesData.forEach(cell => {
-    window.trueCoordinatesMap.scene.remove(cell.tcMesh);
+/**
+ * Generic overlay removal: removes all meshes/lines from scenes and nullifies the reference.
+ * @param {Object|null} overlay - The overlay object with cubesData and adjacentLines.
+ * @param {Object} meshConfig - Maps overlay property paths to scene keys.
+ */
+function removeOverlayFromScenes(overlay, meshConfig) {
+  if (!overlay) return;
+  const scenes = getScenes();
+  meshConfig.cubes.forEach(({ prop, scene }) => {
+    overlay.cubesData?.forEach(cell => {
+      scenes[scene]?.remove(cell[prop]);
+    });
   });
-  densityOverlay.adjacentLines.forEach(object => {
-    window.globeMap.scene.remove(object.line);
+  meshConfig.lines.forEach(({ prop, scene }) => {
+    overlay.adjacentLines?.forEach(obj => {
+      scenes[scene]?.remove(obj[prop]);
+    });
   });
-  window.mollweideMap.scene.remove(densityOverlay.textureMesh);
-  densityOverlay = null;
+  if (meshConfig.extra) {
+    meshConfig.extra.forEach(({ prop, scene }) => {
+      if (overlay[prop]) scenes[scene]?.remove(overlay[prop]);
+    });
+  }
 }
 
+/** Mesh layout for the isolation overlay. */
+const ISOLATION_MESH_CONFIG = {
+  cubes: [
+    { prop: 'tcMesh', scene: 'tc' },
+    { prop: 'mollweideMesh', scene: 'moll' }
+  ],
+  lines: [
+    { prop: 'line', scene: 'globe' },
+    { prop: 'lineM', scene: 'moll' }
+  ]
+};
+
+/** Mesh layout for the density overlay. */
+const DENSITY_MESH_CONFIG = {
+  cubes: [
+    { prop: 'tcMesh', scene: 'tc' }
+  ],
+  lines: [
+    { prop: 'line', scene: 'globe' }
+  ],
+  extra: [
+    { prop: 'textureMesh', scene: 'moll' }
+  ]
+};
+
+/**
+ * Checks whether an overlay needs to be rebuilt due to changed parameters.
+ * @param {Object|null} overlay - Current overlay instance.
+ * @param {Object} filters - Current filter state.
+ * @param {number} gridSize - Computed grid size.
+ * @returns {boolean}
+ */
+function needsRebuild(overlay, filters, gridSize) {
+  return (
+    !overlay ||
+    overlay.minDistance !== filters.minDistance ||
+    overlay.maxDistance !== filters.maxDistance ||
+    overlay.gridSize !== gridSize
+  );
+}
+
+/**
+ * Adds an isolation overlay's meshes to the appropriate scenes.
+ * @param {Object} overlay
+ */
+function addIsolationToScenes(overlay) {
+  const scenes = getScenes();
+  overlay.cubesData.forEach(cell => {
+    scenes.tc?.add(cell.tcMesh);
+  });
+  overlay.adjacentLines.forEach(obj => {
+    scenes.globe?.add(obj.line);
+    scenes.moll?.add(obj.lineM);
+  });
+}
+
+/**
+ * Adds a density overlay's meshes to the appropriate scenes.
+ * @param {Object} overlay
+ */
+function addDensityToScenes(overlay) {
+  const scenes = getScenes();
+  overlay.cubesData.forEach(cell => {
+    scenes.tc?.add(cell.tcMesh);
+  });
+  overlay.adjacentLines.forEach(obj => {
+    scenes.globe?.add(obj.line);
+  });
+  scenes.moll?.add(overlay.textureMesh);
+}
+
+/**
+ * Main entry point: updates both isolation and density overlays based on current filters.
+ * Handles initialization, rebuild detection, cleanup, and rendering updates.
+ * @param {Array} allStars - Complete star array.
+ * @param {Object} filters - Current filter state.
+ * @param {Function} computeAdaptiveGridSize - Grid size computation function.
+ * @returns {{ isolationOverlay: Object|null, densityOverlay: Object|null }}
+ */
 export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize) {
+  const scenes = getScenes();
+
+  // --- Isolation overlay ---
   if (filters.enableIsolationFilter) {
     const gridSize = computeAdaptiveGridSize(filters.isolationGridSize);
-    const overlayNeedsRebuild = (
-      !isolationOverlay ||
-      isolationOverlay.minDistance !== filters.minDistance ||
-      isolationOverlay.maxDistance !== filters.maxDistance ||
-      isolationOverlay.gridSize !== gridSize
-    );
 
-    if (overlayNeedsRebuild) {
-      if (isolationOverlay) {
-        isolationOverlay.cubesData.forEach(cell => {
-          if (window.trueCoordinatesMap.scene.children.includes(cell.tcMesh)) {
-            window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-          }
-          if (window.mollweideMap.scene.children.includes(cell.mollweideMesh)) {
-            window.mollweideMap.scene.remove(cell.mollweideMesh);
-          }
-        });
-        isolationOverlay.adjacentLines.forEach(object => {
-          if (window.globeMap.scene.children.includes(object.line)) {
-            window.globeMap.scene.remove(object.line);
-          }
-          if (window.mollweideMap.scene.children.includes(object.lineM)) {
-            window.mollweideMap.scene.remove(object.lineM);
-          }
-        });
-      }
-
-      isolationOverlay = initIsolationFilter(
-        filters.minDistance,
-        filters.maxDistance,
-        allStars,
-        gridSize
-      );
-
-      isolationOverlay.cubesData.forEach(cell => {
-        window.trueCoordinatesMap.scene.add(cell.tcMesh);
-      });
-      isolationOverlay.adjacentLines.forEach(object => {
-        window.globeMap.scene.add(object.line);
-        window.mollweideMap.scene.add(object.lineM);
-      });
+    if (needsRebuild(isolationOverlay, filters, gridSize)) {
+      removeOverlayFromScenes(isolationOverlay, ISOLATION_MESH_CONFIG);
+      isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
+      addIsolationToScenes(isolationOverlay);
     }
 
-    updateIsolationFilter(
-      allStars,
-      isolationOverlay,
-      window.trueCoordinatesMap.scene,
-      window.globeMap.scene,
-      window.mollweideMap.scene
-    );
+    updateIsolationFilter(allStars, isolationOverlay, scenes.tc, scenes.globe, scenes.moll);
   } else {
-    removeIsolationOverlay();
+    removeOverlayFromScenes(isolationOverlay, ISOLATION_MESH_CONFIG);
+    isolationOverlay = null;
   }
 
+  // --- Density overlay ---
   if (filters.enableDensityFilter) {
     const gridSize = computeAdaptiveGridSize(filters.densityGridSize);
-    const overlayNeedsRebuild = (
-      !densityOverlay ||
-      densityOverlay.minDistance !== filters.minDistance ||
-      densityOverlay.maxDistance !== filters.maxDistance ||
-      densityOverlay.gridSize !== gridSize
-    );
 
-    if (overlayNeedsRebuild) {
-      if (densityOverlay) {
-        densityOverlay.cubesData.forEach(cell => {
-          window.trueCoordinatesMap.scene.remove(cell.tcMesh);
-        });
-        densityOverlay.adjacentLines.forEach(object => {
-          window.globeMap.scene.remove(object.line);
-        });
-        window.mollweideMap.scene.remove(densityOverlay.textureMesh);
-      }
-
-      densityOverlay = initDensityFilter(
-        filters.minDistance,
-        filters.maxDistance,
-        allStars,
-        gridSize
-      );
-
-      densityOverlay.cubesData.forEach(cell => {
-        window.trueCoordinatesMap.scene.add(cell.tcMesh);
-      });
-      densityOverlay.adjacentLines.forEach(object => {
-        window.globeMap.scene.add(object.line);
-      });
-      window.mollweideMap.scene.add(densityOverlay.textureMesh);
+    if (needsRebuild(densityOverlay, filters, gridSize)) {
+      removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG);
+      densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
+      addDensityToScenes(densityOverlay);
     }
 
-    updateDensityFilter(
-      allStars,
-      densityOverlay,
-      window.trueCoordinatesMap.scene,
-      window.globeMap.scene,
-      window.mollweideMap.scene
-    );
+    updateDensityFilter(allStars, densityOverlay, scenes.tc, scenes.globe, scenes.moll);
   } else {
-    removeDensityOverlay();
+    removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG);
+    densityOverlay = null;
   }
 
-  return {
-    isolationOverlay,
-    densityOverlay
-  };
+  return { isolationOverlay, densityOverlay };
 }

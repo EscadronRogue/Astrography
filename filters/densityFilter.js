@@ -10,6 +10,7 @@ import {
 import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
 import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../utils/renderUtils.js';
+import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../shared/constants.js';
 
 class DensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2) {
@@ -24,8 +25,8 @@ class DensityGridOverlay {
     this.fadePower = 1.0;
 
     // Off-screen canvas for smooth Mollweide heatmap
-    this.canvasWidth = 1024;
-    this.canvasHeight = 512;
+    this.canvasWidth = HEATMAP_CANVAS_WIDTH;
+    this.canvasHeight = HEATMAP_CANVAS_HEIGHT;
     this.canvas = document.createElement('canvas');
     this.canvas.width = this.canvasWidth;
     this.canvas.height = this.canvasHeight;
@@ -39,7 +40,7 @@ class DensityGridOverlay {
       depthWrite: false
     });
     this.textureMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(400, 200),
+      new THREE.PlaneGeometry(HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT),
       mat
     );
     this.textureMesh.renderOrder = 2;
@@ -85,21 +86,21 @@ class DensityGridOverlay {
           } else {
             ra = Math.atan2(-posTC.z, -posTC.x);
             dec = Math.asin(posTC.y / distFromCenter);
-            const radius = 100;
+            const radius = GLOBE_RADIUS;
             projectedPos = new THREE.Vector3(
               -radius * Math.cos(dec) * Math.cos(ra),
                radius * Math.sin(dec),
               -radius * Math.cos(dec) * Math.sin(ra)
             );
-            const projMoll = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
+            const projMoll = cachedRadToMollweide(ra, dec, GLOBE_RADIUS, getMollweideLambda0());
             circleMoll.position.copy(projMoll);
           }
           let theta = dec;
-          for (let i = 0; i < 10; i++) {
+          for (let i = 0; i < MOLLWEIDE_MAX_ITERATIONS; i++) {
             const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
               (2 + 2 * Math.cos(2 * theta));
             theta -= delta;
-            if (Math.abs(delta) < 1e-10) break;
+            if (Math.abs(delta) < EPSILON) break;
           }
           const cosT = Math.cos(theta);
           const sinT = Math.sin(theta);

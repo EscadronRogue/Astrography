@@ -12,6 +12,8 @@ import {
 import { getDustCloudColor } from './dustCloudColors.js';
 import { loadCachedCloudData } from './dustCloudDataCache.js';
 import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../utils/renderUtils.js';
+import { uniqueColorFromName, getCloudNameFromFileUrl } from '../shared/colorUtils.js';
+import { GLOBE_RADIUS, CIRCLE_SEGMENTS } from '../shared/constants.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -91,7 +93,7 @@ export async function createCloudOverlay(
   }
 
   const vertices = [];
-  const globeRadius = 100;
+  const globeRadius = GLOBE_RADIUS;
   const segmentsPerConnection = mapType === 'Globe' ? 32 : 1;
 
   pairs.forEach(pair => {
@@ -123,40 +125,7 @@ export async function createCloudOverlay(
   return lineSegments;
 }
 
-/**
- * Generates a unique color based on a given name.
- * @param {string} name 
- * @returns {THREE.Color}
- */
-function uniqueColorFromName(name) {
-  const predefined = getDustCloudColor(name);
-  if (predefined) {
-    return new THREE.Color(predefined);
-  }
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = (hash % 360 + 360) % 360;
-  return new THREE.Color(`hsl(${hue}, 70%, 50%)`);
-}
-
-/**
- * Extracts the cloud name from its file URL.
- * E.g., "data/Aquila_cloud_data.json" -> "Aquila"
- * @param {string} fileUrl 
- * @returns {string} Cloud name.
- */
-function getCloudNameFromFileUrl(fileUrl) {
-  const parts = fileUrl.split('/');
-  let filename = parts[parts.length - 1];
-  filename = filename
-    .replace(/_cloud_data\.json$/i, '')
-    .replace(/\.json$/i, '');
-  return filename.replace(/_/g, ' ').trim();
-}
-
-const GC_SEGMENTS = 32;
+const GC_SEGMENTS = CIRCLE_SEGMENTS;
 
 export function createMollweideCloudSegments(pairs, color, opacityFactor = 1.0, width = 30) {
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), createWideLineMaterial(color));

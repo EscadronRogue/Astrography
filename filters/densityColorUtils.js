@@ -1,4 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import { hashString, hslColorFromHash } from '../shared/colorUtils.js';
 
 export function lightenColor(color, factor) {
   const hsl = { h: 0, s: 0, l: 0 };
@@ -14,18 +15,6 @@ export function darkenColor(color, factor) {
   const next = new THREE.Color();
   next.setHSL(hsl.h, hsl.s, Math.max(0, hsl.l - factor));
   return next;
-}
-
-function hashString(str) {
-  let hash = 0;
-  const value = String(str ?? '');
-  for (let i = 0; i < value.length; i++) hash = value.charCodeAt(i) + ((hash << 5) - hash);
-  return hash;
-}
-
-function hslColorFromHash(str, { start, spread }) {
-  const hue = start + (Math.abs(hashString(str)) % spread);
-  return new THREE.Color(`hsl(${hue}, 70%, 50%)`);
 }
 
 export function getBaseColor(str) { return hslColorFromHash(str, { start: 0, spread: 360 }); }

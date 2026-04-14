@@ -1,421 +1,180 @@
-// /ui/filterUI.js
-// Manages the UI for the filter form.
+/**
+ * @file Manages the filter form UI: slider/number synchronization,
+ * enable/disable groups, clouds fieldsets, and fullscreen controls.
+ */
+import { syncSliderPair, createCollapsibleFieldset, createCheckbox, createRangeControl } from '../shared/uiFactory.js';
+
+/**
+ * Binds a master checkbox to enable/disable a group of input elements.
+ * @param {string} checkboxId - ID of the master enable/disable checkbox.
+ * @param {string[]} controlIds - IDs of inputs to toggle.
+ */
+function bindEnableGroup(checkboxId, controlIds) {
+  const checkbox = document.getElementById(checkboxId);
+  if (!checkbox) return;
+  const controls = controlIds.map(id => document.getElementById(id)).filter(Boolean);
+  checkbox.addEventListener('change', () => {
+    const enabled = checkbox.checked;
+    controls.forEach(el => { el.disabled = !enabled; });
+  });
+}
 
 export function initFilterUI() {
-  // Toggle sidebar menu on mobile.
-  document.getElementById('menu-toggle').addEventListener('click', function () {
-    document.querySelector('.sidebar').classList.toggle('open');
-  });
+  // Mobile sidebar toggle
+  const menuToggle = document.getElementById('menu-toggle');
+  if (menuToggle) {
+    menuToggle.addEventListener('click', () => {
+      document.querySelector('.sidebar')?.classList.toggle('open');
+    });
+  }
 
-  // Enable/disable connection slider.
-  const enableConnectionsChk = document.getElementById('enable-connections');
-  const connectionSlider = document.getElementById('connection-slider');
-  const connectionNumber = document.getElementById('connection-number');
-  const connectionOpacitySlider = document.getElementById('connection-opacity-slider');
-  const connectionOpacityNumber = document.getElementById('connection-opacity-number');
-  const connectionWidthSlider = document.getElementById('connection-width-slider');
-  const connectionWidthNumber = document.getElementById('connection-width-number');
-  const connectionFadeSlider = document.getElementById('connection-fade-slider');
-  const connectionFadeNumber = document.getElementById('connection-fade-number');
-  const connectionLabelSizeSlider = document.getElementById('connection-label-size-slider');
-  const connectionLabelSizeNumber = document.getElementById('connection-label-size-number');
-  enableConnectionsChk.addEventListener('change', function () {
-    const enabled = this.checked;
-    connectionSlider.disabled = !enabled;
-    connectionNumber.disabled = !enabled;
-    connectionOpacitySlider.disabled = !enabled;
-    connectionOpacityNumber.disabled = !enabled;
-    connectionWidthSlider.disabled = !enabled;
-    connectionWidthNumber.disabled = !enabled;
-    connectionFadeSlider.disabled = !enabled;
-    connectionFadeNumber.disabled = !enabled;
-    connectionLabelSizeSlider.disabled = !enabled;
-    connectionLabelSizeNumber.disabled = !enabled;
-  });
-  connectionSlider.addEventListener('input', function () {
-    connectionNumber.value = this.value;
-  });
-  connectionNumber.addEventListener('input', function () {
-    connectionSlider.value = this.value;
-  });
-  connectionOpacitySlider.addEventListener('input', function () {
-    connectionOpacityNumber.value = this.value;
-    document.getElementById('connection-opacity-value').textContent = this.value;
-  });
-  connectionOpacityNumber.addEventListener('input', function () {
-    connectionOpacitySlider.value = this.value;
-    document.getElementById('connection-opacity-value').textContent = this.value;
-  });
-  connectionWidthSlider.addEventListener('input', function () {
-    connectionWidthNumber.value = this.value;
-  });
-  connectionWidthNumber.addEventListener('input', function () {
-    connectionWidthSlider.value = this.value;
-  });
-  connectionFadeSlider.addEventListener('input', function () {
-    connectionFadeNumber.value = this.value;
-  });
-  connectionFadeNumber.addEventListener('input', function () {
-    connectionFadeSlider.value = this.value;
-  });
-  connectionLabelSizeSlider.addEventListener('input', function () {
-    connectionLabelSizeNumber.value = this.value;
-  });
-  connectionLabelSizeNumber.addEventListener('input', function () {
-    connectionLabelSizeSlider.value = this.value;
-  });
+  // --- Connection controls ---
+  bindEnableGroup('enable-connections', [
+    'connection-slider', 'connection-number',
+    'connection-opacity-slider', 'connection-opacity-number',
+    'connection-width-slider', 'connection-width-number',
+    'connection-fade-slider', 'connection-fade-number',
+    'connection-label-size-slider', 'connection-label-size-number'
+  ]);
+  syncSliderPair('connection-slider', 'connection-number');
+  syncSliderPair('connection-opacity-slider', 'connection-opacity-number', 'connection-opacity-value');
+  syncSliderPair('connection-width-slider', 'connection-width-number');
+  syncSliderPair('connection-fade-slider', 'connection-fade-number');
+  syncSliderPair('connection-label-size-slider', 'connection-label-size-number');
 
-  // Isolation Filter UI controls.
-  const enableIsolationChk = document.getElementById('enable-isolation-filter');
-  const isolationSlider = document.getElementById('isolation-slider');
-  const isolationNumber = document.getElementById('isolation-number');
-  const isolationToleranceSlider = document.getElementById('isolation-tolerance-slider');
-  const isolationGridSlider = document.getElementById('isolation-grid-slider');
-  const isolationGridNumber = document.getElementById('isolation-grid-number');
-  enableIsolationChk.addEventListener('change', function () {
-    const enabled = this.checked;
-    isolationSlider.disabled = !enabled;
-    isolationNumber.disabled = !enabled;
-    isolationToleranceSlider.disabled = !enabled;
-    isolationGridSlider.disabled = !enabled;
-    isolationGridNumber.disabled = !enabled;
-  });
-  isolationSlider.addEventListener('input', function () {
-    isolationNumber.value = this.value;
-    document.getElementById('isolation-value').textContent = this.value;
-  });
-  isolationNumber.addEventListener('input', function () {
-    isolationSlider.value = this.value;
-    document.getElementById('isolation-value').textContent = this.value;
-  });
-  isolationToleranceSlider.addEventListener('input', function () {
-    document.getElementById('isolation-tolerance-value').textContent = this.value;
-  });
-  isolationGridSlider.addEventListener('input', function () {
-    isolationGridNumber.value = this.value;
-  });
-  isolationGridNumber.addEventListener('input', function () {
-    isolationGridSlider.value = this.value;
-  });
+  // --- Isolation filter controls ---
+  bindEnableGroup('enable-isolation-filter', [
+    'isolation-slider', 'isolation-number',
+    'isolation-tolerance-slider',
+    'isolation-grid-slider', 'isolation-grid-number'
+  ]);
+  syncSliderPair('isolation-slider', 'isolation-number', 'isolation-value');
+  const isoTolSlider = document.getElementById('isolation-tolerance-slider');
+  if (isoTolSlider) {
+    isoTolSlider.addEventListener('input', () => {
+      const display = document.getElementById('isolation-tolerance-value');
+      if (display) display.textContent = isoTolSlider.value;
+    });
+  }
+  syncSliderPair('isolation-grid-slider', 'isolation-grid-number');
 
-  // Density Filter UI controls (mirrors Isolation Filter configuration).
-  const enableDensityChk = document.getElementById('enable-density-filter');
-  const densitySlider = document.getElementById('density-slider');
-  const densityNumber = document.getElementById('density-number');
-  const densityToleranceSlider = document.getElementById('density-tolerance-slider');
-  const densityBottomSlider = document.getElementById('density-bottom-slider');
-  const densityBottomNumber = document.getElementById('density-bottom-number');
-  const densityTopSlider = document.getElementById('density-top-slider');
-  const densityTopNumber = document.getElementById('density-top-number');
-  const densityGridSlider = document.getElementById('density-grid-slider');
-  const densityGridNumber = document.getElementById('density-grid-number');
-  const densityOpacitySlider = document.getElementById('density-opacity-slider');
-  const densityOpacityNumber = document.getElementById('density-opacity-number');
-  const densityLineWidthSlider = document.getElementById('density-line-width-slider');
-  const densityLineWidthNumber = document.getElementById('density-line-width-number');
-  const densityFadeSlider = document.getElementById('density-fade-slider');
-  const densityFadeNumber = document.getElementById('density-fade-number');
-  const starOpacitySlider = document.getElementById('star-opacity-slider');
-  const starOpacityNumber = document.getElementById('star-opacity-number');
-  const starNameOpacitySlider = document.getElementById('star-name-opacity-slider');
-  const starNameOpacityNumber = document.getElementById('star-name-opacity-number');
-  enableDensityChk.addEventListener('change', function () {
-    const enabled = this.checked;
-    densitySlider.disabled = !enabled;
-    densityNumber.disabled = !enabled;
-    densityToleranceSlider.disabled = !enabled;
-    densityBottomSlider.disabled = !enabled;
-    densityBottomNumber.disabled = !enabled;
-    densityTopSlider.disabled = !enabled;
-    densityTopNumber.disabled = !enabled;
-    densityGridSlider.disabled = !enabled;
-    densityGridNumber.disabled = !enabled;
-    densityOpacitySlider.disabled = !enabled;
-    densityOpacityNumber.disabled = !enabled;
-    densityLineWidthSlider.disabled = !enabled;
-    densityLineWidthNumber.disabled = !enabled;
-    densityFadeSlider.disabled = !enabled;
-    densityFadeNumber.disabled = !enabled;
-  });
-  densitySlider.addEventListener('input', function () {
-    densityNumber.value = this.value;
-    document.getElementById('density-value').textContent = this.value;
-  });
-  densityNumber.addEventListener('input', function () {
-    densitySlider.value = this.value;
-    document.getElementById('density-value').textContent = this.value;
-  });
-  densityToleranceSlider.addEventListener('input', function () {
-    document.getElementById('density-tolerance-value').textContent = this.value;
-  });
-  densityBottomSlider.addEventListener('input', function () {
-    densityBottomNumber.value = this.value;
-    document.getElementById('density-bottom-value').textContent = this.value;
-  });
-  densityBottomNumber.addEventListener('input', function () {
-    densityBottomSlider.value = this.value;
-    document.getElementById('density-bottom-value').textContent = this.value;
-  });
-  densityTopSlider.addEventListener('input', function () {
-    densityTopNumber.value = this.value;
-    document.getElementById('density-top-value').textContent = this.value;
-  });
-  densityTopNumber.addEventListener('input', function () {
-    densityTopSlider.value = this.value;
-    document.getElementById('density-top-value').textContent = this.value;
-  });
-  densityGridSlider.addEventListener('input', function () {
-    densityGridNumber.value = this.value;
-  });
-  densityGridNumber.addEventListener('input', function () {
-    densityGridSlider.value = this.value;
-  });
-  densityOpacitySlider.addEventListener('input', function () {
-    densityOpacityNumber.value = this.value;
-    document.getElementById('density-opacity-value').textContent = this.value;
-  });
-  densityOpacityNumber.addEventListener('input', function () {
-    densityOpacitySlider.value = this.value;
-    document.getElementById('density-opacity-value').textContent = this.value;
-  });
-  densityLineWidthSlider.addEventListener('input', function () {
-    densityLineWidthNumber.value = this.value;
-  });
-  densityLineWidthNumber.addEventListener('input', function () {
-    densityLineWidthSlider.value = this.value;
-  });
-  densityFadeSlider.addEventListener('input', function () {
-    densityFadeNumber.value = this.value;
-  });
-  densityFadeNumber.addEventListener('input', function () {
-    densityFadeSlider.value = this.value;
-  });
+  // --- Density filter controls ---
+  bindEnableGroup('enable-density-filter', [
+    'density-slider', 'density-number',
+    'density-tolerance-slider',
+    'density-bottom-slider', 'density-bottom-number',
+    'density-top-slider', 'density-top-number',
+    'density-grid-slider', 'density-grid-number',
+    'density-opacity-slider', 'density-opacity-number',
+    'density-line-width-slider', 'density-line-width-number',
+    'density-fade-slider', 'density-fade-number'
+  ]);
+  syncSliderPair('density-slider', 'density-number', 'density-value');
+  const densTolSlider = document.getElementById('density-tolerance-slider');
+  if (densTolSlider) {
+    densTolSlider.addEventListener('input', () => {
+      const display = document.getElementById('density-tolerance-value');
+      if (display) display.textContent = densTolSlider.value;
+    });
+  }
+  syncSliderPair('density-bottom-slider', 'density-bottom-number', 'density-bottom-value');
+  syncSliderPair('density-top-slider', 'density-top-number', 'density-top-value');
+  syncSliderPair('density-grid-slider', 'density-grid-number');
+  syncSliderPair('density-opacity-slider', 'density-opacity-number', 'density-opacity-value');
+  syncSliderPair('density-line-width-slider', 'density-line-width-number');
+  syncSliderPair('density-fade-slider', 'density-fade-number');
 
-  starOpacitySlider.addEventListener('input', function () {
-    starOpacityNumber.value = this.value;
-    document.getElementById('star-opacity-value').textContent = this.value;
-  });
-  starOpacityNumber.addEventListener('input', function () {
-    starOpacitySlider.value = this.value;
-    document.getElementById('star-opacity-value').textContent = this.value;
-  });
-  starNameOpacitySlider.addEventListener('input', function () {
-    starNameOpacityNumber.value = this.value;
-    document.getElementById('star-name-opacity-value').textContent = this.value;
-  });
-  starNameOpacityNumber.addEventListener('input', function () {
-    starNameOpacitySlider.value = this.value;
-    document.getElementById('star-name-opacity-value').textContent = this.value;
-  });
+  // --- Star opacity controls ---
+  syncSliderPair('star-opacity-slider', 'star-opacity-number', 'star-opacity-value');
+  syncSliderPair('star-name-opacity-slider', 'star-name-opacity-number', 'star-name-opacity-value');
 
+  // --- Distance sliders ---
+  syncSliderPair('min-distance-slider', 'min-distance-number');
+  syncSliderPair('max-distance-slider', 'max-distance-number');
 
-  // Distance slider sync.
-  const minDistanceSlider = document.getElementById('min-distance-slider');
-  const minDistanceNumber = document.getElementById('min-distance-number');
-  minDistanceSlider.addEventListener('input', function () {
-    minDistanceNumber.value = this.value;
-  });
-  minDistanceNumber.addEventListener('input', function () {
-    minDistanceSlider.value = this.value;
-  });
-  const maxDistanceSlider = document.getElementById('max-distance-slider');
-  const maxDistanceNumber = document.getElementById('max-distance-number');
-  maxDistanceSlider.addEventListener('input', function () {
-    maxDistanceNumber.value = this.value;
-  });
-  maxDistanceNumber.addEventListener('input', function () {
-    maxDistanceSlider.value = this.value;
-  });
-
-  // Add Dust Clouds fieldset.
+  // --- Dynamic fieldsets ---
   addCloudsFieldset();
   addCloudDensityFieldset();
 
-  // Fullscreen button listeners.
+  // --- Fullscreen ---
   document.querySelectorAll('.fullscreen-btn').forEach(btn => {
     btn.addEventListener('click', function () {
-      const mapContainer = this.parentElement;
-      const canvas = mapContainer.querySelector('canvas');
+      const canvas = this.parentElement?.querySelector('canvas');
       if (document.fullscreenElement) {
         document.exitFullscreen();
       } else {
-        canvas.requestFullscreen().catch(err => {
-          console.error("Error attempting to enable full-screen mode:", err);
+        canvas?.requestFullscreen().catch(err => {
+          console.error('Error enabling fullscreen:', err);
         });
       }
     });
   });
 
-  document.addEventListener("fullscreenchange", function () {
+  document.addEventListener('fullscreenchange', () => {
     if (!document.fullscreenElement) {
       document.querySelectorAll('.map-container canvas').forEach(canvas => {
-        canvas.style.width = "";
-        canvas.style.height = "";
+        canvas.style.width = '';
+        canvas.style.height = '';
       });
       window.dispatchEvent(new Event('resize'));
     }
   });
-
-  console.log("[filterUI] Filter UI initialized.");
 }
+
+// --- Dust Clouds fieldset ---
+
+const DUST_CLOUDS = [
+  { name: 'Aquila', file: 'data/Aquila_cloud_data.json' },
+  { name: 'Auriga', file: 'data/Auriga_cloud_data.json' },
+  { name: 'Blue', file: 'data/Blue_cloud_data.json' },
+  { name: 'Ceti', file: 'data/Ceti_cloud_data.json' },
+  { name: 'Dorado', file: 'data/Dorado_cloud_data.json' },
+  { name: 'Eridani', file: 'data/Eridani_cloud_data.json' },
+  { name: 'Galactic', file: 'data/Galactic_cloud_data.json' },
+  { name: 'Gemini', file: 'data/Gemini_cloud_data.json' },
+  { name: 'Hyades', file: 'data/Hyades_cloud_data.json' },
+  { name: 'Leo', file: 'data/Leo_cloud_data.json' },
+  { name: 'Local Interstellar', file: 'data/Local_interstellar_cloud.json' },
+  { name: 'Microscopi', file: 'data/Microscopi_cloud_data.json' },
+  { name: 'North Galactic Pole', file: 'data/North_Galactic_Pole_cloud_data.json' },
+  { name: 'Ophiucus', file: 'data/Ophiucus_cloud_data.json' },
+  { name: 'Vela', file: 'data/Vela_cloud_data.json' }
+];
 
 function addCloudsFieldset() {
   const filterForm = document.getElementById('filters-form');
-  const fs = document.createElement('fieldset');
-  const legend = document.createElement('legend');
-  legend.classList.add('collapsible');
-  legend.textContent = 'Dust Clouds';
-  fs.appendChild(legend);
-  
-  // Create content container with classes matching the constellation category.
-  const contentDiv = document.createElement('div');
-  contentDiv.classList.add('filter-content', 'scrollable-category');
-  contentDiv.style.maxHeight = '0px';
-  
-  // Toggle open/closed state on legend click (consistent with other filter categories).
-  legend.addEventListener('click', () => {
-    legend.classList.toggle('active');
-    const isActive = legend.classList.contains('active');
-    legend.setAttribute('aria-expanded', isActive);
-    if (isActive) {
-      // Use a timeout to ensure scrollHeight is computed after render.
-      setTimeout(() => {
-        contentDiv.style.maxHeight = contentDiv.scrollHeight + "px";
-      }, 0);
-      contentDiv.style.overflowY = 'auto';
-    } else {
-      contentDiv.style.maxHeight = "0px";
-      contentDiv.style.overflowY = 'hidden';
-    }
-  });
-  
-  // List of dust clouds and corresponding data file paths.
-  const dustClouds = [
-    { name: "Aquila", file: "data/Aquila_cloud_data.json" },
-    { name: "Auriga", file: "data/Auriga_cloud_data.json" },
-    { name: "Blue", file: "data/Blue_cloud_data.json" },
-    { name: "Ceti", file: "data/Ceti_cloud_data.json" },
-    { name: "Dorado", file: "data/Dorado_cloud_data.json" },
-    { name: "Eridani", file: "data/Eridani_cloud_data.json" },
-    { name: "Galactic", file: "data/Galactic_cloud_data.json" },
-    { name: "Gemini", file: "data/Gemini_cloud_data.json" },
-    { name: "Hyades", file: "data/Hyades_cloud_data.json" },
-    { name: "Leo", file: "data/Leo_cloud_data.json" },
-    { name: "Local Interstellar", file: "data/Local_interstellar_cloud.json" },
-    { name: "Microscopi", file: "data/Microscopi_cloud_data.json" },
-    { name: "North Galactic Pole", file: "data/North_Galactic_Pole_cloud_data.json" },
-    { name: "Ophiucus", file: "data/Ophiucus_cloud_data.json" },
-    { name: "Vela", file: "data/Vela_cloud_data.json" }
-  ];
-  
-  // Create a checkbox for each dust cloud.
-  dustClouds.forEach(cloud => {
-    const cloudDiv = document.createElement('div');
-    cloudDiv.classList.add('filter-item');
-    const cloudChk = document.createElement('input');
-    cloudChk.type = 'checkbox';
-    cloudChk.id = 'dust-cloud-' + cloud.name.replace(/\s+/g, '-').toLowerCase();
-    cloudChk.name = 'dust-clouds'; // All checkboxes share this name.
-    cloudChk.value = cloud.file;
-    // All clouds are off by default.
-    cloudChk.checked = false;
-    const cloudLbl = document.createElement('label');
-    cloudLbl.htmlFor = cloudChk.id;
-    cloudLbl.textContent = cloud.name;
-    cloudDiv.appendChild(cloudChk);
-    cloudDiv.appendChild(cloudLbl);
-    contentDiv.appendChild(cloudDiv);
+  if (!filterForm) return;
+
+  const { fieldset, contentDiv } = createCollapsibleFieldset('Dust Clouds', {
+    contentClasses: ['scrollable-category']
   });
 
-  const opDiv = document.createElement('div');
-  opDiv.classList.add('filter-item');
-  const opLabel = document.createElement('label');
-  opLabel.htmlFor = 'cloud-opacity-slider';
-  opLabel.textContent = 'Overlay Opacity:';
-  const opSlider = document.createElement('input');
-  opSlider.type = 'range';
-  opSlider.id = 'cloud-opacity-slider';
-  opSlider.name = 'cloud-opacity';
-  opSlider.min = '0';
-  opSlider.max = '100';
-  opSlider.value = '100';
-  opSlider.step = '1';
-  const opNumber = document.createElement('input');
-  opNumber.type = 'number';
-  opNumber.id = 'cloud-opacity-number';
-  opNumber.name = 'cloud-opacity';
-  opNumber.min = '0';
-  opNumber.max = '100';
-  opNumber.value = '100';
-  opNumber.step = '1';
-  const opSpan = document.createElement('span');
-  opSpan.id = 'cloud-opacity-value';
-  opSpan.textContent = '100';
-  opDiv.appendChild(opLabel);
-  opDiv.appendChild(opSlider);
-  opDiv.appendChild(opNumber);
-  opDiv.appendChild(opSpan);
-  opDiv.appendChild(document.createTextNode('%'));
+  DUST_CLOUDS.forEach(cloud => {
+    const { container } = createCheckbox(
+      'dust-cloud-' + cloud.name.replace(/\s+/g, '-').toLowerCase(),
+      'dust-clouds', cloud.name, false, cloud.file
+    );
+    contentDiv.appendChild(container);
+  });
+
+  const { container: opDiv } = createRangeControl({
+    id: 'cloud-opacity-slider', name: 'cloud-opacity',
+    label: 'Overlay Opacity:', min: 0, max: 100, value: 100, unit: '%'
+  });
   contentDiv.appendChild(opDiv);
 
-  opSlider.addEventListener('input', () => {
-    opNumber.value = opSlider.value;
-    opSpan.textContent = opSlider.value;
-  });
-  opNumber.addEventListener('input', () => {
-    opSlider.value = opNumber.value;
-    opSpan.textContent = opNumber.value;
-  });
-  
-  fs.appendChild(contentDiv);
-  filterForm.appendChild(fs);
+  filterForm.appendChild(fieldset);
 }
 
 function addCloudDensityFieldset() {
   const filterForm = document.getElementById('filters-form');
-  const fs = document.createElement('fieldset');
-  const legend = document.createElement('legend');
-  legend.classList.add('collapsible');
-  legend.textContent = 'Dust Cloud Density';
-  fs.appendChild(legend);
+  if (!filterForm) return;
 
-  const contentDiv = document.createElement('div');
-  contentDiv.classList.add('filter-content', 'scrollable-category');
-  contentDiv.style.maxHeight = '0px';
-
-  legend.addEventListener('click', () => {
-    legend.classList.toggle('active');
-    const isActive = legend.classList.contains('active');
-    legend.setAttribute('aria-expanded', isActive);
-    if (isActive) {
-      setTimeout(() => {
-        contentDiv.style.maxHeight = contentDiv.scrollHeight + 'px';
-      }, 0);
-      contentDiv.style.overflowY = 'auto';
-    } else {
-      contentDiv.style.maxHeight = '0px';
-      contentDiv.style.overflowY = 'hidden';
-    }
+  const { fieldset, contentDiv } = createCollapsibleFieldset('Dust Cloud Density', {
+    contentClasses: ['scrollable-category']
   });
 
-  const dustClouds = [
-    { name: 'Aquila', file: 'data/Aquila_cloud_data.json' },
-    { name: 'Auriga', file: 'data/Auriga_cloud_data.json' },
-    { name: 'Blue', file: 'data/Blue_cloud_data.json' },
-    { name: 'Ceti', file: 'data/Ceti_cloud_data.json' },
-    { name: 'Dorado', file: 'data/Dorado_cloud_data.json' },
-    { name: 'Eridani', file: 'data/Eridani_cloud_data.json' },
-    { name: 'Galactic', file: 'data/Galactic_cloud_data.json' },
-    { name: 'Gemini', file: 'data/Gemini_cloud_data.json' },
-    { name: 'Hyades', file: 'data/Hyades_cloud_data.json' },
-    { name: 'Leo', file: 'data/Leo_cloud_data.json' },
-    { name: 'Local Interstellar', file: 'data/Local_interstellar_cloud.json' },
-    { name: 'Microscopi', file: 'data/Microscopi_cloud_data.json' },
-    { name: 'North Galactic Pole', file: 'data/North_Galactic_Pole_cloud_data.json' },
-    { name: 'Ophiucus', file: 'data/Ophiucus_cloud_data.json' },
-    { name: 'Vela', file: 'data/Vela_cloud_data.json' }
-  ];
-
+  // Toggle all button
   const toggleDiv = document.createElement('div');
   toggleDiv.classList.add('filter-item');
   const toggleBtn = document.createElement('button');
@@ -432,126 +191,38 @@ function addCloudDensityFieldset() {
   toggleDiv.appendChild(toggleBtn);
   contentDiv.appendChild(toggleDiv);
 
-  dustClouds.forEach(cloud => {
-    const div = document.createElement('div');
-    div.classList.add('filter-item');
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.id = 'dust-density-' + cloud.name.replace(/\s+/g, '-').toLowerCase();
-    chk.name = 'dust-density-clouds';
-    chk.value = cloud.file;
-    chk.checked = false;
-    const lbl = document.createElement('label');
-    lbl.htmlFor = chk.id;
-    lbl.textContent = cloud.name;
-    div.appendChild(chk);
-    div.appendChild(lbl);
-    contentDiv.appendChild(div);
+  DUST_CLOUDS.forEach(cloud => {
+    const { container } = createCheckbox(
+      'dust-density-' + cloud.name.replace(/\s+/g, '-').toLowerCase(),
+      'dust-density-clouds', cloud.name, false, cloud.file
+    );
+    contentDiv.appendChild(container);
   });
 
-  const rDiv = document.createElement('div');
-  rDiv.classList.add('filter-item');
-  const rLabel = document.createElement('label');
-  rLabel.htmlFor = 'cloud-density-radius-slider';
-  rLabel.textContent = 'Radius:';
-  const rSlider = document.createElement('input');
-  rSlider.type = 'range';
-  rSlider.id = 'cloud-density-radius-slider';
-  rSlider.name = 'cloud-density-radius';
-  rSlider.min = '1';
-  rSlider.max = '20';
-  rSlider.value = '5';
-  rSlider.step = '1';
-  const rNumber = document.createElement('input');
-  rNumber.type = 'number';
-  rNumber.id = 'cloud-density-radius-number';
-  rNumber.name = 'cloud-density-radius';
-  rNumber.min = '1';
-  rNumber.max = '20';
-  rNumber.value = '5';
-  rNumber.step = '1';
-  const rSpan = document.createElement('span');
-  rSpan.id = 'cloud-density-radius-value';
-  rSpan.textContent = '5';
-  rDiv.appendChild(rLabel);
-  rDiv.appendChild(rSlider);
-  rDiv.appendChild(rNumber);
-  rDiv.appendChild(rSpan);
-  rDiv.appendChild(document.createTextNode(' LY'));
+  const { container: rDiv } = createRangeControl({
+    id: 'cloud-density-radius-slider', name: 'cloud-density-radius',
+    label: 'Radius:', min: 1, max: 20, value: 5, unit: ' LY'
+  });
   contentDiv.appendChild(rDiv);
 
-  const opDiv = document.createElement('div');
-  opDiv.classList.add('filter-item');
-  const opLabel = document.createElement('label');
-  opLabel.htmlFor = 'cloud-density-opacity-slider';
-  opLabel.textContent = 'Overlay Opacity:';
-  const opSlider = document.createElement('input');
-  opSlider.type = 'range';
-  opSlider.id = 'cloud-density-opacity-slider';
-  opSlider.name = 'cloud-density-opacity';
-  opSlider.min = '0';
-  opSlider.max = '100';
-  opSlider.value = '100';
-  opSlider.step = '1';
-  const opNumber = document.createElement('input');
-  opNumber.type = 'number';
-  opNumber.id = 'cloud-density-opacity-number';
-  opNumber.name = 'cloud-density-opacity';
-  opNumber.min = '0';
-  opNumber.max = '100';
-  opNumber.value = '100';
-  opNumber.step = '1';
-  const opSpan = document.createElement('span');
-  opSpan.id = 'cloud-density-opacity-value';
-  opSpan.textContent = '100';
-  opDiv.appendChild(opLabel);
-  opDiv.appendChild(opSlider);
-  opDiv.appendChild(opNumber);
-  opDiv.appendChild(opSpan);
-  opDiv.appendChild(document.createTextNode('%'));
+  const { container: opDiv } = createRangeControl({
+    id: 'cloud-density-opacity-slider', name: 'cloud-density-opacity',
+    label: 'Overlay Opacity:', min: 0, max: 100, value: 100, unit: '%'
+  });
   contentDiv.appendChild(opDiv);
 
-  rSlider.addEventListener('input', () => {
-    rNumber.value = rSlider.value;
-    rSpan.textContent = rSlider.value;
-  });
-  rNumber.addEventListener('input', () => {
-    rSlider.value = rNumber.value;
-    rSpan.textContent = rNumber.value;
-  });
-  opSlider.addEventListener('input', () => {
-    opNumber.value = opSlider.value;
-    opSpan.textContent = opSlider.value;
-  });
-  opNumber.addEventListener('input', () => {
-    opSlider.value = opNumber.value;
-    opSpan.textContent = opNumber.value;
-  });
-
-  fs.appendChild(contentDiv);
-  filterForm.appendChild(fs);
+  filterForm.appendChild(fieldset);
 }
 
 export function bindAdditionalOpacitySliders() {
-  const lineOpSlider = document.getElementById('constellation-line-opacity-slider');
-  const lineOpNumber = document.getElementById('constellation-line-opacity-number');
-  const lineOpSpan = document.getElementById('constellation-line-opacity-value');
-  if (lineOpSlider && lineOpNumber && lineOpSpan) {
-    lineOpSlider.addEventListener('input', () => {
-      lineOpNumber.value = lineOpSlider.value;
-      lineOpSpan.textContent = lineOpSlider.value;
-    });
-    lineOpNumber.addEventListener('input', () => {
-      lineOpSlider.value = lineOpNumber.value;
-      lineOpSpan.textContent = lineOpNumber.value;
-    });
-  }
+  syncSliderPair('constellation-line-opacity-slider', 'constellation-line-opacity-number', 'constellation-line-opacity-value');
 
+  // Line width with clamping
   const lineWidthSlider = document.getElementById('constellation-line-width-slider');
   const lineWidthNumber = document.getElementById('constellation-line-width-number');
   const lineWidthSpan = document.getElementById('constellation-line-width-value');
   if (lineWidthSlider && lineWidthNumber && lineWidthSpan) {
-    const updateWidthDisplay = val => {
+    const updateWidth = val => {
       const clamped = Math.min(5, Math.max(0.1, val));
       const display = clamped.toFixed(1);
       lineWidthNumber.value = display;
@@ -559,36 +230,23 @@ export function bindAdditionalOpacitySliders() {
       return clamped;
     };
     lineWidthSlider.addEventListener('input', () => {
-      const current = parseFloat(lineWidthSlider.value);
-      const normalized = updateWidthDisplay(Number.isFinite(current) ? current : 1);
-      lineWidthSlider.value = normalized.toString();
+      const v = parseFloat(lineWidthSlider.value);
+      lineWidthSlider.value = updateWidth(Number.isFinite(v) ? v : 1).toString();
     });
     lineWidthNumber.addEventListener('input', () => {
-      const current = parseFloat(lineWidthNumber.value);
-      const normalized = updateWidthDisplay(Number.isFinite(current) ? current : 1);
-      lineWidthSlider.value = normalized.toString();
+      const v = parseFloat(lineWidthNumber.value);
+      lineWidthSlider.value = updateWidth(Number.isFinite(v) ? v : 1).toString();
     });
   }
 
-  const nameOpSlider = document.getElementById('constellation-name-opacity-slider');
-  const nameOpNumber = document.getElementById('constellation-name-opacity-number');
-  const nameOpSpan = document.getElementById('constellation-name-opacity-value');
-  if (nameOpSlider && nameOpNumber && nameOpSpan) {
-    nameOpSlider.addEventListener('input', () => {
-      nameOpNumber.value = nameOpSlider.value;
-      nameOpSpan.textContent = nameOpSlider.value;
-    });
-    nameOpNumber.addEventListener('input', () => {
-      nameOpSlider.value = nameOpNumber.value;
-      nameOpSpan.textContent = nameOpNumber.value;
-    });
-  }
+  syncSliderPair('constellation-name-opacity-slider', 'constellation-name-opacity-number', 'constellation-name-opacity-value');
 
+  // Border width with clamping
   const borderWidthSlider = document.getElementById('mollweide-border-width-slider');
   const borderWidthNumber = document.getElementById('mollweide-border-width-number');
   const borderWidthSpan = document.getElementById('mollweide-border-width-value');
   if (borderWidthSlider && borderWidthNumber && borderWidthSpan) {
-    const updateBorderWidthDisplay = val => {
+    const updateBorderWidth = val => {
       const clamped = Math.min(10, Math.max(0.1, val));
       const display = clamped.toFixed(1);
       borderWidthNumber.value = display;
@@ -596,42 +254,15 @@ export function bindAdditionalOpacitySliders() {
       return clamped;
     };
     borderWidthSlider.addEventListener('input', () => {
-      const current = parseFloat(borderWidthSlider.value);
-      const normalized = updateBorderWidthDisplay(Number.isFinite(current) ? current : 1);
-      borderWidthSlider.value = normalized.toString();
+      const v = parseFloat(borderWidthSlider.value);
+      borderWidthSlider.value = updateBorderWidth(Number.isFinite(v) ? v : 1).toString();
     });
     borderWidthNumber.addEventListener('input', () => {
-      const current = parseFloat(borderWidthNumber.value);
-      const normalized = updateBorderWidthDisplay(Number.isFinite(current) ? current : 1);
-      borderWidthSlider.value = normalized.toString();
+      const v = parseFloat(borderWidthNumber.value);
+      borderWidthSlider.value = updateBorderWidth(Number.isFinite(v) ? v : 1).toString();
     });
   }
 
-  const borderOpacitySlider = document.getElementById('mollweide-border-opacity-slider');
-  const borderOpacityNumber = document.getElementById('mollweide-border-opacity-number');
-  const borderOpacitySpan = document.getElementById('mollweide-border-opacity-value');
-  if (borderOpacitySlider && borderOpacityNumber && borderOpacitySpan) {
-    borderOpacitySlider.addEventListener('input', () => {
-      borderOpacityNumber.value = borderOpacitySlider.value;
-      borderOpacitySpan.textContent = borderOpacitySlider.value;
-    });
-    borderOpacityNumber.addEventListener('input', () => {
-      borderOpacitySlider.value = borderOpacityNumber.value;
-      borderOpacitySpan.textContent = borderOpacityNumber.value;
-    });
-  }
-
-  const planeOpSlider = document.getElementById('plane-opacity-slider');
-  const planeOpNumber = document.getElementById('plane-opacity-number');
-  const planeOpSpan = document.getElementById('plane-opacity-value');
-  if (planeOpSlider && planeOpNumber && planeOpSpan) {
-    planeOpSlider.addEventListener('input', () => {
-      planeOpNumber.value = planeOpSlider.value;
-      planeOpSpan.textContent = planeOpSlider.value;
-    });
-    planeOpNumber.addEventListener('input', () => {
-      planeOpSlider.value = planeOpNumber.value;
-      planeOpSpan.textContent = planeOpNumber.value;
-    });
-  }
+  syncSliderPair('mollweide-border-opacity-slider', 'mollweide-border-opacity-number', 'mollweide-border-opacity-value');
+  syncSliderPair('plane-opacity-slider', 'plane-opacity-number', 'plane-opacity-value');
 }
