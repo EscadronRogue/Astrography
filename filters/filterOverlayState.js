@@ -56,10 +56,13 @@ const ISOLATION_MESH_CONFIG = {
 /** Mesh layout for the density overlay. */
 const DENSITY_MESH_CONFIG = {
   cubes: [
-    { prop: 'tcMesh', scene: 'tc' }
+    { prop: 'tcMesh', scene: 'tc' },
+    { prop: 'globeMesh', scene: 'globe' },
+    { prop: 'mollweideMesh', scene: 'moll' }
   ],
   lines: [
-    { prop: 'line', scene: 'globe' }
+    { prop: 'line', scene: 'globe' },
+    { prop: 'lineM', scene: 'moll' }
   ],
   extra: [
     { prop: 'textureMesh', scene: 'moll' }
@@ -105,9 +108,12 @@ function addDensityToScenes(overlay, scenes) {
   const normalizedScenes = normalizeScenes(scenes);
   overlay.cubesData.forEach(cell => {
     normalizedScenes.tc?.add(cell.tcMesh);
+    normalizedScenes.globe?.add(cell.globeMesh);
+    normalizedScenes.moll?.add(cell.mollweideMesh);
   });
   overlay.adjacentLines.forEach(obj => {
     normalizedScenes.globe?.add(obj.line);
+    normalizedScenes.moll?.add(obj.lineM);
   });
   normalizedScenes.moll?.add(overlay.textureMesh);
 }
@@ -149,7 +155,7 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
       addDensityToScenes(densityOverlay, normalizedScenes);
     }
 
-    updateDensityFilter(allStars, densityOverlay, normalizedScenes.tc, normalizedScenes.globe, normalizedScenes.moll);
+    updateDensityFilter(allStars, densityOverlay, normalizedScenes.tc, normalizedScenes.globe, normalizedScenes.moll, filters);
   } else {
     removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG, normalizedScenes);
     densityOverlay = null;
