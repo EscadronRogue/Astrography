@@ -34,7 +34,7 @@ import {
 import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
-import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
+import { cachedRadToSphere, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
 import { minimalRADifference } from './utils.js';
 import { initFilterUI } from './ui/filterUI.js';
 import { loadStarData } from './app/starData.js';
