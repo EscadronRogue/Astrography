@@ -14,7 +14,6 @@ import { loadCachedCloudData } from './dustCloudDataCache.js';
 import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../utils/renderUtils.js';
 import { uniqueColorFromName, getCloudNameFromFileUrl } from '../shared/colorUtils.js';
 import { GLOBE_RADIUS, CIRCLE_SEGMENTS } from '../shared/constants.js';
-import { getStarDistance } from '../shared/starUtils.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -55,7 +54,7 @@ export async function createCloudOverlay(
   const cloudStars = [];
 
   completeStarList.forEach(star => {
-    const distance = getStarDistance(star, Number.POSITIVE_INFINITY);
+    const distance = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
     if (distance > 100) return;
     if (cloudNames.has(normalizeCloudStarName(star.Common_name_of_the_star))) {
       if (mapType === 'TrueCoordinates' && star.truePosition) {

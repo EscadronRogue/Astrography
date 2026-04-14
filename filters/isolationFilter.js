@@ -5,7 +5,6 @@ import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densi
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, vectorToRaDec } from '../utils/geometryUtils.js';
 import { minimalRADifference } from '../utils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries, loadConstellationFullNames } from './constellationFilter.js';
-import { getStarDistance } from '../shared/starUtils.js';
 
 // Helper to create line materials that support color and opacity gradients.
 function createGradientLineMaterial() {
@@ -142,7 +141,7 @@ class IsolationGridOverlay {
     }
     // Compute distances using an extended star set.
     const extendedStars = stars.filter(star => {
-      const d = getStarDistance(star, Number.POSITIVE_INFINITY);
+      const d = star.Distance_from_the_Sun;
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
@@ -247,7 +246,7 @@ class IsolationGridOverlay {
 
     // Recalculate distances for each cell based on an extended set of stars.
     const extendedStars = stars.filter(star => {
-      const d = getStarDistance(star, Number.POSITIVE_INFINITY);
+      const d = star.Distance_from_the_Sun;
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
