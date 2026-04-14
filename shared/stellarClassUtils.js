@@ -5,65 +5,97 @@
  */
 import { STELLAR_CLASS_SET } from './constants.js';
 
-const WHITE_DWARF_PREFIXES = ['DA', 'DB', 'DC', 'DO', 'DQ', 'DZ', 'DX', 'DQZ', 'DAZ', 'DBZ', 'DCZ'];
-const SUBDWARF_PREFIX_RE = /^(?:usd|esd|sd)([OBAFGKMLTY])|^d([OBAFGKMLTY])/i;
-const STANDARD_CLASS_RE = /^[OBAFGKMLTYD]/i;
+const LOWERCASE_DWARF_PREFIX_PATTERN = /^(?:usd|esd|sd|d)([OBAFGKMLTY])/;
+const WHITE_DWARF_PATTERN = /^D[A-Z0-9]/;
+const LEADING_SPECTRAL_CLASS_PATTERN = /^([OBAFGKMLTY])/;
+const KNOWN_CLASS_OVERRIDES = Object.freeze({
+  'Gliese 229 Bb': 'T'
+});
 
-function readRawClass(star) {
-  if (typeof star?.primaryClass === 'string' && star.primaryClass.trim()) {
-    return star.primaryClass.trim();
-  }
-  if (typeof star?.spectralClass === 'string' && star.spectralClass.trim()) {
-    return star.spectralClass.trim();
-  }
-  if (typeof star?.Stellar_class === 'string' && star.Stellar_class.trim()) {
-    return star.Stellar_class.trim();
-  }
-  return '';
+/**
+ * Extracts the primary spectral class letter from the available star metadata.
+ * Supports normal spectral classes, brown dwarfs, and a dedicated white dwarf D class.
+ * Falls back to curated name overrides and coarse color heuristics for known incomplete rows.
+ * @param {Object} star - Star object with optional classification metadata.
+ * @returns {string} Single uppercase letter (O, B, A, F, G, K, M, L, T, Y, D) or 'Other'.
+ */
+export function getPrimaryClass(star) {
+  if (!star || typeof star !== 'object') return 'Other';
+
+  const normalizedPrimaryClass = normalizePrimaryClass(star.primaryClass);
+  if (normalizedPrimaryClass) return normalizedPrimaryClass;
+
+  const knownOverride = getKnownClassOverride(star);
+  if (knownOverride) return knownOverride;
+
+  const stellarClass = typeof star.Stellar_class === 'string' ? star.Stellar_class.trim() : '';
+  const parsedStellarClass = parseStellarClass(stellarClass);
+  if (parsedStellarClass) return parsedStellarClass;
+
+  const colorFallbackClass = inferClassFromColor(star.Color);
+  if (colorFallbackClass) return colorFallbackClass;
+
+  return 'Other';
 }
 
-function normalizeNamedOverrides(star) {
-  const name = `${star?.Common_name_of_the_star || ''} ${star?.Common_name_of_the_star_system || ''}`.toLowerCase();
-  if (name.includes('gliese 229 bb')) return 'T';
-  if (name.includes('2mass j0429+3806')) return 'L';
+function normalizePrimaryClass(primaryClass) {
+  if (typeof primaryClass !== 'string') return null;
+  const normalized = primaryClass.trim().toUpperCase();
+  if (STELLAR_CLASS_SET.has(normalized)) return normalized;
+  if (normalized === 'OTHER') return 'Other';
   return null;
 }
 
-function isWhiteDwarfClass(rawClass) {
-  const upper = rawClass.toUpperCase();
-  return WHITE_DWARF_PREFIXES.some(prefix => upper.startsWith(prefix)) || upper.startsWith('D');
+function getKnownClassOverride(star) {
+  const commonName = typeof star.Common_name_of_the_star === 'string'
+    ? star.Common_name_of_the_star.trim()
+    : '';
+  const systemName = typeof star.Common_name_of_the_star_system === 'string'
+    ? star.Common_name_of_the_star_system.trim()
+    : '';
+  return KNOWN_CLASS_OVERRIDES[commonName] || KNOWN_CLASS_OVERRIDES[systemName] || null;
 }
 
-/**
- * Extracts the primary spectral class bucket from a star.
- * Supports standard MK classes, brown dwarf L/T/Y classes, and a dedicated D bucket for white dwarfs.
- * @param {Object} star - Star object.
- * @returns {string} One of O, B, A, F, G, K, M, L, T, Y, D, or 'Other'.
- */
-export function getPrimaryClass(star) {
-  if (star?.primaryClass === 'Other') return 'Other';
+function parseStellarClass(stellarClass) {
+  if (!stellarClass) return null;
 
-  const namedOverride = normalizeNamedOverrides(star);
-  if (namedOverride) return namedOverride;
-
-  const rawClass = readRawClass(star);
-  if (!rawClass) return 'Other';
-
-  const subdwarfMatch = rawClass.match(SUBDWARF_PREFIX_RE);
-  if (subdwarfMatch && rawClass[0] === rawClass[0].toLowerCase()) {
-    const candidate = (subdwarfMatch[1] || subdwarfMatch[2]).toUpperCase();
-    return STELLAR_CLASS_SET.has(candidate) ? candidate : 'Other';
+  const lowercaseDwarfMatch = stellarClass.match(LOWERCASE_DWARF_PREFIX_PATTERN);
+  if (lowercaseDwarfMatch) {
+    return lowercaseDwarfMatch[1].toUpperCase();
   }
 
-  if (isWhiteDwarfClass(rawClass)) return 'D';
+  const normalized = stellarClass.toUpperCase();
+  if (normalized === 'OTHER' || normalized === 'UNKNOWN') return null;
 
-  const standardMatch = rawClass.match(STANDARD_CLASS_RE);
-  if (standardMatch) {
-    const candidate = standardMatch[0].toUpperCase();
-    return STELLAR_CLASS_SET.has(candidate) ? candidate : 'Other';
+  if (WHITE_DWARF_PATTERN.test(normalized)) {
+    return 'D';
   }
 
-  return 'Other';
+  const leadingSpectralClassMatch = normalized.match(LEADING_SPECTRAL_CLASS_PATTERN);
+  if (leadingSpectralClassMatch) {
+    return leadingSpectralClassMatch[1];
+  }
+
+  return null;
+}
+
+function inferClassFromColor(colorValue) {
+  if (typeof colorValue !== 'string') return null;
+  const normalizedColor = colorValue.trim().toLowerCase();
+  if (!normalizedColor || normalizedColor === 'unknown') return null;
+
+  if (normalizedColor.includes('white dwarf')) return 'D';
+  if (normalizedColor.includes('sub-brown dwarf')) return 'Y';
+  if (normalizedColor.includes('brown dwarf')) return 'L';
+  if (normalizedColor.includes('white-blue') || normalizedColor.includes('blue-white')) return 'B';
+  if (normalizedColor.includes('yellow-white')) return 'F';
+  if (normalizedColor.includes('blue')) return 'O';
+  if (normalizedColor.includes('white')) return 'A';
+  if (normalizedColor.includes('yellow')) return 'G';
+  if (normalizedColor.includes('orange')) return 'K';
+  if (normalizedColor.includes('red')) return 'M';
+
+  return null;
 }
 
 /**

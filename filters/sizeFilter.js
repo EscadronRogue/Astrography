@@ -3,7 +3,6 @@
 import { getStellarClassData } from './stellarClassData.js';
 import { getPrimaryClass } from '../shared/stellarClassUtils.js';
 import { DISTANCE_SIZE_SCALE } from '../shared/constants.js';
-import { getStarDistance } from '../shared/starUtils.js';
 
 /**
  * Applies size-related filters to the given stars array.
@@ -18,9 +17,8 @@ export function applySizeFilter(stars, filters) {
   // Pre-compute distance range if needed
   let minDistance, maxDistance;
   if (filters.size === 'distance') {
-    const distances = stars.map(star => getStarDistance(star)).filter(Number.isFinite);
-    minDistance = distances.length > 0 ? Math.min(...distances) : 0;
-    maxDistance = distances.length > 0 ? Math.max(...distances) : minDistance;
+    minDistance = Math.min(...stars.map(s => s.Distance_from_the_Sun));
+    maxDistance = Math.max(...stars.map(s => s.Distance_from_the_Sun));
   }
 
   stars.forEach(star => {
@@ -28,9 +26,8 @@ export function applySizeFilter(stars, filters) {
 
     // 1) Base size from selected mode
     if (filters.size === 'distance') {
-      const distance = getStarDistance(star, maxDistance);
       star.displaySize =
-        DISTANCE_SIZE_SCALE * (maxDistance - distance) / (maxDistance - minDistance + 1) + 1;
+        DISTANCE_SIZE_SCALE * (maxDistance - star.Distance_from_the_Sun) / (maxDistance - minDistance + 1) + 1;
     } else if (filters.size === 'stellar-class') {
       const classData = stellarClassData[primaryClass];
       star.displaySize = classData ? classData.size : 1;

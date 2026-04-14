@@ -1,6 +1,6 @@
 /**
  * @file Handles stellar class visibility logic and builds the UI subcategories.
- * Each spectral class (O, B, A, F, G, K, M, L, T, Y, Other) gets a collapsible
+ * Each spectral class (O, B, A, F, G, K, M, L, T, Y, D, Other) gets a collapsible
  * section with class-level and individual star visibility controls.
  */
 import { getStellarClassData } from './stellarClassData.js';

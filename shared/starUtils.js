@@ -13,13 +13,10 @@ export function getStarId(star) {
 }
 
 export function getStarCoordinates(star) {
-  if (Number.isFinite(star?.raRad) && Number.isFinite(star?.decRad)) {
-    return { ra: star.raRad, dec: star.decRad };
-  }
-  if (Number.isFinite(star?.RA_in_radian) && Number.isFinite(star?.DEC_in_radian)) {
+  if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
     return { ra: star.RA_in_radian, dec: star.DEC_in_radian };
   }
-  if (Number.isFinite(star?.RA_in_degrees) && Number.isFinite(star?.DEC_in_degrees)) {
+  if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
     return {
       ra: degToRad(star.RA_in_degrees),
       dec: degToRad(star.DEC_in_degrees)
