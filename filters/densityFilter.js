@@ -253,22 +253,14 @@ class DensityGridOverlay {
     this.texture.needsUpdate = true;
   }
 
-  update(stars, sceneTC, sceneGlobe, sceneMoll) {
-    const radiusSlider = document.getElementById('density-slider');
-    const tolSlider = document.getElementById('density-tolerance-slider');
-    const bottomSlider = document.getElementById('density-bottom-slider');
-    const topSlider = document.getElementById('density-top-slider');
-    const opacitySlider = document.getElementById('density-opacity-slider');
-    const widthSlider = document.getElementById('density-line-width-slider');
-    const fadeSlider = document.getElementById('density-fade-slider');
-    const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
-    const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
-    const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
-    const topPct = topSlider ? parseFloat(topSlider.value) : 10;
-    this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
-    let newWidth = this.mollLineWidth;
-    if (widthSlider) newWidth = parseFloat(widthSlider.value);
-    if (fadeSlider) this.fadePower = parseFloat(fadeSlider.value);
+  update(stars, sceneTC, sceneGlobe, sceneMoll, settings = {}) {
+    const radius = Number.isFinite(settings.density) ? settings.density : 10;
+    const tolerance = Number.isFinite(settings.densityTolerance) ? settings.densityTolerance : 0;
+    const bottomPct = Number.isFinite(settings.densityBottomPercent) ? settings.densityBottomPercent : 10;
+    const topPct = Number.isFinite(settings.densityTopPercent) ? settings.densityTopPercent : 10;
+    this.opacityFactor = Number.isFinite(settings.densityOpacity) ? settings.densityOpacity : 1.0;
+    let newWidth = Number.isFinite(settings.densityLineWidth) ? settings.densityLineWidth : this.mollLineWidth;
+    this.fadePower = Number.isFinite(settings.densityFade) ? settings.densityFade : this.fadePower;
 
     if (newWidth !== this.mollLineWidth) {
       this.mollLineWidth = newWidth;
@@ -322,6 +314,8 @@ class DensityGridOverlay {
       cell.globeMesh.material.color.copy(color);
       cell.mollweideMesh.material.color.copy(color);
       cell.tcMesh.visible = cell.active;
+      cell.globeMesh.visible = cell.active;
+      cell.mollweideMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
     });
@@ -349,13 +343,18 @@ class DensityGridOverlay {
       this.cubesData.forEach(c => { sceneTC.add(c.tcMesh); });
     }
     if (sceneGlobe) {
+      this.cubesData.forEach(c => { sceneGlobe.add(c.globeMesh); });
       this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
     }
     if (sceneMoll) {
+      this.cubesData.forEach(c => { sceneMoll.add(c.mollweideMesh); });
+      this.adjacentLines.forEach(o => { sceneMoll.add(o.lineM); });
       if (!sceneMoll.children.includes(this.textureMesh)) {
         sceneMoll.add(this.textureMesh);
       }
     }
+    const hasActiveCells = this.cubesData.some(cell => cell.active);
+    this.textureMesh.visible = hasActiveCells;
     this.drawHeatmap(getMollweideLambda0());
   }
 
