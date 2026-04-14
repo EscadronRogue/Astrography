@@ -1,4 +1,4 @@
-const STELLAR_CLASSES = ['O', 'B', 'A', 'F', 'G', 'K', 'M', 'L', 'T', 'Y', 'Other'];
+const STELLAR_CLASSES = ['O', 'B', 'A', 'F', 'G', 'K', 'M', 'L', 'T', 'Y', 'D', 'Other'];
 
 function readNumericValue(formData, name, fallback, parser = Number.parseFloat) {
   const rawValue = formData.get(name);

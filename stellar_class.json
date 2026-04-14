@@ -48,5 +48,10 @@
     "color": "#3B2717",
     "size": 2,
     "hierarchy": 10
+  },
+  "D": {
+    "color": "#DDE6F5",
+    "size": 2.4,
+    "hierarchy": 11
   }
 }

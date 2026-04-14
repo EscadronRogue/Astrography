@@ -15,3 +15,7 @@ coverage/
 *.local
 *.bak
 *.orig
+exports/
+*.export.png
+*.export.pdf
+*.tmp.png
