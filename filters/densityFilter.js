@@ -134,8 +134,6 @@ class DensityGridOverlay {
           });
           const cubeTC = new THREE.Mesh(geometry, material);
           cubeTC.position.copy(posTC);
-          cubeTC.renderOrder = 5;
-          cubeTC.material.depthTest = false;
 
           const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
           const circleGeom = new THREE.CircleGeometry(this.gridSize / 2, 32);
@@ -143,10 +141,6 @@ class DensityGridOverlay {
           planeMat.side = THREE.DoubleSide;
           const squareGlobe = new THREE.Mesh(planeGeom, planeMat.clone());
           const circleMoll = new THREE.Mesh(circleGeom, planeMat.clone());
-          squareGlobe.renderOrder = 5;
-          circleMoll.renderOrder = 5;
-          squareGlobe.material.depthTest = false;
-          circleMoll.material.depthTest = false;
 
           let projectedPos;
           let ra, dec;
@@ -322,14 +316,22 @@ class DensityGridOverlay {
     this.texture.needsUpdate = true;
   }
 
-  update(stars, sceneTC, sceneGlobe, sceneMoll, settings = {}) {
-    const radius = Number.isFinite(settings.density) ? settings.density : 10;
-    const tolerance = Number.isFinite(settings.densityTolerance) ? settings.densityTolerance : 0;
-    const bottomPct = Number.isFinite(settings.densityBottomPercent) ? settings.densityBottomPercent : 10;
-    const topPct = Number.isFinite(settings.densityTopPercent) ? settings.densityTopPercent : 10;
-    this.opacityFactor = Number.isFinite(settings.densityOpacity) ? settings.densityOpacity : 1.0;
-    let newWidth = Number.isFinite(settings.densityLineWidth) ? settings.densityLineWidth : this.mollLineWidth;
-    this.fadePower = Number.isFinite(settings.densityFade) ? settings.densityFade : this.fadePower;
+  update(stars, sceneTC, sceneGlobe, sceneMoll) {
+    const radiusSlider = document.getElementById('density-slider');
+    const tolSlider = document.getElementById('density-tolerance-slider');
+    const bottomSlider = document.getElementById('density-bottom-slider');
+    const topSlider = document.getElementById('density-top-slider');
+    const opacitySlider = document.getElementById('density-opacity-slider');
+    const widthSlider = document.getElementById('density-line-width-slider');
+    const fadeSlider = document.getElementById('density-fade-slider');
+    const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
+    const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
+    const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
+    const topPct = topSlider ? parseFloat(topSlider.value) : 10;
+    this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
+    let newWidth = this.mollLineWidth;
+    if (widthSlider) newWidth = parseFloat(widthSlider.value);
+    if (fadeSlider) this.fadePower = parseFloat(fadeSlider.value);
 
     if (newWidth !== this.mollLineWidth) {
       this.mollLineWidth = newWidth;
@@ -343,33 +345,39 @@ class DensityGridOverlay {
 
     this.cubesData.forEach(cell => {
       this.computeCellDensity(cell, extendedStars, radius, tolerance);
-      cell.active = false;
     });
 
-    const rankedCells = this.cubesData.slice().sort((a, b) => a.density - b.density);
-    const cellCount = rankedCells.length;
-    if (cellCount === 0) return;
+    const densities = this.cubesData.map(c => c.density);
+    const sorted = densities.slice().sort((a, b) => a - b);
+    const bottomIdx = Math.floor(sorted.length * (bottomPct / 100));
+    const topIdx = Math.floor(sorted.length * (1 - topPct / 100));
+    const minD = sorted[0];
+    const maxD = sorted[sorted.length - 1];
+    const bottomThr = sorted[Math.min(bottomIdx, sorted.length - 1)];
+    const topThr = sorted[Math.max(topIdx, 0)];
 
-    const bottomCount = Math.min(cellCount, Math.max(1, Math.floor(cellCount * (bottomPct / 100))));
-    const topCount = Math.min(cellCount, Math.max(1, Math.floor(cellCount * (topPct / 100))));
-    const bottomCells = rankedCells.slice(0, bottomCount);
-    const topCells = rankedCells.slice(cellCount - topCount);
-
-    const bottomMin = bottomCells[0]?.density ?? 0;
-    const bottomMax = bottomCells[bottomCells.length - 1]?.density ?? bottomMin;
-    const topMin = topCells[0]?.density ?? 0;
-    const topMax = topCells[topCells.length - 1]?.density ?? topMin;
-
-    const baseBlue = new THREE.Color(0x0000ff);
-    const white = new THREE.Color(0xffffff);
-    const baseRed = new THREE.Color(0xff0000);
-    const lightRed = lightenColor(baseRed.clone(), 0.4);
-
-    const applyVisuals = (cell, color, alpha) => {
+    this.cubesData.forEach(cell => {
       const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
+      let color = new THREE.Color(0xffffff);
+      let alpha = 0;
+      if (cell.density <= bottomThr) {
+        const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
+        color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0xffffff), t);
+        alpha = 0.5 * (1 - t);
+        cell.active = true;
+      } else if (cell.density >= topThr) {
+        const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
+        const baseRed = new THREE.Color(0xff0000);
+        const lightRed = lightenColor(baseRed.clone(), 0.4);
+        color = lightRed.lerp(baseRed, t);
+        alpha = 0.5 * t;
+        cell.active = true;
+      } else {
+        cell.active = false;
+      }
+
       const finalAlpha = alpha * this.opacityFactor;
-      cell.active = finalAlpha > 0;
       cell.tcMesh.material.opacity = finalAlpha;
       cell.globeMesh.material.opacity = finalAlpha;
       cell.mollweideMesh.material.opacity = finalAlpha;
@@ -377,28 +385,8 @@ class DensityGridOverlay {
       cell.globeMesh.material.color.copy(color);
       cell.mollweideMesh.material.color.copy(color);
       cell.tcMesh.visible = cell.active;
-      cell.globeMesh.visible = cell.active;
-      cell.mollweideMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
-    };
-
-    this.cubesData.forEach(cell => {
-      applyVisuals(cell, white, 0);
-    });
-
-    bottomCells.forEach(cell => {
-      const t = bottomMax === bottomMin ? 0 : (cell.density - bottomMin) / (bottomMax - bottomMin);
-      const color = baseBlue.clone().lerp(white, t);
-      const alpha = THREE.MathUtils.lerp(0.5, 0.15, t);
-      applyVisuals(cell, color, alpha);
-    });
-
-    topCells.forEach(cell => {
-      const t = topMax === topMin ? 1 : (cell.density - topMin) / (topMax - topMin);
-      const color = lightRed.clone().lerp(baseRed, t);
-      const alpha = THREE.MathUtils.lerp(0.15, 0.5, t);
-      applyVisuals(cell, color, alpha);
     });
     this.adjacentLines.forEach(obj => {
       const { line, lineM, cell1, cell2 } = obj;
@@ -421,21 +409,16 @@ class DensityGridOverlay {
       }
     });
     if (sceneTC) {
-      this.cubesData.forEach(c => { if (!c.tcMesh.parent) sceneTC.add(c.tcMesh); });
+      this.cubesData.forEach(c => { sceneTC.add(c.tcMesh); });
     }
     if (sceneGlobe) {
-      this.cubesData.forEach(c => { if (!c.globeMesh.parent) sceneGlobe.add(c.globeMesh); });
-      this.adjacentLines.forEach(o => { if (!o.line.parent) sceneGlobe.add(o.line); });
+      this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
     }
     if (sceneMoll) {
-      this.cubesData.forEach(c => { if (!c.mollweideMesh.parent) sceneMoll.add(c.mollweideMesh); });
-      this.adjacentLines.forEach(o => { if (!o.lineM.parent) sceneMoll.add(o.lineM); });
       if (!sceneMoll.children.includes(this.textureMesh)) {
         sceneMoll.add(this.textureMesh);
       }
     }
-    const hasActiveCells = this.cubesData.some(cell => cell.active);
-    this.textureMesh.visible = hasActiveCells;
     this.drawHeatmap(getMollweideLambda0());
   }
 
