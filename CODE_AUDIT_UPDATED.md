@@ -1,16 +1,3 @@
-# Applied refactor update — April 14, 2026
-
-This audit has now been partially executed in code. The following high-risk items from the action list are no longer pending:
-
-- Mollweide export logic was extracted from `script.js` into `script/exportManager.js`.
-- Mollweide label/line editing logic was extracted from `script.js` into `script/editManager.js`.
-- Opacity values are now normalized at the form boundary and propagated internally as 0–1 values.
-- Distance-based sizing/isolation/density/cloud code now uses normalized distance access instead of scattered legacy reads.
-
-The remaining highest-priority architectural item is the `script.js` state facade, which is now less burdened but still not fully replaced by a plain application state tree.
-
----
-
 # Astrography — Code Audit (replacement)
 
 **Date:** April 14, 2026  
