@@ -3,6 +3,8 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
 import { createWideLineMaterial, buildWideLineGeometry } from '../utils/renderUtils.js';
+import { getStarTruePosition } from '../shared/starUtils.js';
+import { GLOBE_RADIUS, DEFAULT_STAR_COLOR } from '../shared/constants.js';
 
 // Tunable parameters for the connections lines
 let connectionMaxWidth = 5;
@@ -16,74 +18,87 @@ export function setConnectionLineParams(maxWidth, fadePower, labelSize = 1.0) {
 }
 
 const GC_SEGMENTS = 32;
+const STAR_POSITION_CACHE_KEY = Symbol('connectionPositionCache');
 
-/**
- * Helper: Returns a THREE.Vector3 for a star’s position.
- *  - If star.truePosition is available, it is returned.
- *  - Otherwise, if x_coordinate, y_coordinate, z_coordinate exist, they are used.
- *  - Otherwise, if RA_in_degrees and DEC_in_degrees exist, position is computed using:
- *      x = -Distance * cos(dec) * cos(ra)
- *      y = Distance * sin(dec)
- *      z = -Distance * cos(dec) * sin(ra)
- * @param {Object} star - The star object.
- * @returns {THREE.Vector3}
- */
 function getPosition(star) {
-  if (star.truePosition) {
-    return star.truePosition;
-  } else if (
-    star.x_coordinate !== undefined &&
-    star.y_coordinate !== undefined &&
-    star.z_coordinate !== undefined
-  ) {
-    return new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
-  } else if (
-    star.RA_in_degrees !== undefined &&
-    star.DEC_in_degrees !== undefined &&
-    star.Distance_from_the_Sun !== undefined
-  ) {
-    const ra = THREE.MathUtils.degToRad(star.RA_in_degrees);
-    const dec = THREE.MathUtils.degToRad(star.DEC_in_degrees);
-    const R = star.Distance_from_the_Sun;
-    return new THREE.Vector3(
-      -R * Math.cos(dec) * Math.cos(ra),
-       R * Math.sin(dec),
-      -R * Math.cos(dec) * Math.sin(ra)
-    );
+  if (star[STAR_POSITION_CACHE_KEY]) {
+    return star[STAR_POSITION_CACHE_KEY];
   }
-  return new THREE.Vector3(0, 0, 0);
+  const position = getStarTruePosition(star);
+  star[STAR_POSITION_CACHE_KEY] = position;
+  return position;
+}
+
+function getGridKey(position, cellSize) {
+  return [
+    Math.floor(position.x / cellSize),
+    Math.floor(position.y / cellSize),
+    Math.floor(position.z / cellSize)
+  ].join(',');
 }
 
 /**
  * Computes connection pairs between stars that are within maxDistance.
- *
- * @param {Array} stars - Array of star objects.
- * @param {number} maxDistance - Maximum allowed distance between stars.
- * @returns {Array} Array of connection objects: { starA, starB, distance }
+ * Uses a uniform spatial hash to avoid the prior O(n²) all-pairs scan.
  */
 export function computeConnectionPairs(stars, maxDistance) {
+  if (!Array.isArray(stars) || stars.length < 2 || !(maxDistance > 0)) {
+    return [];
+  }
+
   const pairs = [];
-  for (let i = 0; i < stars.length; i++) {
-    for (let j = i + 1; j < stars.length; j++) {
-      const starA = stars[i];
-      const starB = stars[j];
-      const posA = getPosition(starA);
-      const posB = getPosition(starB);
-      const distance = posA.distanceTo(posB);
-      if (distance > 0 && distance <= maxDistance) {
-        pairs.push({ starA, starB, distance });
+  const cellSize = maxDistance;
+  const spatialGrid = new Map();
+  const preparedStars = stars.map(star => ({ star, position: getPosition(star) }));
+
+  preparedStars.forEach(entry => {
+    const key = getGridKey(entry.position, cellSize);
+    let bucket = spatialGrid.get(key);
+    if (!bucket) {
+      bucket = [];
+      spatialGrid.set(key, bucket);
+    }
+    bucket.push(entry);
+  });
+
+  const neighborOffsets = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        neighborOffsets.push([dx, dy, dz]);
       }
     }
   }
+
+  const visitedBuckets = new Set();
+  for (const [key, bucket] of spatialGrid.entries()) {
+    const [ix, iy, iz] = key.split(',').map(Number);
+    for (const [dx, dy, dz] of neighborOffsets) {
+      const neighborKey = `${ix + dx},${iy + dy},${iz + dz}`;
+      const neighborBucket = spatialGrid.get(neighborKey);
+      if (!neighborBucket) continue;
+
+      const pairBucketKey = key < neighborKey ? `${key}|${neighborKey}` : `${neighborKey}|${key}`;
+      if (visitedBuckets.has(pairBucketKey)) continue;
+      visitedBuckets.add(pairBucketKey);
+
+      for (let i = 0; i < bucket.length; i++) {
+        const startJ = key === neighborKey ? i + 1 : 0;
+        for (let j = startJ; j < neighborBucket.length; j++) {
+          const starA = bucket[i];
+          const starB = neighborBucket[j];
+          const distance = starA.position.distanceTo(starB.position);
+          if (distance > 0 && distance <= maxDistance) {
+            pairs.push({ starA: starA.star, starB: starB.star, distance });
+          }
+        }
+      }
+    }
+  }
+
   return pairs;
 }
 
-/**
- * Merges connection line segments into a single THREE.LineSegments object.
- *
- * @param {Array} connectionObjs - Array of connection objects.
- * @returns {THREE.LineSegments} - The merged connection lines.
- */
 export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates', opacity = 0.5) {
   const positions = [];
   const colors = [];
@@ -91,8 +106,6 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
   connectionObjs.forEach(pair => {
     const { starA, starB } = pair;
     let posA, posB;
-    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
-    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
     if (mapType === 'Globe') {
       posA = starA.spherePosition;
       posB = starB.spherePosition;
@@ -103,40 +116,40 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
       );
       segments.forEach(([s1, s2]) => {
         positions.push(s1.x, s1.y, s1.z, s2.x, s2.y, s2.z);
-        const cA = new THREE.Color(starA.displayColor || '#ffffff');
-        const cB = new THREE.Color(starB.displayColor || '#ffffff');
+        const cA = new THREE.Color(starA.displayColor || DEFAULT_STAR_COLOR);
+        const cB = new THREE.Color(starB.displayColor || DEFAULT_STAR_COLOR);
         colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
       });
-      return; // continue to next pair
+      return;
     } else {
       posA = getPosition(starA);
       posB = getPosition(starB);
     }
+    if (!posA || !posB) return;
     positions.push(posA.x, posA.y, posA.z);
     positions.push(posB.x, posB.y, posB.z);
 
-    const cA = new THREE.Color(starA.displayColor || '#ffffff');
-    const cB = new THREE.Color(starB.displayColor || '#ffffff');
+    const cA = new THREE.Color(starA.displayColor || DEFAULT_STAR_COLOR);
+    const cB = new THREE.Color(starB.displayColor || DEFAULT_STAR_COLOR);
     colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
   });
-  
+
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  
+
   const material = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
     opacity,
     linewidth: 1
   });
-  
-  const mergedLines = new THREE.LineSegments(geometry, material);
-  return mergedLines;
+
+  return new THREE.LineSegments(geometry, material);
 }
 
 export function createMollweideConnectionSegments(pairs, opacity = 0.5) {
-  const segCount = pairs.length * GC_SEGMENTS * 2; // each GC segment may wrap
+  const segCount = pairs.length * GC_SEGMENTS * 2;
   const positions = new Float32Array(segCount * 2 * 3);
   const colors = new Float32Array(segCount * 2 * 3);
   const geometry = new THREE.BufferGeometry();
@@ -164,28 +177,27 @@ export function updateMollweideConnectionSegments(lineSegs) {
     const p1 = pair.starA.spherePosition;
     const p2 = pair.starB.spherePosition;
     if (!p1 || !p2) return;
-    const pts = greatCircleToMollweide(p1, p2, 100, segsCount, getMollweideLambda0());
-    const cA = new THREE.Color(pair.starA.displayColor || '#ffffff');
-    const cB = new THREE.Color(pair.starB.displayColor || '#ffffff');
+    const pts = greatCircleToMollweide(p1, p2, GLOBE_RADIUS, segsCount, getMollweideLambda0());
+    const cA = new THREE.Color(pair.starA.displayColor || DEFAULT_STAR_COLOR);
+    const cB = new THREE.Color(pair.starB.displayColor || DEFAULT_STAR_COLOR);
     for (let j = 0; j < pts.length - 1; j++) {
       const segs = splitMollweideWrap(pts[j], pts[j + 1]);
       segs.forEach(([s, e]) => {
         if (idx + 6 > posAttr.array.length) return;
-        posAttr.array[idx] = s.x; posAttr.array[idx+1] = s.y; posAttr.array[idx+2] = s.z;
-        posAttr.array[idx+3] = e.x; posAttr.array[idx+4] = e.y; posAttr.array[idx+5] = e.z;
+        posAttr.array[idx] = s.x; posAttr.array[idx + 1] = s.y; posAttr.array[idx + 2] = s.z;
+        posAttr.array[idx + 3] = e.x; posAttr.array[idx + 4] = e.y; posAttr.array[idx + 5] = e.z;
         const t1 = j / (pts.length - 1);
         const t2 = (j + 1) / (pts.length - 1);
-        colorAttr.array[idx]   = THREE.MathUtils.lerp(cA.r, cB.r, t1);
-        colorAttr.array[idx+1] = THREE.MathUtils.lerp(cA.g, cB.g, t1);
-        colorAttr.array[idx+2] = THREE.MathUtils.lerp(cA.b, cB.b, t1);
-        colorAttr.array[idx+3] = THREE.MathUtils.lerp(cA.r, cB.r, t2);
-        colorAttr.array[idx+4] = THREE.MathUtils.lerp(cA.g, cB.g, t2);
-        colorAttr.array[idx+5] = THREE.MathUtils.lerp(cA.b, cB.b, t2);
+        colorAttr.array[idx] = THREE.MathUtils.lerp(cA.r, cB.r, t1);
+        colorAttr.array[idx + 1] = THREE.MathUtils.lerp(cA.g, cB.g, t1);
+        colorAttr.array[idx + 2] = THREE.MathUtils.lerp(cA.b, cB.b, t1);
+        colorAttr.array[idx + 3] = THREE.MathUtils.lerp(cA.r, cB.r, t2);
+        colorAttr.array[idx + 4] = THREE.MathUtils.lerp(cA.g, cB.g, t2);
+        colorAttr.array[idx + 5] = THREE.MathUtils.lerp(cA.b, cB.b, t2);
         idx += 6;
       });
     }
   });
-  // zero out remaining
   for (; idx < posAttr.array.length; idx++) {
     posAttr.array[idx] = 0;
     colorAttr.array[idx] = 0;
@@ -195,14 +207,6 @@ export function updateMollweideConnectionSegments(lineSegs) {
   lineSegs.computeLineDistances();
 }
 
-/**
- * Creates individual connection line objects between star pairs.
- *
- * @param {Array} stars - Array of star objects.
- * @param {Array} pairs - Array of connection objects.
- * @param {string} mapType - 'Globe' or other.
- * @returns {Array} - Array of THREE.Line objects.
- */
 export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5) {
   if (!pairs || pairs.length === 0) return [];
 
@@ -210,16 +214,16 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
   const largestPairDistance = Math.max(...distances);
   const smallestPairDistance = Math.min(...distances);
   const lines = [];
-  
+
   pairs.forEach(pair => {
     const { starA, starB, distance } = pair;
     let posA, posB;
-    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
-    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
+    const c1 = new THREE.Color(starA.displayColor || DEFAULT_STAR_COLOR);
+    const c2 = new THREE.Color(starB.displayColor || DEFAULT_STAR_COLOR);
     if (mapType === 'Globe') {
       if (!starA.spherePosition || !starB.spherePosition) return;
-      posA = new THREE.Vector3(starA.spherePosition.x, starA.spherePosition.y, starA.spherePosition.z);
-      posB = new THREE.Vector3(starB.spherePosition.x, starB.spherePosition.y, starB.spherePosition.z);
+      posA = starA.spherePosition.clone();
+      posB = starB.spherePosition.clone();
     } else if (mapType === 'Mollweide') {
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
       const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
@@ -242,11 +246,9 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         group.add(mesh);
       });
 
-      // ---- distance label ----
-      // Determine midpoint and tangent along the actual rendered segments
       let totalLen = 0;
       const segLens = segments.map(([a, b]) => {
-        const len = a.clone().sub(b).length();
+        const len = a.distanceTo(b);
         totalLen += len;
         return len;
       });
@@ -274,6 +276,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       const fontSize = baseFontSize * connectionLabelSize;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
+      if (!ctx) return;
       ctx.font = `${fontSize}px Oswald`;
       const metrics = ctx.measureText(distanceText);
       const padX = 10;
@@ -304,21 +307,18 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       lines.push(group);
       return;
     } else {
-      // Use the computed truePosition if available
       posA = getPosition(starA).clone();
       posB = getPosition(starB).clone();
     }
-    
-    const gradientColor = c1.clone().lerp(c2, 0.5);
 
+    const gradientColor = c1.clone().lerp(c2, 0.5);
     const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
     const lineThickness = THREE.MathUtils.lerp(connectionMaxWidth, 1, normDist);
     const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
-    
+
     let points;
     if (mapType === 'Globe') {
-      const R = 100;
-      const curve = new THREE.CatmullRomCurve3(getGreatCirclePoints(posA, posB, R, 32));
+      const curve = new THREE.CatmullRomCurve3(getGreatCirclePoints(posA, posB, GLOBE_RADIUS, 32));
       points = curve.getPoints(32);
     } else {
       points = [posA, posB];
@@ -343,15 +343,6 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
   return lines;
 }
 
-/**
- * Helper function to compute points along a great‑circle path between two points.
- *
- * @param {THREE.Vector3} p1 - Starting position.
- * @param {THREE.Vector3} p2 - Ending position.
- * @param {number} R - Sphere radius.
- * @param {number} segments - Number of segments.
- * @returns {Array} - Array of THREE.Vector3 points.
- */
 function getGreatCirclePoints(p1, p2, R, segments) {
   const points = [];
   const start = p1.clone().normalize().multiplyScalar(R);
@@ -367,6 +358,4 @@ function getGreatCirclePoints(p1, p2, R, segments) {
   return points;
 }
 
-
-// Backward-compatible re-exports for modules that still import these helpers from this file.
 export { createWideLineMaterial, buildWideLineGeometry };

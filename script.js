@@ -34,12 +34,13 @@ import {
 import { ThreeDControls, TwoDControls } from './cameraControls.js';
 import { LabelManager } from './labelManager.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
-import { cachedRadToSphere, cachedRadToMollweide, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
+import { cachedRadToSphere, degToRad, setMollweideLambda0, getMollweideLambda0 } from './utils/geometryUtils.js';
 import { minimalRADifference } from './utils.js';
 import { initFilterUI } from './ui/filterUI.js';
 import { loadStarData } from './app/starData.js';
 import { captureStellarClassState, restoreStellarClassState } from './app/stellarClassState.js';
 import { maybeSavePresets, savePresets, loadPresets, clearSavedPresets } from './app/presets.js';
+import { getStarId as getSharedStarId, getStarTruePosition as getSharedStarTruePosition, getStarGlobePosition, getStarMollweidePosition, precalcMollweideData as precalcSharedMollweideData } from './shared/starUtils.js';
 
 let cachedStars = null;
 let currentFilteredStars = [];
@@ -154,88 +155,23 @@ function angleDiff(a, b) {
 }
 
 function getStarId(star) {
-  return (
-    star.Common_name_of_the_star ||
-    star.Common_name_of_the_star_system ||
-    star.HD ||
-    `${star.RA_in_degrees}_${star.DEC_in_degrees}`
-  );
+  return getSharedStarId(star);
 }
 
 function getStarTruePosition(star) {
-  const R = star.distance !== undefined ? star.distance : star.Distance_from_the_Sun;
-  let ra, dec;
-  if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
-    ra = star.RA_in_radian;
-    dec = star.DEC_in_radian;
-  } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
-    ra = degToRad(star.RA_in_degrees);
-    dec = degToRad(star.DEC_in_degrees);
-  } else {
-    ra = 0;
-    dec = 0;
-  }
-  return cachedRadToSphere(ra, dec, R);
+  return getSharedStarTruePosition(star);
 }
 
 function projectStarGlobe(star) {
-  const R = 100;
-  let ra, dec;
-  if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
-    ra = star.RA_in_radian;
-    dec = star.DEC_in_radian;
-  } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
-    ra = degToRad(star.RA_in_degrees);
-    dec = degToRad(star.DEC_in_degrees);
-  } else {
-    ra = 0;
-    dec = 0;
-  }
-  return cachedRadToSphere(ra, dec, R);
+  return getStarGlobePosition(star);
 }
 
 function projectStarMollweide(star) {
-  const R = 100;
-  let ra, dec;
-  if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
-    ra = star.RA_in_radian;
-    dec = star.DEC_in_radian;
-  } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
-    ra = degToRad(star.RA_in_degrees);
-    dec = degToRad(star.DEC_in_degrees);
-  } else {
-    ra = 0;
-    dec = 0;
-  }
-  return cachedRadToMollweide(ra, dec, R);
+  return getStarMollweidePosition(star);
 }
 
 function precalcMollweideData(star) {
-  const R = 100;
-  let ra, dec;
-  if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
-    ra = star.RA_in_radian;
-    dec = star.DEC_in_radian;
-  } else if (star.RA_in_degrees !== undefined && star.DEC_in_degrees !== undefined) {
-    ra = degToRad(star.RA_in_degrees);
-    dec = degToRad(star.DEC_in_degrees);
-  } else {
-    ra = 0;
-    dec = 0;
-  }
-  star.raRad = ra;
-  star.decRad = dec;
-  let theta = dec;
-  for (let i = 0; i < 10; i++) {
-    const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
-      (2 + 2 * Math.cos(2 * theta));
-    theta -= delta;
-    if (Math.abs(delta) < 1e-10) break;
-  }
-  const cosT = Math.cos(theta);
-  const sinT = Math.sin(theta);
-  star.mollXFactor = (2 * R / Math.PI) * cosT;
-  star.mollY = R * sinT;
+  return precalcSharedMollweideData(star);
 }
 
 function updateMollweidePosition(star) {
@@ -756,6 +692,7 @@ function createStarTexture() {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable');
   const gradient = ctx.createRadialGradient(
     size / 2,
     size / 2,
@@ -1467,6 +1404,7 @@ function exportMollweideMap(format = 'png', rect = null) {
   finalCanvas.width = exportCropW;
   finalCanvas.height = exportCropH;
   const ctx = finalCanvas.getContext('2d');
+  if (!ctx) throw new Error('2D canvas context unavailable');
   const maxSize = exportRenderer.capabilities.maxTextureSize;
   const tile = Math.min(Math.floor(maxSize / scale), 8192);
   for (let y = cropY; y < cropY + cropH; y += tile) {
