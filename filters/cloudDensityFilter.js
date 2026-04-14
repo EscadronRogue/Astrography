@@ -22,6 +22,7 @@ class CloudDensityGridOverlay {
     this.canvas.width = this.canvasWidth;
     this.canvas.height = this.canvasHeight;
     this.ctx = this.canvas.getContext('2d');
+    if (!this.ctx) throw new Error('2D canvas context unavailable');
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;

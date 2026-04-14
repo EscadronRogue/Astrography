@@ -9,7 +9,7 @@ export function createDefaultFilterResult(allStars) {
     showConstellationBoundaries: false,
     showConstellationNames: false,
     showConstellationOverlay: false,
-    globeOpaqueSurface: false,
+    globeOpaqueSurface: true,
     enableConnections: false,
     enableIsolationFilter: false,
     enableDensityFilter: false,
