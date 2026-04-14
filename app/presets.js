@@ -1,5 +1,7 @@
+import { captureFormState, restoreFormState } from '../shared/formUtils.js';
+
 export const PRESET_KEY = 'astrography-presets';
-export const PRESET_SCHEMA_VERSION = 2;
+export const PRESET_SCHEMA_VERSION = 3;
 
 function serializeMap(map) {
   return Array.from(map.entries());
@@ -35,18 +37,10 @@ export function savePresets({
   const form = document.getElementById(formId);
   if (!form) return;
 
-  const formState = {};
-  form.querySelectorAll('input, select, textarea').forEach(element => {
-    if (!element.id) return;
-    formState[element.id] = element.type === 'checkbox' || element.type === 'radio'
-      ? element.checked
-      : element.value;
-  });
-
   const payload = {
     schemaVersion: PRESET_SCHEMA_VERSION,
     remember: true,
-    form: formState,
+    form: captureFormState(form),
     edits: {
       starOffsets: serializeMap(starLabelOffsets),
       starRotations: serializeMap(starLabelRotations),
@@ -60,7 +54,11 @@ export function savePresets({
     }
   };
 
-  localStorage.setItem(PRESET_KEY, JSON.stringify(payload));
+  try {
+    localStorage.setItem(PRESET_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('[savePresets] Failed to persist presets:', error);
+  }
 }
 
 export function loadPresets({
@@ -73,18 +71,24 @@ export function loadPresets({
   removedLineSegments,
   hiddenLineKeys
 }) {
-  const serialized = localStorage.getItem(PRESET_KEY);
-  if (!serialized) return;
+  let serialized = null;
+  try {
+    serialized = localStorage.getItem(PRESET_KEY);
+  } catch (error) {
+    console.warn('[loadPresets] Failed to read saved presets:', error);
+    return false;
+  }
+  if (!serialized) return false;
 
   let payload;
   try {
     payload = JSON.parse(serialized);
   } catch {
-    return;
+    return false;
   }
 
   if (payload.schemaVersion && payload.schemaVersion > PRESET_SCHEMA_VERSION) {
-    return;
+    return false;
   }
 
   if (payload.remember) {
@@ -94,18 +98,7 @@ export function loadPresets({
 
   const form = document.getElementById(formId);
   if (form && payload.form) {
-    Object.entries(payload.form).forEach(([id, value]) => {
-      const element = document.getElementById(id);
-      if (!element) return;
-
-      if (element.type === 'checkbox' || element.type === 'radio') {
-        element.checked = value;
-        element.dispatchEvent(new Event('change'));
-      } else {
-        element.value = value;
-        element.dispatchEvent(new Event('input'));
-      }
-    });
+    restoreFormState(form, payload.form, { dispatchEvents: false });
   }
 
   if (payload.edits) {
@@ -120,8 +113,14 @@ export function loadPresets({
     deserializeSet(payload.lineEdits.removedSegments, removedLineSegments);
     deserializeSet(payload.lineEdits.hiddenLines, hiddenLineKeys);
   }
+
+  return true;
 }
 
 export function clearSavedPresets() {
-  localStorage.removeItem(PRESET_KEY);
+  try {
+    localStorage.removeItem(PRESET_KEY);
+  } catch (error) {
+    console.warn('[clearSavedPresets] Failed to clear presets:', error);
+  }
 }
