@@ -56,3 +56,4 @@ Still not fully complete relative to the ideal target:
 - `src/features/isolation/isolationFilter.js` still needs a true split between analyzer/state/renderer responsibilities
 - `src/features/clouds/cloudsFilter.js` and `src/features/clouds/cloudDensityFilter.js` still contain legacy-shaped implementations under the correct feature home
 - `src/features/editing/editManager.js` still needs deeper extraction into dedicated label and line editors
+- line-edit pointer handling and undo replay were extracted into `src/features/editing/lineEditor.js` and `src/features/editing/editCommands.js`, reducing the manager's direct responsibility surface

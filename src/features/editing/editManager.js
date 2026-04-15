@@ -3,7 +3,13 @@ import { initializeEditState } from './editState.js';
 import { downloadLabelEdits, applyLabelEdits, buildSerializableEditState } from './editPersistence.js';
 import { setupEditIOControls } from './editIOControls.js';
 import { updateEditOverlayPosition, registerEditableLabels } from './labelEditor.js';
-import { getLineKey as getStoredLineKey, applyStoredLineEdits, registerEditableLines } from './lineEditor.js';
+import {
+  getLineKey as getStoredLineKey,
+  applyStoredLineEdits,
+  registerEditableLines,
+  handleLinePointerDown
+} from './lineEditor.js';
+import { undoLastEdit } from './editCommands.js';
 
 export class EditManager {
   constructor(mollweideMap, cachedStars, constellationLabelsMoll, galacticDirectionLabelsMoll, getStarId, buildAndApplyFilters, maybePersistPresets, requestRender) {
@@ -60,82 +66,8 @@ export class EditManager {
     registerEditableLines(this);
   }
 
-  onLinePointerDown = (e) => {
-    if (!this.lineEditMode) return;
-    this.getPointerPos(e);
-    this.editRaycaster.setFromCamera(this.editPointer, this.mollweideMap.camera);
-    const intersects = this.editRaycaster.intersectObjects(this.editableLines, false);
-    if (intersects.length > 0) {
-      let intersect = null;
-      for (const intr of intersects) {
-        const obj = intr.object;
-        const idx = intr.index;
-        const posAttr = obj.geometry && obj.geometry.getAttribute('position');
-        if (posAttr && idx !== undefined) {
-          const start = obj.type === 'LineSegments' ? idx - (idx % 2) : idx;
-          const base = start * 3;
-          if (base + 5 < posAttr.array.length) {
-            let removed = true;
-            for (let i = 0; i < 6; i++) {
-              if (!Number.isNaN(posAttr.array[base + i])) {
-                removed = false;
-                break;
-              }
-            }
-            if (!removed) {
-              intersect = intr;
-              break;
-            }
-          }
-        } else {
-          intersect = intr;
-          break;
-        }
-      }
-      if (!intersect) return;
-      const obj = intersect.object;
-      const idx = intersect.index;
-      const posAttr = obj.geometry && obj.geometry.getAttribute('position');
-      if (posAttr && idx !== undefined) {
-        const start = obj.type === 'LineSegments' ? idx - (idx % 2) : idx;
-        const base = start * 3;
-        if (base + 5 < posAttr.array.length) {
-          const prevPos = [
-            posAttr.array[base], posAttr.array[base + 1], posAttr.array[base + 2],
-            posAttr.array[base + 3], posAttr.array[base + 4], posAttr.array[base + 5]
-          ];
-          for (let i = 0; i < 6; i++) posAttr.array[base + i] = NaN;
-          posAttr.needsUpdate = true;
-          let prevAlpha = null;
-          const alphaAttr = obj.geometry.getAttribute('alpha');
-          if (alphaAttr) {
-            prevAlpha = [alphaAttr.array[start], alphaAttr.array[start + 1]];
-            alphaAttr.array[start] = 0;
-            alphaAttr.array[start + 1] = 0;
-            alphaAttr.needsUpdate = true;
-          }
-          this.removedLineSegments.add(prevPos.join(','));
-          this.editHistory.push({
-            type: 'removeSegment',
-            object: obj,
-            index: start,
-            prevPos,
-            prevAlpha
-          });
-          this.requestRender();
-          e.preventDefault();
-          this.maybePersistPresets();
-          return;
-        }
-      }
-      this.editHistory.push({ type: 'toggleVisible', object: obj, prevVisible: obj.visible });
-      obj.visible = false;
-      const key = this.getLineKey(obj);
-      if (key) this.hiddenLineKeys.add(key);
-      this.requestRender();
-      e.preventDefault();
-      this.maybePersistPresets();
-    }
+  onLinePointerDown = event => {
+    handleLinePointerDown(this, event);
   };
 
   onEditPointerDown = (e) => {
@@ -271,57 +203,7 @@ export class EditManager {
     const btn = document.getElementById('undo-edit');
     if (!btn) return;
     btn.addEventListener('click', () => {
-      const action = this.editHistory.pop();
-      if (!action) return;
-      if (action.type === 'toggleVisible') {
-        action.object.visible = action.prevVisible;
-      } else if (action.type === 'removeSegment') {
-        const posAttr = action.object.geometry.getAttribute('position');
-        const base = action.index * 3;
-        action.prevPos.forEach((v, i) => {
-          posAttr.array[base + i] = v;
-        });
-        posAttr.needsUpdate = true;
-        if (action.prevAlpha) {
-          const alphaAttr = action.object.geometry.getAttribute('alpha');
-          if (alphaAttr) {
-            alphaAttr.array[action.index] = action.prevAlpha[0];
-            alphaAttr.array[action.index + 1] = action.prevAlpha[1];
-            alphaAttr.needsUpdate = true;
-          }
-        }
-      } else if (action.type === 'moveLabel') {
-        const label = action.label;
-        const anchor = label.userData.anchorFunc();
-        const newPos = anchor.clone().add(action.prevOffset);
-        label.position.copy(newPos);
-        if (label.userData.editType === 'star') {
-          this.starLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
-          if (label.userData.starRef) label.userData.starRef.mollLabelOffset = action.prevOffset.clone();
-          if (label.userData.lineObj) label.userData.lineObj.geometry.setFromPoints([anchor, newPos]);
-        } else if (label.userData.editType === 'constellation') {
-          this.constellationLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
-          label.userData.offset = action.prevOffset.clone();
-        } else if (label.userData.editType === 'galactic') {
-          this.galacticLabelOffsets.set(label.userData.editId, { x: action.prevOffset.x, y: action.prevOffset.y });
-          label.userData.offset = action.prevOffset.clone();
-        }
-        this.updateEditOverlay();
-      } else if (action.type === 'rotateLabel') {
-        const label = action.label;
-        label.material.rotation = action.prevRotation;
-        if (label.userData.starRef) label.userData.starRef.mollLabelRotation = action.prevRotation;
-        this.starLabelRotations.set(label.userData.editId, action.prevRotation);
-        this.updateEditOverlay();
-      } else if (action.type === 'scaleLabel') {
-        const label = action.label;
-        label.scale.copy(action.prevScale);
-        if (label.userData.starRef) label.userData.starRef.mollLabelScale = action.prevScale.clone();
-        this.starLabelScales.set(label.userData.editId, { x: action.prevScale.x, y: action.prevScale.y });
-        this.updateEditOverlay();
-      }
-      this.requestRender();
-      this.maybePersistPresets();
+      undoLastEdit(this);
     });
   }
 
