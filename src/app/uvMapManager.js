@@ -9,7 +9,12 @@ import {
   raDecToUV,
   getStarEquirectangularPosition,
   spherePositionToUv,
-  normalizeRightAscension
+  normalizeRightAscension,
+  splitWrappedUvSegment,
+  sampleGreatCircleUvFromVectors,
+  sampleGreatCircleUvFromRaDec,
+  unwrapUvSequence,
+  unwrapUvAroundReference
 } from '../shared/uvUtils.js';
 import { loadConstellationCenters, loadConstellationFullNames, getConstellationCenters, getConstellationFullNames } from '../features/constellations/constellationDataService.js';
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
@@ -243,17 +248,28 @@ export class UVMapManager {
 
   drawConnections(ctx, connections) {
     const opacity = clamp01(this.connectionOpacity);
+    const lineWidth = Math.max(1, readNumberInput('connection-width', 5) * 0.45);
     connections.forEach(connection => {
       if (!connection?.starA || !connection?.starB) return;
-      const { ra: raA, dec: decA } = getStarCoordinates(connection.starA);
-      const { ra: raB, dec: decB } = getStarCoordinates(connection.starB);
-      const a = raDecToUV(raA, decA);
-      const b = raDecToUV(raB, decB);
-      const segments = this.splitWrappedSegment(a, b);
+      const startVec = connection.starA.spherePosition;
+      const endVec = connection.starB.spherePosition;
+      const uvPoints = (startVec && endVec)
+        ? sampleGreatCircleUvFromVectors(startVec, endVec, 100, 24)
+        : sampleGreatCircleUvFromRaDec(
+            getStarCoordinates(connection.starA).ra,
+            getStarCoordinates(connection.starA).dec,
+            getStarCoordinates(connection.starB).ra,
+            getStarCoordinates(connection.starB).dec,
+            100,
+            24
+          );
+      if (uvPoints.length < 2) return;
       ctx.save();
       ctx.strokeStyle = rgbaFromHex(connection.starA.displayColor || '#8fb5ff', opacity * 0.7);
-      ctx.lineWidth = 2;
-      segments.forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+      ctx.lineWidth = lineWidth;
+      for (let i = 0; i < uvPoints.length - 1; i++) {
+        splitWrappedUvSegment(uvPoints[i], uvPoints[i + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+      }
       ctx.restore();
     });
   }
@@ -286,8 +302,17 @@ export class UVMapManager {
       const starPos = getStarEquirectangularPosition(star);
       const offset = this.labelManager.computeLabelOffset(star, starPos);
       const labelPos = starPos.clone().add(offset);
-      const starPx = this.equirectToAtlas(starPos);
-      const labelPx = this.equirectToAtlas(labelPos);
+      const starUv = {
+        u: (starPos.x / EQUIRECT_WIDTH) + 0.5,
+        v: 0.5 - (starPos.y / EQUIRECT_HEIGHT)
+      };
+      const labelUv = {
+        u: (labelPos.x / EQUIRECT_WIDTH) + 0.5,
+        v: 0.5 - (labelPos.y / EQUIRECT_HEIGHT)
+      };
+      const normalizedLabelUv = { u: unwrapUvAroundReference(starUv.u, labelUv.u), v: labelUv.v };
+      const starPx = { x: starUv.u * ATLAS_WIDTH, y: starUv.v * ATLAS_HEIGHT };
+      const labelPx = { x: normalizedLabelUv.u * ATLAS_WIDTH, y: normalizedLabelUv.v * ATLAS_HEIGHT };
       const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
       const fontSize = Math.round(THREE.MathUtils.clamp(10 + labelSize * 4, 10, 28));
       const textColor = rgbaFromHex(star.displayColor || '#ffffff', opacity);
@@ -296,20 +321,19 @@ export class UVMapManager {
       const metrics = ctx.measureText(star.displayName);
       const paddingX = 8;
       const textWidth = metrics.width + paddingX * 2;
-      const textHeight = fontSize + 8;
       const originX = labelPx.x;
       const originY = labelPx.y;
-      const baselineX = originX + paddingX;
       const baselineY = originY;
       [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
         const shiftedOriginX = originX + shiftX;
         if (shiftedOriginX + textWidth < 0 || shiftedOriginX - textWidth > ATLAS_WIDTH) return;
         ctx.strokeStyle = lineColor;
         ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(starPx.x + shiftX, starPx.y);
-        ctx.lineTo(shiftedOriginX, originY);
-        ctx.stroke();
+        this.strokeUvSegment(
+          ctx,
+          { u: starUv.u + (shiftX / ATLAS_WIDTH), v: starUv.v },
+          { u: normalizedLabelUv.u + (shiftX / ATLAS_WIDTH), v: normalizedLabelUv.v }
+        );
         ctx.fillStyle = textColor;
         ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.85})`;
         ctx.lineWidth = 3;
@@ -355,12 +379,17 @@ export class UVMapManager {
     boundaries.forEach(boundary => {
       const points = Array.isArray(boundary?.raDecPolygon) ? boundary.raDecPolygon : [];
       if (points.length < 2) return;
-      for (let i = 0; i < points.length; i++) {
-        const current = points[i];
-        const next = points[(i + 1) % points.length];
-        const a = raDecToUV(THREE.MathUtils.degToRad(current.ra), THREE.MathUtils.degToRad(current.dec));
-        const b = raDecToUV(THREE.MathUtils.degToRad(next.ra), THREE.MathUtils.degToRad(next.dec));
-        this.splitWrappedSegment(a, b).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+      const closedPoints = points.map(point => ({
+        ra: THREE.MathUtils.degToRad(point.ra),
+        dec: THREE.MathUtils.degToRad(point.dec)
+      }));
+      for (let i = 0; i < closedPoints.length; i++) {
+        const current = closedPoints[i];
+        const next = closedPoints[(i + 1) % closedPoints.length];
+        const uvPoints = sampleGreatCircleUvFromRaDec(current.ra, current.dec, next.ra, next.dec, 100, 12);
+        for (let j = 0; j < uvPoints.length - 1; j++) {
+          splitWrappedUvSegment(uvPoints[j], uvPoints[j + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+        }
       }
     });
     ctx.restore();
@@ -517,15 +546,7 @@ export class UVMapManager {
   }
 
   normalizeWrappedTriangle(triangle) {
-    const normalized = triangle.map(point => ({ ...point }));
-    let base = normalized[0].u;
-    for (let i = 1; i < normalized.length; i++) {
-      let u = normalized[i].u;
-      while (u - base > 0.5) u -= 1;
-      while (u - base < -0.5) u += 1;
-      normalized[i].u = u;
-    }
-    return normalized;
+    return unwrapUvSequence(triangle.map(point => ({ ...point })));
   }
 
   equirectToAtlas(position) {
@@ -560,22 +581,7 @@ export class UVMapManager {
   }
 
   splitWrappedSegment(a, b) {
-    let du = b.u - a.u;
-    if (Math.abs(du) <= 0.5) return [[a, b]];
-    if (du > 0.5) {
-      const t = (1 - a.u) / ((b.u - 1) - a.u || 1);
-      const vEdge = THREE.MathUtils.lerp(a.v, b.v, t);
-      return [
-        [{ u: a.u, v: a.v }, { u: 1, v: vEdge }],
-        [{ u: 0, v: vEdge }, { u: b.u, v: b.v }]
-      ];
-    }
-    const t = (0 - a.u) / ((b.u + 1) - a.u || 1);
-    const vEdge = THREE.MathUtils.lerp(a.v, b.v, t);
-    return [
-      [{ u: a.u, v: a.v }, { u: 0, v: vEdge }],
-      [{ u: 1, v: vEdge }, { u: b.u, v: b.v }]
-    ];
+    return splitWrappedUvSegment(a, b);
   }
 
   updateInteractionGeometry(stars) {
