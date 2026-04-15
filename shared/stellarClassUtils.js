@@ -31,7 +31,7 @@ function isWhiteDwarfClass(rawValue, normalizedUpper) {
  * @returns {string} Single uppercase letter (O, B, A, D, F, G, K, M, L, T, Y) or 'Other'.
  */
 export function getPrimaryClass(star) {
-  const rawValue = normalizeStellarClass(star?.Stellar_class);
+  const rawValue = normalizeStellarClass(star?.stellarClass ?? star?.Stellar_class);
   if (!rawValue) return 'Other';
 
   const normalizedUpper = rawValue.toUpperCase();

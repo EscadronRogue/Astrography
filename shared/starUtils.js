@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad } from '../utils/geometryUtils.js';
-import { GLOBE_RADIUS, MOLLWEIDE_MAX_ITERATIONS } from './constants.js';
+import { GLOBE_RADIUS, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from './constants.js';
 
 export function getStarId(star) {
   return (
@@ -26,8 +26,7 @@ export function getStarCoordinates(star) {
 }
 
 export function getStarDistance(star, fallback = 0) {
-  const distance = star.distance ?? star.Distance_from_the_Sun;
-  return Number.isFinite(distance) ? distance : fallback;
+  return Number.isFinite(star.distance) ? star.distance : fallback;
 }
 
 export function getStarTruePosition(star) {
@@ -70,7 +69,7 @@ export function precalcMollweideData(star, radius = GLOBE_RADIUS) {
     const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
       (2 + 2 * Math.cos(2 * theta));
     theta -= delta;
-    if (Math.abs(delta) < 1e-10) break;
+    if (Math.abs(delta) < EPSILON) break;
   }
   const cosT = Math.cos(theta);
   const sinT = Math.sin(theta);

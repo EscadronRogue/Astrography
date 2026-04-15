@@ -15,10 +15,11 @@ export function applySizeFilter(stars, filters) {
   const stellarClassData = getStellarClassData();
 
   // Pre-compute distance range if needed
-  let minDistance, maxDistance;
+  let distMin, distMax;
   if (filters.size === 'distance') {
-    minDistance = Math.min(...stars.map(s => s.Distance_from_the_Sun));
-    maxDistance = Math.max(...stars.map(s => s.Distance_from_the_Sun));
+    const distances = stars.map(s => s.distance).filter(Number.isFinite);
+    distMin = Math.min(...distances);
+    distMax = Math.max(...distances);
   }
 
   stars.forEach(star => {
@@ -26,8 +27,9 @@ export function applySizeFilter(stars, filters) {
 
     // 1) Base size from selected mode
     if (filters.size === 'distance') {
+      const d = Number.isFinite(star.distance) ? star.distance : 0;
       star.displaySize =
-        DISTANCE_SIZE_SCALE * (maxDistance - star.Distance_from_the_Sun) / (maxDistance - minDistance + 1) + 1;
+        DISTANCE_SIZE_SCALE * (distMax - d) / (distMax - distMin + 1) + 1;
     } else if (filters.size === 'stellar-class') {
       const classData = stellarClassData[primaryClass];
       star.displaySize = classData ? classData.size : 1;

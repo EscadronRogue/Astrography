@@ -53,5 +53,10 @@
     "color": "#3B2717",
     "size": 2,
     "hierarchy": 11
+  },
+  "Other": {
+    "color": "#888888",
+    "size": 2,
+    "hierarchy": 12
   }
 }

@@ -1,6 +1,16 @@
 // utils/geometryUtils.js
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { minimalRADifference } from '../utils.js';
+
+/**
+ * Wraps RA difference into [-π, π].
+ * @param {number} ra
+ * @returns {number}
+ */
+export function minimalRADifference(ra) {
+  while (ra > Math.PI) ra -= 2 * Math.PI;
+  while (ra < -Math.PI) ra += 2 * Math.PI;
+  return ra;
+}
 
 // Global central meridian for Mollweide projection
 let mollweideLambda0 = 0;

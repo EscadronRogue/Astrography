@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { interpolateColor } from './utils.js';
+import { interpolateColor } from './shared/colorUtils.js';
 import { getDoubleSidedLabelMaterial } from './filters/densityColorUtils.js';
 import { disposeObject3D, stableAngleFromString } from './utils/renderUtils.js';
 

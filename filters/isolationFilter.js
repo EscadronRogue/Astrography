@@ -3,7 +3,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from './densityColorUtils.js';
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, vectorToRaDec } from '../utils/geometryUtils.js';
-import { minimalRADifference } from '../utils.js';
+import { minimalRADifference } from '../utils/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries, loadConstellationFullNames } from './constellationFilter.js';
 
 // Helper to create line materials that support color and opacity gradients.
@@ -141,7 +141,7 @@ class IsolationGridOverlay {
     }
     // Compute distances using an extended star set.
     const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+      const d = star.distance;
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {
@@ -246,7 +246,7 @@ class IsolationGridOverlay {
 
     // Recalculate distances for each cell based on an extended set of stars.
     const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+      const d = star.distance;
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
     this.cubesData.forEach(cell => {

@@ -41,7 +41,7 @@ export function showTooltip(x, y, star) {
   appendRow(tooltip, 'tooltip-systemName', 'System', star.Common_name_of_the_star_system || 'Unknown System');
   appendRow(tooltip, 'tooltip-distance', 'Distance', formatNumber(star.distance, 2, ' LY'));
   appendRow(tooltip, 'tooltip-constellation', 'Constellation', star.Constellation || 'N/A');
-  appendRow(tooltip, 'tooltip-stellarClass', 'Stellar Class', star.Stellar_class || 'N/A');
+  appendRow(tooltip, 'tooltip-stellarClass', 'Stellar Class', star.stellarClass || star.Stellar_class || 'N/A');
   appendRow(tooltip, 'tooltip-mass', 'Mass', Number.isFinite(star.Mass) ? String(star.Mass) : 'N/A');
   appendRow(tooltip, 'tooltip-size', 'Size', Number.isFinite(star.Size) ? String(star.Size) : 'N/A');
   appendRow(tooltip, 'tooltip-absoluteMag', 'Absolute Mag', formatNumber(star.absoluteMagnitude));

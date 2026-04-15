@@ -1,22 +1,13 @@
-import { degToRad } from '../utils/geometryUtils.js';
+/**
+ * @file Provides constellation center data for density visualization.
+ * Delegates to the canonical loader in constellationFilter.js to avoid duplicate fetches.
+ */
+import { getConstellationCenters } from './constellationFilter.js';
 
-let densityCenterData = null;
-
-export async function loadDensityCenterData() {
-  if (densityCenterData !== null) return densityCenterData;
-  try {
-    const response = await fetch('constellation_center.json');
-    if (!response.ok) throw new Error(`Failed to fetch constellation_center.json: ${response.status}`);
-    const raw = await response.json();
-    densityCenterData = raw.map(entry => ({ name: entry.name, ra: degToRad(entry.raDeg), dec: degToRad(entry.decDeg) }));
-    return densityCenterData;
-  } catch (err) {
-    densityCenterData = [];
-    console.error('Error loading constellation_center.json:', err);
-    return densityCenterData;
-  }
-}
-
+/**
+ * Returns constellation center data (already loaded by constellationFilter).
+ * @returns {Array<{name: string, ra: number, dec: number}>}
+ */
 export function getDensityCenterData() {
-  return densityCenterData;
+  return getConstellationCenters() || [];
 }

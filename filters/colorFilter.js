@@ -24,7 +24,7 @@ export function applyColorFilter(stars, filters) {
     });
   } else if (filters.color === 'constellation') {
     stars.forEach(star => {
-      star.displayColor = getStableConstellationColor((star.Constellation || '').toUpperCase()) || DEFAULT_STAR_COLOR;
+      star.displayColor = getStableConstellationColor((star.constellation || '').toUpperCase()) || DEFAULT_STAR_COLOR;
     });
   } else if (filters.color === 'galactic-plane') {
     const maxZ = Math.max(EPSILON, ...stars.map(s => Math.abs(Number.isFinite(s.z_coordinate) ? s.z_coordinate : 0)));

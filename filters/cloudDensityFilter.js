@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { cachedRadToMollweide, getMollweideLambda0 } from '../utils/geometryUtils.js';
-import { minimalRADifference } from '../utils.js';
+import { minimalRADifference } from '../utils/geometryUtils.js';
 import { lightenColor } from './densityColorUtils.js';
 import { getDustCloudColor } from './dustCloudColors.js';
 import { loadCachedCloudData } from './dustCloudDataCache.js';

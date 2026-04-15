@@ -7,7 +7,7 @@ import {
   vectorToRaDecRad,
   radToMollweide
 } from '../utils/geometryUtils.js';
-import { minimalRADifference } from '../utils.js';
+import { minimalRADifference } from '../utils/geometryUtils.js';
 import { lightenColor } from './densityColorUtils.js';
 import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../utils/renderUtils.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../shared/constants.js';
@@ -275,7 +275,7 @@ class DensityGridOverlay {
     }
 
     const extendedStars = stars.filter(star => {
-      const d = star.Distance_from_the_Sun;
+      const d = star.distance;
       return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
     });
 

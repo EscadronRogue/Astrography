@@ -6,7 +6,7 @@ import {
   updateMollweideCloudSegments
 } from '../filters/cloudsFilter.js';
 import { createCloudDensityOverlay, updateCloudDensityOverlay } from '../filters/cloudDensityFilter.js';
-import { captureStellarClassState, restoreStellarClassState } from '../app/stellarClassState.js';
+import { captureFormState, restoreFormState } from '../shared/formUtils.js';
 import { applyPlanes, refreshMollweidePlanes } from './planeManager.js';
 import { rebuildConstellationVisuals, refreshMollweideConstellationVisuals } from './constellationManager.js';
 
@@ -27,20 +27,20 @@ function updateProjectedPositions(ctx) {
 function updateMapDisplays(ctx, options) {
   const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
   const { state } = ctx;
-  trueCoordinatesMap.setStarOpacity(options.starOpacity / 100);
-  globeMap.setStarOpacity(options.starOpacity / 100);
-  mollweideMap.setStarOpacity(options.starOpacity / 100);
-  trueCoordinatesMap.setLabelOpacity(options.starNameOpacity / 100);
-  globeMap.setLabelOpacity(options.starNameOpacity / 100);
-  mollweideMap.setLabelOpacity(options.starNameOpacity / 100);
-  trueCoordinatesMap.setConnectionOpacity(options.connectionOpacity / 100);
-  globeMap.setConnectionOpacity(options.connectionOpacity / 100);
-  mollweideMap.setConnectionOpacity(options.connectionOpacity / 100);
+  trueCoordinatesMap.setStarOpacity(options.starOpacity);
+  globeMap.setStarOpacity(options.starOpacity);
+  mollweideMap.setStarOpacity(options.starOpacity);
+  trueCoordinatesMap.setLabelOpacity(options.starNameOpacity);
+  globeMap.setLabelOpacity(options.starNameOpacity);
+  mollweideMap.setLabelOpacity(options.starNameOpacity);
+  trueCoordinatesMap.setConnectionOpacity(options.connectionOpacity);
+  globeMap.setConnectionOpacity(options.connectionOpacity);
+  mollweideMap.setConnectionOpacity(options.connectionOpacity);
   setConnectionLineParams(options.connectionWidth, options.connectionFade, options.connectionLabelSize);
 
-  trueCoordinatesMap.connectionOpacity = options.connectionOpacity / 100;
-  globeMap.connectionOpacity = options.connectionOpacity / 100;
-  mollweideMap.connectionOpacity = options.connectionOpacity / 100;
+  trueCoordinatesMap.connectionOpacity = options.connectionOpacity;
+  globeMap.connectionOpacity = options.connectionOpacity;
+  mollweideMap.connectionOpacity = options.connectionOpacity;
 
   trueCoordinatesMap.updateMap(state.currentFilteredStars, state.currentConnections);
   trueCoordinatesMap.labelManager.refreshLabels(state.currentFilteredStars);
@@ -64,13 +64,13 @@ async function refreshCloudOverlays(ctx, options) {
 
   if (options.showClouds) {
     const cloudDataFiles = new FormData(form).getAll('dust-clouds');
-    await updateCloudsOverlay(state.cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, options.cloudOpacity / 100);
-    await updateCloudsOverlay(state.cachedStars, globeMap.scene, 'Globe', cloudDataFiles, options.cloudOpacity / 100);
-    await updateCloudsOverlay(state.cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, options.cloudOpacity / 100);
+    await updateCloudsOverlay(state.cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, options.cloudOpacity);
+    await updateCloudsOverlay(state.cachedStars, globeMap.scene, 'Globe', cloudDataFiles, options.cloudOpacity);
+    await updateCloudsOverlay(state.cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, options.cloudOpacity);
   } else {
-    await updateCloudsOverlay(state.cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], options.cloudOpacity / 100);
-    await updateCloudsOverlay(state.cachedStars, globeMap.scene, 'Globe', [], options.cloudOpacity / 100);
-    await updateCloudsOverlay(state.cachedStars, mollweideMap.scene, 'Mollweide', [], options.cloudOpacity / 100);
+    await updateCloudsOverlay(state.cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], options.cloudOpacity);
+    await updateCloudsOverlay(state.cachedStars, globeMap.scene, 'Globe', [], options.cloudOpacity);
+    await updateCloudsOverlay(state.cachedStars, mollweideMap.scene, 'Mollweide', [], options.cloudOpacity);
   }
 }
 
@@ -109,7 +109,7 @@ async function refreshCloudDensityOverlays(ctx, options) {
       globeMap.scene,
       mollweideMap.scene,
       options.cloudDensityRadius,
-      options.cloudDensityOpacity / 100
+      options.cloudDensityOpacity
     );
     state.cloudDensityOverlays.push(overlay);
   }
@@ -127,13 +127,16 @@ export async function buildAndApplyFilters(ctx) {
       moll: mollweideMap?.scene
     }
   });
-  const previousStellarClassState = captureStellarClassState();
+  const scContainer = document.getElementById('stellar-class-container');
+  const previousStellarClassState = scContainer ? captureFormState(scContainer) : null;
   generateStellarClassFilters(filters.filteredStars);
-  restoreStellarClassState(previousStellarClassState);
+  if (previousStellarClassState && scContainer) {
+    restoreFormState(scContainer, previousStellarClassState, { dispatchEvents: false });
+  }
 
   const sanitizedConstellationLineWidth = Math.max(0.1, filters.constellationLineWidth || 0.1);
   const sanitizedBorderWidth = Math.max(0.1, filters.mollweideBorderWidth || 0.1);
-  const sanitizedBorderOpacity = Math.max(0, Math.min(100, filters.mollweideBorderOpacity));
+  const sanitizedBorderOpacity = Math.max(0, Math.min(1, filters.mollweideBorderOpacity));
 
   Object.assign(state, {
     showConstellationBoundariesFlag: filters.showConstellationBoundaries,
@@ -163,13 +166,13 @@ export async function buildAndApplyFilters(ctx) {
     showConstellationBoundaries: filters.showConstellationBoundaries,
     showConstellationNames: filters.showConstellationNames,
     showConstellationOverlay: filters.showConstellationOverlay,
-    constellationLineOpacity: filters.constellationLineOpacity / 100,
+    constellationLineOpacity: filters.constellationLineOpacity,
     constellationLineWidth: sanitizedConstellationLineWidth,
-    constellationNameOpacity: filters.constellationNameOpacity / 100
+    constellationNameOpacity: filters.constellationNameOpacity
   });
 
   if (mollweideMap && typeof mollweideMap.setMollweideBorderAppearance === 'function') {
-    mollweideMap.setMollweideBorderAppearance(sanitizedBorderWidth, sanitizedBorderOpacity / 100);
+    mollweideMap.setMollweideBorderAppearance(sanitizedBorderWidth, sanitizedBorderOpacity);
   }
 
   await refreshCloudOverlays(ctx, filters);
@@ -179,7 +182,7 @@ export async function buildAndApplyFilters(ctx) {
     showGalacticPlane: filters.showGalacticPlane,
     showEclipticPlane: filters.showEclipticPlane,
     showCelestialEquator: filters.showCelestialEquator
-  }, filters.planeOpacity / 100);
+  }, filters.planeOpacity);
 
   ctx.applyGlobeSurface(filters.globeOpaqueSurface);
   ctx.requestRender();

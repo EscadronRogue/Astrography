@@ -14,8 +14,7 @@ export function applyOpacityFilter(stars, filters) {
   const fixedOpacity = Number.parseFloat(filters.opacity);
 
   if (Number.isFinite(fixedOpacity)) {
-    // Normalize: if value > 1, assume 0-100 scale from UI slider
-    const clamped = Math.max(0, Math.min(1, fixedOpacity > 1 ? fixedOpacity / 100 : fixedOpacity));
+    const clamped = Math.max(0, Math.min(1, fixedOpacity));
     stars.forEach(star => { star.displayOpacity = clamped; });
     return stars;
   }

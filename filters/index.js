@@ -6,11 +6,10 @@ import { applyOpacityFilter } from './opacityFilter.js';
 import { applyStarsShownFilter } from './starsShownFilter.js';
 import { computeConnectionPairs } from './connectionsFilter.js';
 import { applyStellarClassLogic } from './stellarClassFilter.js';
-import { applyGlobeSurfaceFilter } from './globeSurfaceFilter.js';
 import { applyDistanceFilter } from './distanceFilter.js';
 import { createDefaultFilterResult } from './filterDefaults.js';
 import { computeAdaptiveGridSize, readFilterState } from './filterFormState.js';
-import { setupFilterUI, generateStellarClassFilters } from './filterUISetup.js';
+import { setupFilterUI, generateStellarClassFilters } from '../ui/filterUI.js';
 import { updateDerivedOverlays } from './filterOverlayState.js';
 import { SOL_STAR_NAME } from '../shared/constants.js';
 
@@ -51,8 +50,6 @@ export function applyFilters(allStars, context = {}) {
     globeConnections = computeConnectionPairs(nonSolStars, filters.connections);
     mollweideConnections = globeConnections;
   }
-
-  applyGlobeSurfaceFilter(filters);
 
   const overlayState = updateDerivedOverlays(
     allStars,

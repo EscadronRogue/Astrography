@@ -16,11 +16,21 @@ export function normalizeStarRecord(star) {
   const distance = normalizeNumber(star.distance ?? star.Distance_from_the_Sun);
   const apparentMagnitude = normalizeNumber(star.apparentMagnitude ?? star.Apparent_magnitude);
   const absoluteMagnitude = normalizeNumber(star.absoluteMagnitude ?? star.Absolute_magnitude);
+  const stellarClass = star.stellarClass ?? star.Stellar_class ?? '';
+  const constellation = star.constellation ?? star.Constellation ?? '';
+  const x = normalizeNumber(star.x_coordinate);
+  const y = normalizeNumber(star.y_coordinate);
+  const z = normalizeNumber(star.z_coordinate);
   return {
     ...star,
     distance,
     apparentMagnitude,
     absoluteMagnitude,
+    stellarClass,
+    constellation,
+    x_coordinate: x,
+    y_coordinate: y,
+    z_coordinate: z,
     starId: star.starId || buildStableStarId(star)
   };
 }

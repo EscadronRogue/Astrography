@@ -33,5 +33,5 @@ const colorLookup = new Map(
  * @returns {string|null} Hex color string or null if not found.
  */
 export function getDustCloudColor(name) {
-  return colorLookup.get(name.toLowerCase()) ?? null;
+  return colorLookup.get(String(name ?? '').toLowerCase()) ?? null;
 }

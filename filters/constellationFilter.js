@@ -34,7 +34,7 @@ export async function loadConstellationBoundaries() {
       const dec2 = parseDec(decStr2);
       boundaryData.push({ ra1, dec1, ra2, dec2, const1: c1, const2: c2 });
     }
-    console.log(`[ConstellationFilter] Boundaries: loaded ${boundaryData.length} lines.`);
+    // Boundaries loaded successfully
   } catch (err) {
     console.error('Error loading constellation boundaries:', err);
     boundaryData = [];
@@ -50,7 +50,7 @@ export async function loadConstellationCenters() {
     if (!resp.ok) throw new Error(`Failed to load constellation_center.json: ${resp.status}`);
     const raw = await resp.json();
     centerData = raw.map(entry => ({ ra: degToRad(entry.raDeg), dec: degToRad(entry.decDeg), name: entry.name }));
-    console.log(`[ConstellationFilter] Centers: loaded ${centerData.length} items.`);
+    // Centers loaded successfully
   } catch (err) {
     console.error('Error loading constellation centers:', err);
     centerData = [];
