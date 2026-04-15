@@ -2,39 +2,61 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/thr
 import { showTooltip, hideTooltip } from './tooltips.js';
 import { getStarEquirectangularPosition } from '../../shared/uvUtils.js';
 
-function createHighlight(radius, position) {
-  const geometry = new THREE.SphereGeometry(radius, 16, 16);
-  const material = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: true });
+function createHighlight(radius, position, { planar = false } = {}) {
+  let geometry;
+  if (planar) {
+    geometry = new THREE.RingGeometry(radius * 0.72, radius, 48);
+  } else {
+    geometry = new THREE.SphereGeometry(radius, 16, 16);
+  }
+  const material = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: !planar, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.copy(position);
   return mesh;
 }
 
+function getRaycastThreshold(map) {
+  switch (map.mapType) {
+    case 'Equirectangular':
+      return 2.4;
+    case 'UVGlobe':
+    case 'Globe':
+      return 3.2;
+    default:
+      return 2.0;
+  }
+}
+
+function resolveIntersectedStar(map, intersects) {
+  if (!intersects?.length) return null;
+  const intersect = intersects[0];
+  let index;
+  if (intersect.object instanceof THREE.Points) {
+    index = intersect.index;
+  } else if (intersect.object instanceof THREE.InstancedMesh) {
+    index = intersect.instanceId;
+  } else {
+    index = map.starGroup.children.indexOf(intersect.object);
+  }
+  if (index === undefined || index === null || index < 0) return null;
+  return map.starObjects[index] || null;
+}
+
 export function initStarInteractions(ctx, map) {
   const raycaster = new THREE.Raycaster();
+  raycaster.params.Points = { threshold: getRaycastThreshold(map) };
   const mouse = new THREE.Vector2();
 
   map.canvas.addEventListener('mousemove', event => {
-    if (ctx.state.selectedStarData) return;
     const rect = map.canvas.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, map.camera);
     const intersects = raycaster.intersectObjects(map.starGroup.children, true);
+    const hoveredStar = resolveIntersectedStar(map, intersects);
 
-    if (intersects.length > 0) {
-      const intersect = intersects[0];
-      let index;
-      if (intersect.object instanceof THREE.Points) {
-        index = intersect.index;
-      } else if (intersect.object instanceof THREE.InstancedMesh) {
-        index = intersect.instanceId;
-      } else {
-        index = map.starGroup.children.indexOf(intersect.object);
-      }
-      if (index !== undefined && map.starObjects[index]) {
-        showTooltip(event.clientX, event.clientY, map.starObjects[index]);
-      }
+    if (hoveredStar) {
+      showTooltip(event.clientX, event.clientY, hoveredStar);
     } else {
       hideTooltip();
     }
@@ -59,22 +81,7 @@ export function initStarInteractions(ctx, map) {
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, map.camera);
     const intersects = raycaster.intersectObjects(map.starGroup.children, true);
-    let clickedStar = null;
-
-    if (intersects.length > 0) {
-      const intersect = intersects[0];
-      let index;
-      if (intersect.object instanceof THREE.Points) {
-        index = intersect.index;
-      } else if (intersect.object instanceof THREE.InstancedMesh) {
-        index = intersect.instanceId;
-      } else {
-        index = map.starGroup.children.indexOf(intersect.object);
-      }
-      if (index !== undefined && map.starObjects[index]) {
-        clickedStar = map.starObjects[index];
-      }
-    }
+    const clickedStar = resolveIntersectedStar(map, intersects);
 
     ctx.state.selectedStarData = clickedStar;
     updateSelectedStarHighlight(ctx);
@@ -143,7 +150,7 @@ export function updateSelectedStarHighlight(ctx) {
   state.selectedHighlightTrue = createHighlight((state.selectedStarData.displaySize || 2) * 0.2 * 1.2, truePosition);
   state.selectedHighlightGlobe = createHighlight((state.selectedStarData.displaySize || 2) * 0.2 * 1.2, globePosition);
   state.selectedHighlightMollweide = createHighlight((state.selectedStarData.displaySize || 2) * 0.4 * 1.2, mollweidePosition);
-  state.selectedHighlightUv = createHighlight((state.selectedStarData.displaySize || 2) * 0.5 * 1.2, uvPosition);
+  state.selectedHighlightUv = createHighlight((state.selectedStarData.displaySize || 2) * 0.18 * 1.15, uvPosition, { planar: true });
   state.selectedHighlightUvGlobe = createHighlight((state.selectedStarData.displaySize || 2) * 0.2 * 1.2, globePosition);
 
   trueCoordinatesMap.scene.add(state.selectedHighlightTrue);

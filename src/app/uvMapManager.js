@@ -26,11 +26,12 @@ const PLANE_WIDTH = EQUIRECT_WIDTH;
 const PLANE_HEIGHT = EQUIRECT_HEIGHT;
 const GLOBE_RADIUS = 99;
 const TAU = Math.PI * 2;
+const LABEL_MARGIN_Y = 10;
 
 function createHiddenPointsMaterial() {
   return new THREE.PointsMaterial({
     color: 0xffffff,
-    size: 0.01,
+    size: 0.35,
     transparent: true,
     opacity: 0,
     depthWrite: false
@@ -293,55 +294,214 @@ export class UVMapManager {
   drawStarLabels(ctx, stars) {
     const opacity = clamp01(this.labelOpacity);
     if (opacity <= 0.001) return;
+
+    const visibleLabeledStars = (stars || []).filter(star => star.displayVisible && star.displayName);
+    if (!visibleLabeledStars.length) return;
+
+    const visibleStarAnchors = (stars || [])
+      .filter(star => star.displayVisible)
+      .map(star => {
+        const starPos = getStarEquirectangularPosition(star);
+        return {
+          x: ((starPos.x / EQUIRECT_WIDTH) + 0.5) * ATLAS_WIDTH,
+          y: (0.5 - (starPos.y / EQUIRECT_HEIGHT)) * ATLAS_HEIGHT,
+          star
+        };
+      });
+
+    const placedBoxes = [];
     ctx.save();
     ctx.textBaseline = 'middle';
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    stars.forEach(star => {
-      if (!star.displayVisible || !star.displayName) return;
-      const starPos = getStarEquirectangularPosition(star);
-      const offset = this.labelManager.computeLabelOffset(star, starPos);
-      const labelPos = starPos.clone().add(offset);
-      const starUv = {
-        u: (starPos.x / EQUIRECT_WIDTH) + 0.5,
-        v: 0.5 - (starPos.y / EQUIRECT_HEIGHT)
-      };
-      const labelUv = {
-        u: (labelPos.x / EQUIRECT_WIDTH) + 0.5,
-        v: 0.5 - (labelPos.y / EQUIRECT_HEIGHT)
-      };
-      const normalizedLabelUv = { u: unwrapUvAroundReference(starUv.u, labelUv.u), v: labelUv.v };
-      const starPx = { x: starUv.u * ATLAS_WIDTH, y: starUv.v * ATLAS_HEIGHT };
-      const labelPx = { x: normalizedLabelUv.u * ATLAS_WIDTH, y: normalizedLabelUv.v * ATLAS_HEIGHT };
-      const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
-      const fontSize = Math.round(THREE.MathUtils.clamp(10 + labelSize * 4, 10, 28));
-      const textColor = rgbaFromHex(star.displayColor || '#ffffff', opacity);
-      const lineColor = rgbaFromHex(star.displayColor || '#ffffff', opacity * 0.22);
-      ctx.font = `${fontSize}px Oswald`;
-      const metrics = ctx.measureText(star.displayName);
-      const paddingX = 8;
-      const textWidth = metrics.width + paddingX * 2;
-      const originX = labelPx.x;
-      const originY = labelPx.y;
-      const baselineY = originY;
-      [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
-        const shiftedOriginX = originX + shiftX;
-        if (shiftedOriginX + textWidth < 0 || shiftedOriginX - textWidth > ATLAS_WIDTH) return;
+
+    visibleLabeledStars
+      .slice()
+      .sort((a, b) => this.getLabelPriority(b) - this.getLabelPriority(a))
+      .forEach(star => {
+        const placement = this.computeUvLabelPlacement(ctx, star, visibleStarAnchors, placedBoxes);
+        if (!placement) return;
+
+        const textColor = rgbaFromHex(star.displayColor || '#ffffff', opacity);
+        const lineColor = rgbaFromHex(star.displayColor || '#ffffff', opacity * 0.2);
+        ctx.font = `${placement.fontSize}px Oswald`;
         ctx.strokeStyle = lineColor;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.35;
+
         this.strokeUvSegment(
           ctx,
-          { u: starUv.u + (shiftX / ATLAS_WIDTH), v: starUv.v },
-          { u: normalizedLabelUv.u + (shiftX / ATLAS_WIDTH), v: normalizedLabelUv.v }
+          placement.connector.startUv,
+          placement.connector.endUv
         );
-        ctx.fillStyle = textColor;
-        ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.85})`;
-        ctx.lineWidth = 3;
-        ctx.strokeText(star.displayName, shiftedOriginX + paddingX, baselineY);
-        ctx.fillText(star.displayName, shiftedOriginX + paddingX, baselineY);
+
+        [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
+          const drawX = placement.drawX + shiftX;
+          if (drawX + placement.bounds.width < -24 || drawX > ATLAS_WIDTH + 24) return;
+          ctx.fillStyle = textColor;
+          ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.85})`;
+          ctx.lineWidth = 3;
+          ctx.strokeText(star.displayName, drawX, placement.drawY);
+          ctx.fillText(star.displayName, drawX, placement.drawY);
+        });
+
+        placedBoxes.push({
+          x: placement.bounds.x,
+          y: placement.bounds.y,
+          width: placement.bounds.width,
+          height: placement.bounds.height,
+          starX: placement.starPx.x,
+          starY: placement.starPx.y
+        });
       });
-    });
     ctx.restore();
+  }
+
+  getLabelPriority(star) {
+    const nameWeight = Math.max(1, (star.displayName || '').length * 0.05);
+    const sizeWeight = star.displayLabelSize !== undefined ? star.displayLabelSize : (star.displaySize || 1);
+    const magWeight = Number.isFinite(star.absoluteMagnitude) ? (8 - star.absoluteMagnitude) * 0.35 : 0;
+    return sizeWeight * 2 + magWeight + nameWeight;
+  }
+
+  computeUvLabelPlacement(ctx, star, visibleStarAnchors, placedBoxes) {
+    const starPos = getStarEquirectangularPosition(star);
+    const starPx = {
+      x: ((starPos.x / EQUIRECT_WIDTH) + 0.5) * ATLAS_WIDTH,
+      y: (0.5 - (starPos.y / EQUIRECT_HEIGHT)) * ATLAS_HEIGHT
+    };
+    const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
+    const fontSize = Math.round(THREE.MathUtils.clamp(10 + labelSize * 4, 10, 28));
+    const paddingX = 8;
+    const textHeight = Math.max(fontSize + 4, 14);
+    ctx.font = `${fontSize}px Oswald`;
+    const textWidth = ctx.measureText(star.displayName).width;
+
+    const baseRadius = THREE.MathUtils.clamp((star.displaySize || 1) * 2.8 + 10, 12, 30);
+    const directions = [
+      new THREE.Vector2(1, 0),
+      new THREE.Vector2(-1, 0),
+      new THREE.Vector2(0.84, -0.54),
+      new THREE.Vector2(0.84, 0.54),
+      new THREE.Vector2(-0.84, -0.54),
+      new THREE.Vector2(-0.84, 0.54),
+      new THREE.Vector2(0, -1),
+      new THREE.Vector2(0, 1)
+    ];
+    const radii = [baseRadius, baseRadius + 8, baseRadius + 16, baseRadius + 24];
+
+    let best = null;
+    for (const radius of radii) {
+      for (const dir of directions) {
+        const candidate = this.evaluateUvLabelCandidate({
+          starPx,
+          dir,
+          radius,
+          textWidth,
+          textHeight,
+          paddingX,
+          fontSize,
+          visibleStarAnchors,
+          placedBoxes
+        });
+        if (!candidate) continue;
+        if (!best || candidate.score < best.score) {
+          best = candidate;
+        }
+      }
+    }
+
+    if (!best) return null;
+
+    const starUv = { u: starPx.x / ATLAS_WIDTH, v: starPx.y / ATLAS_HEIGHT };
+    const anchorUv = { u: best.anchorX / ATLAS_WIDTH, v: best.anchorY / ATLAS_HEIGHT };
+    const endUv = { u: unwrapUvAroundReference(starUv.u, anchorUv.u), v: anchorUv.v };
+
+    return {
+      fontSize,
+      drawX: best.drawX,
+      drawY: best.drawY,
+      bounds: best.bounds,
+      starPx,
+      connector: {
+        startUv: starUv,
+        endUv
+      }
+    };
+  }
+
+  evaluateUvLabelCandidate({ starPx, dir, radius, textWidth, textHeight, paddingX, fontSize, visibleStarAnchors, placedBoxes }) {
+    const anchorXRaw = starPx.x + dir.x * radius;
+    const anchorY = THREE.MathUtils.clamp(starPx.y + dir.y * radius, LABEL_MARGIN_Y + textHeight * 0.5, ATLAS_HEIGHT - LABEL_MARGIN_Y - textHeight * 0.5);
+    const preferRight = dir.x >= 0;
+    const drawXRaw = preferRight ? (anchorXRaw + paddingX) : (anchorXRaw - paddingX - textWidth);
+    const drawX = this.wrapPixelX(drawXRaw);
+    const drawY = anchorY;
+    const bounds = {
+      x: drawX,
+      y: drawY - textHeight * 0.5,
+      width: textWidth,
+      height: textHeight
+    };
+
+    let overlapPenalty = 0;
+    for (const box of placedBoxes) {
+      if (this.boxesOverlapWrapped(bounds, box)) overlapPenalty += 5000;
+    }
+
+    let starPenalty = 0;
+    const expandedBounds = {
+      x: bounds.x - 5,
+      y: bounds.y - 4,
+      width: bounds.width + 10,
+      height: bounds.height + 8
+    };
+    for (const anchor of visibleStarAnchors) {
+      if (anchor.x === starPx.x && anchor.y === starPx.y) continue;
+      if (this.pointInWrappedRect(anchor.x, anchor.y, expandedBounds)) {
+        starPenalty += 220;
+      }
+    }
+
+    const verticalPenalty = Math.abs(anchorY - starPx.y) * 0.28;
+    const radialPenalty = radius * 0.9;
+    const sideBias = dir.x < 0 ? 6 : 0;
+    const polarPenalty = (anchorY < 70 || anchorY > ATLAS_HEIGHT - 70) ? 40 : 0;
+    const score = overlapPenalty + starPenalty + verticalPenalty + radialPenalty + sideBias + polarPenalty;
+
+    return {
+      score,
+      anchorX: this.wrapPixelX(anchorXRaw),
+      anchorY,
+      drawX,
+      drawY,
+      bounds
+    };
+  }
+
+  wrapPixelX(value) {
+    let wrapped = value % ATLAS_WIDTH;
+    if (wrapped < 0) wrapped += ATLAS_WIDTH;
+    return wrapped;
+  }
+
+  pointInWrappedRect(x, y, rect) {
+    if (y < rect.y || y > rect.y + rect.height) return false;
+    for (const shift of [-ATLAS_WIDTH, 0, ATLAS_WIDTH]) {
+      const shiftedX = x + shift;
+      if (shiftedX >= rect.x && shiftedX <= rect.x + rect.width) return true;
+    }
+    return false;
+  }
+
+  boxesOverlapWrapped(a, b) {
+    const yOverlap = a.y < (b.y + b.height) && (a.y + a.height) > b.y;
+    if (!yOverlap) return false;
+    for (const shift of [-ATLAS_WIDTH, 0, ATLAS_WIDTH]) {
+      const bx = b.x + shift;
+      const xOverlap = a.x < (bx + b.width) && (a.x + a.width) > bx;
+      if (xOverlap) return true;
+    }
+    return false;
   }
 
   drawConstellationNames(ctx) {
