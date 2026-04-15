@@ -94,3 +94,22 @@
   pointer-events: none;
 }
 
+
+.map-subtitle {
+  margin: -0.5rem 0 0.75rem;
+  color: #a8b3c7;
+  font-size: 0.85rem;
+}
+
+.legacy-map-container h2::after {
+  content: "Legacy";
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7fb0ff;
+  border: 1px solid rgba(127, 176, 255, 0.45);
+  padding: 0.1rem 0.35rem;
+  border-radius: 999px;
+  vertical-align: middle;
+}

@@ -10,11 +10,13 @@ import { captureFormState, restoreFormState } from '../../../shared/formUtils.js
 import { syncFilterResultsToAppState } from '../state/filterStateStore.js';
 import { applyPlanes, refreshMollweidePlanes } from '../../planes/planeManager.js';
 import { rebuildConstellationVisuals, refreshMollweideConstellationVisuals } from '../../constellations/constellationManager.js';
+import { getStarEquirectangularPosition } from '../../../shared/uvUtils.js';
 
 function updateProjectedPositions(ctx) {
   const { state } = ctx;
   state.currentGlobeFilteredStars.forEach(star => {
     star.spherePosition = ctx.projectStarGlobe(star);
+    star.equirectPosition = getStarEquirectangularPosition(star);
   });
   state.currentFilteredStars.forEach(star => {
     star.truePosition = ctx.getStarTruePosition(star);
@@ -26,17 +28,23 @@ function updateProjectedPositions(ctx) {
 }
 
 function updateMapDisplays(ctx, options) {
-  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap } = ctx.getMaps();
   const { state } = ctx;
   trueCoordinatesMap.setStarOpacity(options.starOpacity);
   globeMap.setStarOpacity(options.starOpacity);
   mollweideMap.setStarOpacity(options.starOpacity);
+  uvMap?.setStarOpacity(options.starOpacity);
+  uvGlobeMap?.setStarOpacity(options.starOpacity);
   trueCoordinatesMap.setLabelOpacity(options.starNameOpacity);
   globeMap.setLabelOpacity(options.starNameOpacity);
   mollweideMap.setLabelOpacity(options.starNameOpacity);
+  uvMap?.setLabelOpacity(options.starNameOpacity);
+  uvGlobeMap?.setLabelOpacity(options.starNameOpacity);
   trueCoordinatesMap.setConnectionOpacity(options.connectionOpacity);
   globeMap.setConnectionOpacity(options.connectionOpacity);
   mollweideMap.setConnectionOpacity(options.connectionOpacity);
+  uvMap?.setConnectionOpacity(options.connectionOpacity);
+  uvGlobeMap?.setConnectionOpacity(options.connectionOpacity);
   setConnectionLineParams(options.connectionWidth, options.connectionFade, options.connectionLabelSize);
 
   trueCoordinatesMap.connectionOpacity = options.connectionOpacity;
@@ -55,6 +63,10 @@ function updateMapDisplays(ctx, options) {
     mollweideMap.connectionOpacity
   );
   mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
+  uvMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+  uvMap?.labelManager.refreshLabels(state.currentGlobeFilteredStars);
+  uvGlobeMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+  uvGlobeMap?.labelManager.refreshLabels(state.currentGlobeFilteredStars);
   if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
 }
 
@@ -178,11 +190,15 @@ export async function updateMollweideView(ctx) {
     ctx.updateMollweidePosition(star);
   });
 
-  const { mollweideMap } = ctx.getMaps();
+  const { mollweideMap, uvMap, uvGlobeMap } = ctx.getMaps();
   mollweideMap.addStars(state.currentMollweideFilteredStars);
   mollweideMap.updateStarPositions(state.currentMollweideFilteredStars);
   mollweideMap.updateConnectionPositions(state.currentMollweideFilteredStars, state.currentMollweideConnections);
   mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
+  uvMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+  uvMap?.labelManager.refreshLabels(state.currentGlobeFilteredStars);
+  uvGlobeMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+  uvGlobeMap?.labelManager.refreshLabels(state.currentGlobeFilteredStars);
   if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
 
   refreshMollweideConstellationVisuals(ctx);

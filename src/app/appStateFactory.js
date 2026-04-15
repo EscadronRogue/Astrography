@@ -17,6 +17,8 @@ let selectedStarData = null;
 let selectedHighlightTrue = null;
 let selectedHighlightGlobe = null;
 let selectedHighlightMollweide = null;
+let selectedHighlightUv = null;
+let selectedHighlightUvGlobe = null;
 let globeSurfaceSphere = null;
 let cloudDensityOverlays = [];
 let constellationLinesGlobe = [];
@@ -74,6 +76,8 @@ export const state = createAppState({
   selectedHighlightTrue: { get: () => selectedHighlightTrue, set: v => { selectedHighlightTrue = v; } },
   selectedHighlightGlobe: { get: () => selectedHighlightGlobe, set: v => { selectedHighlightGlobe = v; } },
   selectedHighlightMollweide: { get: () => selectedHighlightMollweide, set: v => { selectedHighlightMollweide = v; } },
+  selectedHighlightUv: { get: () => selectedHighlightUv, set: v => { selectedHighlightUv = v; } },
+  selectedHighlightUvGlobe: { get: () => selectedHighlightUvGlobe, set: v => { selectedHighlightUvGlobe = v; } },
   constellationLinesGlobe: { get: () => constellationLinesGlobe, set: v => { constellationLinesGlobe = v; } },
   constellationLabelsGlobe: { get: () => constellationLabelsGlobe, set: v => { constellationLabelsGlobe = v; } },
   constellationOverlayGlobe: { get: () => constellationOverlayGlobe, set: v => { constellationOverlayGlobe = v; } },

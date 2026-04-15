@@ -7,6 +7,7 @@ import { state, getCachedStars, setCachedStars, getConstellationLinesMoll, getGa
 import { setupFilterUI } from '../features/filters/pipeline/index.js';
 import { loadStarData } from '../data/loaders/loadStarData.js';
 import { MapManager } from './mapManager.js';
+import { UVMapManager } from './uvMapManager.js';
 import { createRenderRequester } from './renderFrame.js';
 import { setupMapProjectionToggles } from './projectionVisibility.js';
 import { debounce, createGlobeGrid } from './mapDecorations.js';
@@ -28,6 +29,8 @@ import { preprocessStarData } from './starPreprocessor.js';
 let trueCoordinatesMap;
 let globeMap;
 let mollweideMap;
+let uvMap;
+let uvGlobeMap;
 let editManager = null;
 let exportManager = null;
 
@@ -40,7 +43,7 @@ setRenderRequester(requestRender);
 // ---------------------------------------------------------------------------
 const appContext = {
   state,
-  getMaps: () => ({ trueCoordinatesMap, globeMap, mollweideMap }),
+  getMaps: () => ({ trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap }),
   getStarTruePosition: getSharedStarTruePosition,
   projectStarGlobe: getStarGlobePosition,
   projectStarMollweide: getStarMollweidePosition,
@@ -105,9 +108,11 @@ export async function bootstrapApp() {
 
     // Create map managers
     trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates', state, scheduleMollweideUpdate, getEditManager: () => editManager });
-    globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe', state, scheduleMollweideUpdate, getEditManager: () => editManager });
-    mollweideMap = new MapManager({ canvasId: 'mollweideMap', mapType: 'Mollweide', state, scheduleMollweideUpdate, getEditManager: () => editManager });
-    mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap);
+    globeMap = new MapManager({ canvasId: 'legacySphereMap', mapType: 'Globe', state, scheduleMollweideUpdate, getEditManager: () => editManager });
+    mollweideMap = new MapManager({ canvasId: 'legacyMollweideMap', mapType: 'Mollweide', state, scheduleMollweideUpdate, getEditManager: () => editManager });
+    uvMap = new UVMapManager({ canvasId: 'uvMap', mapType: 'Equirectangular', state });
+    uvGlobeMap = new UVMapManager({ canvasId: 'sphereMap', mapType: 'UVGlobe', state });
+    mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap);
 
     // Initialize EditManager
     editManager = new EditManager(
@@ -161,6 +166,8 @@ export async function bootstrapApp() {
 
     // Star interactions on all maps
     initStarInteractions(appContext, trueCoordinatesMap);
+    initStarInteractions(appContext, uvGlobeMap);
+    initStarInteractions(appContext, uvMap);
     initStarInteractions(appContext, globeMap);
     initStarInteractions(appContext, mollweideMap);
 
@@ -170,7 +177,9 @@ export async function bootstrapApp() {
       maybePersistPresets,
       trueCoordinatesMap,
       globeMap,
-      mollweideMap
+      mollweideMap,
+      uvMap,
+      uvGlobeMap
     });
 
     // Export and edit managers

@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { showTooltip, hideTooltip } from './tooltips.js';
+import { getStarEquirectangularPosition } from '../../shared/uvUtils.js';
 
 function createHighlight(radius, position) {
   const geometry = new THREE.SphereGeometry(radius, 16, 16);
@@ -86,7 +87,7 @@ export function initStarInteractions(ctx, map) {
 }
 
 export function updateSelectedStarHighlight(ctx) {
-  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap } = ctx.getMaps();
   const state = ctx.state;
 
   if (state.selectedHighlightTrue) {
@@ -107,6 +108,18 @@ export function updateSelectedStarHighlight(ctx) {
     state.selectedHighlightMollweide.material?.dispose?.();
     state.selectedHighlightMollweide = null;
   }
+  if (state.selectedHighlightUv) {
+    uvMap.scene.remove(state.selectedHighlightUv);
+    state.selectedHighlightUv.geometry?.dispose?.();
+    state.selectedHighlightUv.material?.dispose?.();
+    state.selectedHighlightUv = null;
+  }
+  if (state.selectedHighlightUvGlobe) {
+    uvGlobeMap.scene.remove(state.selectedHighlightUvGlobe);
+    state.selectedHighlightUvGlobe.geometry?.dispose?.();
+    state.selectedHighlightUvGlobe.material?.dispose?.();
+    state.selectedHighlightUvGlobe = null;
+  }
 
   if (!state.selectedStarData) return;
 
@@ -123,14 +136,21 @@ export function updateSelectedStarHighlight(ctx) {
   const mollweidePosition = state.selectedStarData.mollweidePosition
     ? state.selectedStarData.mollweidePosition
     : ctx.projectStarMollweide(state.selectedStarData);
+  const uvPosition = state.selectedStarData.equirectPosition
+    ? state.selectedStarData.equirectPosition
+    : getStarEquirectangularPosition(state.selectedStarData);
 
   state.selectedHighlightTrue = createHighlight((state.selectedStarData.displaySize || 2) * 0.2 * 1.2, truePosition);
   state.selectedHighlightGlobe = createHighlight((state.selectedStarData.displaySize || 2) * 0.2 * 1.2, globePosition);
   state.selectedHighlightMollweide = createHighlight((state.selectedStarData.displaySize || 2) * 0.4 * 1.2, mollweidePosition);
+  state.selectedHighlightUv = createHighlight((state.selectedStarData.displaySize || 2) * 0.5 * 1.2, uvPosition);
+  state.selectedHighlightUvGlobe = createHighlight((state.selectedStarData.displaySize || 2) * 0.2 * 1.2, globePosition);
 
   trueCoordinatesMap.scene.add(state.selectedHighlightTrue);
   globeMap.scene.add(state.selectedHighlightGlobe);
   mollweideMap.scene.add(state.selectedHighlightMollweide);
+  uvMap.scene.add(state.selectedHighlightUv);
+  uvGlobeMap.scene.add(state.selectedHighlightUvGlobe);
 
   ctx.requestRender();
 }

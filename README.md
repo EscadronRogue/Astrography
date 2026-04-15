@@ -1,10 +1,15 @@
 # Astrography
 
-Astrography is a browser-based stellar cartography application for exploring nearby stars across three synchronized views:
+Astrography is a browser-based stellar cartography application for exploring nearby stars across multiple synchronized views. The primary presentation now uses a UV-first pipeline:
 
+- **Map** — equirectangular UV source map
+- **Globe** — the UV map projected onto a sphere
 - **True Coordinates** — 3D spatial layout of nearby stars
-- **Globe** — spherical sky map
-- **Mollweide** — full-sky equal-area projection for 2D analysis, editing, and export
+
+Legacy views are still available on demand:
+
+- **Legacy Globe** — older scene-based spherical plotting
+- **Legacy Mollweide** — older full-sky equal-area projection for editing and export
 
 The application supports filtering, constellation rendering, density and isolation overlays, interstellar cloud overlays, editable labels and line visibility, preset persistence, and PNG/PDF export.
 
