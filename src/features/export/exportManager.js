@@ -1,3 +1,4 @@
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { buildWideLineGeometry } from '../../render/engine/renderUtils.js';
 
 export class ExportManager {

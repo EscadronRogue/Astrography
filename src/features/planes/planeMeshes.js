@@ -1,7 +1,7 @@
 // Plane mesh builders migrated from the legacy planes filter module.
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { radToSphere, radToMollweide, getMollweideLambda0, splitMollweideWrap } from '../../shared/geometryUtils.js';
-import { galacticToEquatorial, eclipticToEquatorial } from './planeDefinitions.js';
+import { DEG2RAD, galacticToEquatorial, eclipticToEquatorial } from './planeDefinitions.js';
 
 
 export function createGalacticPlaneMesh(size = 250, opacity = 0.2) {

@@ -1,4 +1,5 @@
 // Cloud-density overlay rendering migrated from the legacy cloud-density filter module.
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { cachedRadToMollweide, getMollweideLambda0 } from '../../shared/geometryUtils.js';
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { lightenColor } from '../density/densityColorScale.js';

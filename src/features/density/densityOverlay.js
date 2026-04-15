@@ -1,4 +1,5 @@
 // Density overlay implementation migrated from the legacy density filter module.
+import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import {
   getGreatCirclePoints,
   cachedRadToMollweide,
