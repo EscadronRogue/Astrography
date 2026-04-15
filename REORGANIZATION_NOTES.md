@@ -59,3 +59,6 @@ Still not fully complete relative to the ideal target:
 - line-edit pointer handling and undo replay were extracted into `src/features/editing/lineEditor.js` and `src/features/editing/editCommands.js`, reducing the manager's direct responsibility surface
 
 - 2026-04-15: Moved filter-result synchronization into `src/features/filters/state/filterStateStore.js` and grouped filter-driven runtime fields inside `createApp.js` under a dedicated `filterRuntimeState` backing object. This reduces ad hoc pipeline mutation and makes the filter subsystem a clearer state owner ahead of further feature extraction.
+
+- 2026-04-15: Split `src/app/createApp.js` further by extracting map decoration helpers, the `MapManager` implementation, projection visibility wiring, and frame rendering coordination into dedicated `src/app/*` modules. This makes app composition easier to trace and keeps `createApp.js` focused on bootstrap wiring.
+- 2026-04-15: Split remaining edit interaction responsibilities out of `src/features/editing/editManager.js` into `labelDragControls.js` and `transformControls.js`, so the manager now coordinates dedicated editing modules instead of owning drag/rotate/scale behavior directly.

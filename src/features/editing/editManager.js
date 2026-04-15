@@ -3,6 +3,7 @@ import { initializeEditState } from './editState.js';
 import { downloadLabelEdits, applyLabelEdits, buildSerializableEditState } from './editPersistence.js';
 import { setupEditIOControls } from './editIOControls.js';
 import { updateEditOverlayPosition, registerEditableLabels } from './labelEditor.js';
+import { handleEditPointerDown, handleEditPointerMove, handleEditPointerUp, setupLabelEditor } from './labelDragControls.js';
 import {
   getLineKey as getStoredLineKey,
   applyStoredLineEdits,
@@ -10,6 +11,7 @@ import {
   handleLinePointerDown
 } from './lineEditor.js';
 import { undoLastEdit } from './editCommands.js';
+import { setupEditOverlay, handleRotateMove, handleRotateUp, handleScaleMove, handleScaleUp } from './transformControls.js';
 
 export class EditManager {
   constructor(mollweideMap, cachedStars, constellationLabelsMoll, galacticDirectionLabelsMoll, getStarId, buildAndApplyFilters, maybePersistPresets, requestRender) {
@@ -70,113 +72,20 @@ export class EditManager {
     handleLinePointerDown(this, event);
   };
 
-  onEditPointerDown = (e) => {
-    if (!this.labelEditMode) return;
-    const pos = this.getPointerPos(e);
-    this.editRaycaster.setFromCamera(this.editPointer, this.mollweideMap.camera);
-    const intersects = this.editRaycaster.intersectObjects(this.editableLabels, false);
-    if (intersects.length > 0) {
-      const label = intersects[0].object;
-      if (this.selectedLabel !== label) {
-        this.selectedLabel = label;
-        this.updateEditOverlay();
-      }
-      this.initialLabelPos = this.selectedLabel.position.clone();
-      this.dragOffset.copy(pos).sub(this.selectedLabel.position);
-      this.selectedLabel.userData._origColor = this.selectedLabel.material.color.clone();
-      if (this.selectedLabel.userData.lineObj) {
-        this.selectedLabel.userData._origLineColor = this.selectedLabel.userData.lineObj.material.color.clone();
-      }
-      this.selectedLabel.material.color.offsetHSL(0, 0, 0.1);
-      if (this.selectedLabel.userData.lineObj) {
-        this.selectedLabel.userData.lineObj.material.color.offsetHSL(0, 0, 0.1);
-      }
-      this.mollweideMap.canvas.classList.add('dragging');
-      this.isDragging = true;
-      this.requestRender();
-      e.preventDefault();
-    } else {
-      if (this.selectedLabel) {
-        this.selectedLabel = null;
-        this.updateEditOverlay();
-        this.requestRender();
-      }
-    }
+  onEditPointerDown = event => {
+    handleEditPointerDown(this, event);
   };
 
-  onEditPointerMove = (e) => {
-    if (!this.labelEditMode || !this.selectedLabel || !this.isDragging) return;
-    const pos = this.getPointerPos(e);
-    this.selectedLabel.position.copy(pos.clone().sub(this.dragOffset));
-    if (this.selectedLabel.userData.editType === 'star' && this.selectedLabel.userData.lineObj) {
-      const anchor = this.selectedLabel.userData.anchorFunc();
-      this.selectedLabel.userData.lineObj.geometry.setFromPoints([anchor, this.selectedLabel.position]);
-    }
-    this.updateEditOverlay();
-    this.requestRender();
-    e.preventDefault();
+  onEditPointerMove = event => {
+    handleEditPointerMove(this, event);
   };
 
   onEditPointerUp = () => {
-    if (!this.labelEditMode || !this.selectedLabel) return;
-    const anchor = this.selectedLabel.userData.anchorFunc();
-    const offsetVec = this.selectedLabel.position.clone().sub(anchor);
-    if (this.selectedLabel.userData.editType === 'star') {
-      this.starLabelOffsets.set(this.selectedLabel.userData.editId, { x: offsetVec.x, y: offsetVec.y });
-      if (this.selectedLabel.userData.starRef) {
-        this.selectedLabel.userData.starRef.mollLabelOffset = offsetVec.clone();
-      }
-      if (this.selectedLabel.userData.lineObj) {
-        this.selectedLabel.userData.lineObj.geometry.setFromPoints([anchor, this.selectedLabel.position]);
-      }
-    } else if (this.selectedLabel.userData.editType === 'constellation') {
-      this.constellationLabelOffsets.set(this.selectedLabel.userData.editId, { x: offsetVec.x, y: offsetVec.y });
-      this.selectedLabel.userData.offset = offsetVec.clone();
-    } else if (this.selectedLabel.userData.editType === 'galactic') {
-      this.galacticLabelOffsets.set(this.selectedLabel.userData.editId, { x: offsetVec.x, y: offsetVec.y });
-      this.selectedLabel.userData.offset = offsetVec.clone();
-    }
-    if (this.selectedLabel.userData._origColor) {
-      this.selectedLabel.material.color.copy(this.selectedLabel.userData._origColor);
-    }
-    if (this.selectedLabel.userData.lineObj && this.selectedLabel.userData._origLineColor) {
-      this.selectedLabel.userData.lineObj.material.color.copy(this.selectedLabel.userData._origLineColor);
-    }
-    this.mollweideMap.canvas.classList.remove('dragging');
-    if (this.initialLabelPos) {
-      const prevOffset = this.initialLabelPos.clone().sub(anchor);
-      this.editHistory.push({ type: 'moveLabel', label: this.selectedLabel, prevOffset });
-    }
-    this.isDragging = false;
-    this.updateEditOverlay();
-    this.requestRender();
-    this.initialLabelPos = null;
-    this.maybePersistPresets();
+    handleEditPointerUp(this);
   };
 
   setupLabelEditor() {
-    const btn = document.getElementById('toggle-label-editor');
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-      this.labelEditMode = !this.labelEditMode;
-      btn.classList.toggle('active', this.labelEditMode);
-      if (this.labelEditMode) {
-        this.lineEditMode = false;
-        const lbtn = document.getElementById('toggle-line-editor');
-        if (lbtn) lbtn.classList.remove('active');
-      }
-      this.mollweideMap.canvas.classList.toggle('edit-mode', this.labelEditMode || this.lineEditMode);
-      if (this.labelEditMode) {
-        this.registerMollweideEditableLabels();
-      } else {
-        this.selectedLabel = null;
-        this.updateEditOverlay();
-      }
-      this.requestRender();
-    });
-    this.mollweideMap.canvas.addEventListener('pointerdown', this.onEditPointerDown);
-    this.mollweideMap.canvas.addEventListener('pointermove', this.onEditPointerMove);
-    window.addEventListener('pointerup', this.onEditPointerUp);
+    setupLabelEditor(this);
   }
 
   setupLineEditor() {
@@ -214,104 +123,23 @@ export class EditManager {
   }
 
   setupEditOverlay() {
-    const container = document.querySelector('.label-container');
-    if (!container) return;
-    this.editOverlay = document.createElement('div');
-    this.editOverlay.id = 'label-edit-overlay';
-    this.rotateHandle = document.createElement('div');
-    this.rotateHandle.className = 'handle rotate-handle';
-    this.rotateHandle.textContent = '⟳';
-    this.scaleHandle = document.createElement('div');
-    this.scaleHandle.className = 'handle scale-handle';
-    this.scaleHandle.textContent = '⤡';
-    this.editOverlay.appendChild(this.rotateHandle);
-    this.editOverlay.appendChild(this.scaleHandle);
-    container.appendChild(this.editOverlay);
-
-    this.rotateHandle.addEventListener('pointerdown', e => {
-      if (!this.selectedLabel) return;
-      this.isRotating = true;
-      const rect = this.editOverlay.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      this.rotateStartAngle = Math.atan2(e.clientY - cy, e.clientX - cx);
-      this.rotateInitialRotation = this.selectedLabel.material.rotation || 0;
-      this.rotateCurrentRotation = this.rotateInitialRotation;
-      document.addEventListener('pointermove', this.onRotateMove);
-      document.addEventListener('pointerup', this.onRotateUp);
-      e.stopPropagation();
-      e.preventDefault();
-    });
-
-    this.scaleHandle.addEventListener('pointerdown', e => {
-      if (!this.selectedLabel) return;
-      this.isScaling = true;
-      const rect = this.editOverlay.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dx = e.clientX - cx;
-      const dy = e.clientY - cy;
-      this.scaleStart = { dist: Math.hypot(dx, dy), sx: this.selectedLabel.scale.x, sy: this.selectedLabel.scale.y };
-      document.addEventListener('pointermove', this.onScaleMove);
-      document.addEventListener('pointerup', this.onScaleUp);
-      e.stopPropagation();
-      e.preventDefault();
-    });
+    setupEditOverlay(this);
   }
 
-  onRotateMove = (e) => {
-    if (!this.isRotating || !this.selectedLabel) return;
-    const rect = this.editOverlay.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const angle = Math.atan2(e.clientY - cy, e.clientX - cx);
-    const delta = this.angleDiff(angle, this.rotateStartAngle);
-    this.rotateCurrentRotation -= delta * this.ROTATE_SENSITIVITY;
-    this.selectedLabel.material.rotation = this.rotateCurrentRotation;
-    this.rotateStartAngle = angle;
-    if (this.selectedLabel.userData.starRef) {
-      this.selectedLabel.userData.starRef.mollLabelRotation = this.rotateCurrentRotation;
-    }
-    this.starLabelRotations.set(this.selectedLabel.userData.editId, this.rotateCurrentRotation);
-    this.updateEditOverlay();
-    this.requestRender();
+  onRotateMove = event => {
+    handleRotateMove(this, event);
   };
 
   onRotateUp = () => {
-    if (!this.isRotating) return;
-    document.removeEventListener('pointermove', this.onRotateMove);
-    document.removeEventListener('pointerup', this.onRotateUp);
-    this.editHistory.push({ type: 'rotateLabel', label: this.selectedLabel, prevRotation: this.rotateInitialRotation });
-    this.isRotating = false;
-    this.maybePersistPresets();
+    handleRotateUp(this);
   };
 
-  onScaleMove = (e) => {
-    if (!this.isScaling || !this.selectedLabel) return;
-    const rect = this.editOverlay.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = e.clientX - cx;
-    const dy = e.clientY - cy;
-    const dist = Math.hypot(dx, dy);
-    const ratio = dist / this.scaleStart.dist;
-    const factor = 1 + (ratio - 1) * 0.5;
-    const newX = this.scaleStart.sx * factor;
-    const newY = this.scaleStart.sy * factor;
-    this.selectedLabel.scale.set(newX, newY, 1);
-    if (this.selectedLabel.userData.starRef) this.selectedLabel.userData.starRef.mollLabelScale = new THREE.Vector3(newX, newY, 1);
-    this.starLabelScales.set(this.selectedLabel.userData.editId, { x: newX, y: newY });
-    this.updateEditOverlay();
-    this.requestRender();
+  onScaleMove = event => {
+    handleScaleMove(this, event);
   };
 
   onScaleUp = () => {
-    if (!this.isScaling) return;
-    document.removeEventListener('pointermove', this.onScaleMove);
-    document.removeEventListener('pointerup', this.onScaleUp);
-    this.editHistory.push({ type: 'scaleLabel', label: this.selectedLabel, prevScale: new THREE.Vector3(this.scaleStart.sx, this.scaleStart.sy, 1) });
-    this.isScaling = false;
-    this.maybePersistPresets();
+    handleScaleUp(this);
   };
 
   setupAll() {
