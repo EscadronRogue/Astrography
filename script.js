@@ -159,6 +159,9 @@ function createMaps() {
       if (state.enableIsolationFilterFlag && state.isolationOverlay?.refreshMollweide) {
         state.isolationOverlay.refreshMollweide();
       }
+      if (state.enableDensityFilterFlag && state.densityOverlay?.refreshMollweide) {
+        state.densityOverlay.refreshMollweide();
+      }
     },
     applyStoredLineEdits: createStoredLineEditApplier()
   });
