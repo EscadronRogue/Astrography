@@ -57,3 +57,5 @@ Still not fully complete relative to the ideal target:
 - `src/features/clouds/cloudsFilter.js` and `src/features/clouds/cloudDensityFilter.js` still contain legacy-shaped implementations under the correct feature home
 - `src/features/editing/editManager.js` still needs deeper extraction into dedicated label and line editors
 - line-edit pointer handling and undo replay were extracted into `src/features/editing/lineEditor.js` and `src/features/editing/editCommands.js`, reducing the manager's direct responsibility surface
+
+- 2026-04-15: Moved filter-result synchronization into `src/features/filters/state/filterStateStore.js` and grouped filter-driven runtime fields inside `createApp.js` under a dedicated `filterRuntimeState` backing object. This reduces ad hoc pipeline mutation and makes the filter subsystem a clearer state owner ahead of further feature extraction.

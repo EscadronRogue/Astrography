@@ -20,12 +20,6 @@ import { ExportManager } from '../features/export/exportManager.js';
 import { EditManager } from '../features/editing/editManager.js';
 
 let cachedStars = null;
-let currentFilteredStars = [];
-let currentConnections = [];
-let currentGlobeFilteredStars = [];
-let currentGlobeConnections = [];
-let currentMollweideFilteredStars = [];
-let currentMollweideConnections = [];
 let selectedStarData = null;
 let selectedHighlightTrue = null;
 let selectedHighlightGlobe = null;
@@ -40,8 +34,6 @@ let constellationLinesMoll = [];
 let constellationLabelsMoll = [];
 let constellationOverlayMoll = [];
 let globeSurfaceSphere = null;
-let isolationOverlay = null;
-let densityOverlay = null;
 let cloudDensityOverlays = [];
 let galacticPlaneTrue = null;
 let eclipticPlaneTrue = null;
@@ -55,26 +47,35 @@ let celestialEquatorMoll = null;
 let galacticDirectionLabelsTrue = [];
 let galacticDirectionLabelsGlobe = [];
 let galacticDirectionLabelsMoll = [];
-let showConstellationBoundariesFlag = false;
-let showConstellationNamesFlag = false;
-let showConstellationOverlayFlag = false;
-let enableIsolationFilterFlag = false;
-let enableDensityFilterFlag = false;
-let showCloudsFlag = false;
-let showCloudDensityFlag = false;
-let showGalacticPlaneFlag = false;
-let showEclipticPlaneFlag = false;
-let showCelestialEquatorFlag = false;
-
+const filterRuntimeState = {
+  currentFilteredStars: [],
+  currentConnections: [],
+  currentGlobeFilteredStars: [],
+  currentGlobeConnections: [],
+  currentMollweideFilteredStars: [],
+  currentMollweideConnections: [],
+  isolationOverlay: null,
+  densityOverlay: null,
+  showConstellationBoundariesFlag: false,
+  showConstellationNamesFlag: false,
+  showConstellationOverlayFlag: false,
+  enableIsolationFilterFlag: false,
+  enableDensityFilterFlag: false,
+  showCloudsFlag: false,
+  showCloudDensityFlag: false,
+  showGalacticPlaneFlag: false,
+  showEclipticPlaneFlag: false,
+  showCelestialEquatorFlag: false
+};
 
 const state = createAppState({
   cachedStars: { get: () => cachedStars, set: v => { cachedStars = v; } },
-  currentFilteredStars: { get: () => currentFilteredStars, set: v => { currentFilteredStars = v; } },
-  currentConnections: { get: () => currentConnections, set: v => { currentConnections = v; } },
-  currentGlobeFilteredStars: { get: () => currentGlobeFilteredStars, set: v => { currentGlobeFilteredStars = v; } },
-  currentGlobeConnections: { get: () => currentGlobeConnections, set: v => { currentGlobeConnections = v; } },
-  currentMollweideFilteredStars: { get: () => currentMollweideFilteredStars, set: v => { currentMollweideFilteredStars = v; } },
-  currentMollweideConnections: { get: () => currentMollweideConnections, set: v => { currentMollweideConnections = v; } },
+  currentFilteredStars: { get: () => filterRuntimeState.currentFilteredStars, set: v => { filterRuntimeState.currentFilteredStars = v; } },
+  currentConnections: { get: () => filterRuntimeState.currentConnections, set: v => { filterRuntimeState.currentConnections = v; } },
+  currentGlobeFilteredStars: { get: () => filterRuntimeState.currentGlobeFilteredStars, set: v => { filterRuntimeState.currentGlobeFilteredStars = v; } },
+  currentGlobeConnections: { get: () => filterRuntimeState.currentGlobeConnections, set: v => { filterRuntimeState.currentGlobeConnections = v; } },
+  currentMollweideFilteredStars: { get: () => filterRuntimeState.currentMollweideFilteredStars, set: v => { filterRuntimeState.currentMollweideFilteredStars = v; } },
+  currentMollweideConnections: { get: () => filterRuntimeState.currentMollweideConnections, set: v => { filterRuntimeState.currentMollweideConnections = v; } },
   selectedStarData: { get: () => selectedStarData, set: v => { selectedStarData = v; } },
   selectedHighlightTrue: { get: () => selectedHighlightTrue, set: v => { selectedHighlightTrue = v; } },
   selectedHighlightGlobe: { get: () => selectedHighlightGlobe, set: v => { selectedHighlightGlobe = v; } },
@@ -86,8 +87,8 @@ const state = createAppState({
   constellationLabelsMoll: { get: () => constellationLabelsMoll, set: v => { constellationLabelsMoll = v; } },
   constellationOverlayMoll: { get: () => constellationOverlayMoll, set: v => { constellationOverlayMoll = v; } },
   globeSurfaceSphere: { get: () => globeSurfaceSphere, set: v => { globeSurfaceSphere = v; } },
-  isolationOverlay: { get: () => isolationOverlay, set: v => { isolationOverlay = v; } },
-  densityOverlay: { get: () => densityOverlay, set: v => { densityOverlay = v; } },
+  isolationOverlay: { get: () => filterRuntimeState.isolationOverlay, set: v => { filterRuntimeState.isolationOverlay = v; } },
+  densityOverlay: { get: () => filterRuntimeState.densityOverlay, set: v => { filterRuntimeState.densityOverlay = v; } },
   cloudDensityOverlays: { get: () => cloudDensityOverlays, set: v => { cloudDensityOverlays = v; } },
   galacticPlaneTrue: { get: () => galacticPlaneTrue, set: v => { galacticPlaneTrue = v; } },
   eclipticPlaneTrue: { get: () => eclipticPlaneTrue, set: v => { eclipticPlaneTrue = v; } },
@@ -101,16 +102,16 @@ const state = createAppState({
   galacticDirectionLabelsTrue: { get: () => galacticDirectionLabelsTrue, set: v => { galacticDirectionLabelsTrue = v; } },
   galacticDirectionLabelsGlobe: { get: () => galacticDirectionLabelsGlobe, set: v => { galacticDirectionLabelsGlobe = v; } },
   galacticDirectionLabelsMoll: { get: () => galacticDirectionLabelsMoll, set: v => { galacticDirectionLabelsMoll = v; } },
-  showConstellationBoundariesFlag: { get: () => showConstellationBoundariesFlag, set: v => { showConstellationBoundariesFlag = v; } },
-  showConstellationNamesFlag: { get: () => showConstellationNamesFlag, set: v => { showConstellationNamesFlag = v; } },
-  showConstellationOverlayFlag: { get: () => showConstellationOverlayFlag, set: v => { showConstellationOverlayFlag = v; } },
-  enableIsolationFilterFlag: { get: () => enableIsolationFilterFlag, set: v => { enableIsolationFilterFlag = v; } },
-  enableDensityFilterFlag: { get: () => enableDensityFilterFlag, set: v => { enableDensityFilterFlag = v; } },
-  showCloudsFlag: { get: () => showCloudsFlag, set: v => { showCloudsFlag = v; } },
-  showCloudDensityFlag: { get: () => showCloudDensityFlag, set: v => { showCloudDensityFlag = v; } },
-  showGalacticPlaneFlag: { get: () => showGalacticPlaneFlag, set: v => { showGalacticPlaneFlag = v; } },
-  showEclipticPlaneFlag: { get: () => showEclipticPlaneFlag, set: v => { showEclipticPlaneFlag = v; } },
-  showCelestialEquatorFlag: { get: () => showCelestialEquatorFlag, set: v => { showCelestialEquatorFlag = v; } }
+  showConstellationBoundariesFlag: { get: () => filterRuntimeState.showConstellationBoundariesFlag, set: v => { filterRuntimeState.showConstellationBoundariesFlag = v; } },
+  showConstellationNamesFlag: { get: () => filterRuntimeState.showConstellationNamesFlag, set: v => { filterRuntimeState.showConstellationNamesFlag = v; } },
+  showConstellationOverlayFlag: { get: () => filterRuntimeState.showConstellationOverlayFlag, set: v => { filterRuntimeState.showConstellationOverlayFlag = v; } },
+  enableIsolationFilterFlag: { get: () => filterRuntimeState.enableIsolationFilterFlag, set: v => { filterRuntimeState.enableIsolationFilterFlag = v; } },
+  enableDensityFilterFlag: { get: () => filterRuntimeState.enableDensityFilterFlag, set: v => { filterRuntimeState.enableDensityFilterFlag = v; } },
+  showCloudsFlag: { get: () => filterRuntimeState.showCloudsFlag, set: v => { filterRuntimeState.showCloudsFlag = v; } },
+  showCloudDensityFlag: { get: () => filterRuntimeState.showCloudDensityFlag, set: v => { filterRuntimeState.showCloudDensityFlag = v; } },
+  showGalacticPlaneFlag: { get: () => filterRuntimeState.showGalacticPlaneFlag, set: v => { filterRuntimeState.showGalacticPlaneFlag = v; } },
+  showEclipticPlaneFlag: { get: () => filterRuntimeState.showEclipticPlaneFlag, set: v => { filterRuntimeState.showEclipticPlaneFlag = v; } },
+  showCelestialEquatorFlag: { get: () => filterRuntimeState.showCelestialEquatorFlag, set: v => { filterRuntimeState.showCelestialEquatorFlag = v; } }
 });
 
 let editManager = null;
@@ -466,9 +467,9 @@ class MapManager {
           scheduleMollweideUpdate();
         },
         leftCallback: () => {
-          if (enableIsolationFilterFlag && isolationOverlay &&
-              typeof isolationOverlay.refreshMollweide === 'function') {
-            isolationOverlay.refreshMollweide();
+          if (state.enableIsolationFilterFlag && state.isolationOverlay &&
+              typeof state.isolationOverlay.refreshMollweide === 'function') {
+            state.isolationOverlay.refreshMollweide();
           }
         },
         panCameraLeft: true,
@@ -879,7 +880,7 @@ export async function bootstrapApp() {
     exportManager = new ExportManager(mollweideMap);
     exportManager.setup();
     editManager.setConstellationLinesMoll(constellationLinesMoll);
-    editManager.setIsolationOverlay(isolationOverlay);
+    editManager.setIsolationOverlay(state.isolationOverlay);
     editManager.setupAll();
 
     requestRender();

@@ -7,6 +7,7 @@ import {
 } from '../../clouds/cloudRenderer.js';
 import { createCloudDensityOverlay, updateCloudDensityOverlay } from '../../clouds/cloudDensityRenderer.js';
 import { captureFormState, restoreFormState } from '../../../shared/formUtils.js';
+import { syncFilterResultsToAppState } from '../state/filterStateStore.js';
 import { applyPlanes, refreshMollweidePlanes } from '../../planes/planeManager.js';
 import { rebuildConstellationVisuals, refreshMollweideConstellationVisuals } from '../../constellations/constellationManager.js';
 
@@ -138,26 +139,7 @@ export async function buildAndApplyFilters(ctx) {
   const sanitizedBorderWidth = Math.max(0.1, filters.mollweideBorderWidth || 0.1);
   const sanitizedBorderOpacity = Math.max(0, Math.min(1, filters.mollweideBorderOpacity));
 
-  Object.assign(state, {
-    showConstellationBoundariesFlag: filters.showConstellationBoundaries,
-    showConstellationNamesFlag: filters.showConstellationNames,
-    showConstellationOverlayFlag: filters.showConstellationOverlay,
-    enableIsolationFilterFlag: filters.enableIsolationFilter,
-    enableDensityFilterFlag: filters.enableDensityFilter,
-    showCloudsFlag: filters.showClouds,
-    showCloudDensityFlag: filters.showCloudDensity,
-    showGalacticPlaneFlag: filters.showGalacticPlane,
-    showEclipticPlaneFlag: filters.showEclipticPlane,
-    showCelestialEquatorFlag: filters.showCelestialEquator,
-    isolationOverlay: filters.isolationOverlay,
-    densityOverlay: filters.densityOverlay,
-    currentFilteredStars: filters.filteredStars,
-    currentConnections: filters.connections,
-    currentGlobeFilteredStars: filters.globeFilteredStars,
-    currentGlobeConnections: filters.globeConnections,
-    currentMollweideFilteredStars: filters.mollweideFilteredStars,
-    currentMollweideConnections: filters.mollweideConnections
-  });
+  syncFilterResultsToAppState(state, filters);
 
   updateProjectedPositions(ctx);
   updateMapDisplays(ctx, filters);
