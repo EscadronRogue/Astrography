@@ -1,4 +1,4 @@
-const DEG2RAD = Math.PI / 180;
+export const DEG2RAD = Math.PI / 180;
 
 // Galactic to equatorial conversion constants (J2000)
 export const alphaGP = 192.85948 * DEG2RAD;
