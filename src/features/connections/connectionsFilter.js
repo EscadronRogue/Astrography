@@ -5,7 +5,7 @@ import { splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from 
 import { createWideLineMaterial, buildWideLineGeometry } from '../../render/engine/renderUtils.js';
 import { getStarTruePosition } from '../../shared/starUtils.js';
 import { GLOBE_RADIUS, DEFAULT_STAR_COLOR } from '../../shared/constants.js';
-import { getConnectionLineParams, setConnectionLineParams } from './connectionSettings.js';
+import { getConnectionLineParams } from './connectionSettings.js';
 
 const GC_SEGMENTS = 32;
 const STAR_POSITION_CACHE_KEY = Symbol('connectionPositionCache');
@@ -263,6 +263,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
 
       const distanceText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
       const baseFontSize = 72;
+      const { connectionLabelSize } = getConnectionLineParams();
       const fontSize = baseFontSize * connectionLabelSize;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
