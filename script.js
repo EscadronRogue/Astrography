@@ -125,7 +125,7 @@ const appContext = {
   updateMollweidePosition,
   applyGlobeSurface,
   requestRender: () => requestRender(),
-  editManager: editManager
+  get editManager() { return editManager; }
 };
 
 async function buildAndApplyFilters() {
@@ -642,7 +642,7 @@ class MapManager {
       this.connectionGroup.add(merged);
     }
     this.scene.add(this.connectionGroup);
-    applyStoredLineEdits(this.connectionGroup);
+    if (editManager) editManager.applyStoredLineEdits(this.connectionGroup);
     requestRenderIfAvailable();
   }
 
@@ -880,7 +880,6 @@ async function main() {
     editManager.setConstellationLinesMoll(constellationLinesMoll);
     editManager.setIsolationOverlay(isolationOverlay);
     editManager.setupAll();
-    appContext.editManager = editManager;
 
     requestRender();
     loader.classList.add('hidden');

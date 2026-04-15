@@ -54,7 +54,7 @@ function updateMapDisplays(ctx, options) {
     mollweideMap.connectionOpacity
   );
   mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
-  ctx.editManager.registerMollweideEditableLabels();
+  if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
 }
 
 async function refreshCloudOverlays(ctx, options) {
@@ -201,7 +201,7 @@ export async function updateMollweideView(ctx) {
   mollweideMap.updateStarPositions(state.currentMollweideFilteredStars);
   mollweideMap.updateConnectionPositions(state.currentMollweideFilteredStars, state.currentMollweideConnections);
   mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
-  ctx.editManager.registerMollweideEditableLabels();
+  if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
 
   refreshMollweideConstellationVisuals(ctx);
 
