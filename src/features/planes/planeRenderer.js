@@ -15,4 +15,4 @@ export {
   createGalacticDirectionLabelsGlobe,
   createGalacticDirectionLabelsMollweide,
   updateGalacticDirectionLabelsMollweide
-} from './planesFilter.js';
+} from './planeMeshes.js';

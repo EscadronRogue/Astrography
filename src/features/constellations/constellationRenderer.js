@@ -5,7 +5,7 @@ export {
   createConstellationLabelsForGlobe,
   createConstellationLabelsForMollweide,
   rebuildConstellationMeshFromSegments
-} from './constellationFilter.js';
+} from './constellationMapRenderer.js';
 
 export {
   loadConstellationBoundaries,

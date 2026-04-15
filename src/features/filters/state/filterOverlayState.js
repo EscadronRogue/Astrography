@@ -2,8 +2,8 @@
  * @file Manages creation, rebuilding, and teardown of isolation and density overlays.
  * Provides updateDerivedOverlays() as the main entry point called each filter cycle.
  */
-import { initIsolationFilter, updateIsolationFilter } from '../../isolation/isolationFilter.js';
-import { initDensityFilter, updateDensityFilter } from '../../density/densityFilter.js';
+import { initIsolationFilter, updateIsolationFilter } from '../../isolation/isolationOverlay.js';
+import { initDensityFilter, updateDensityFilter } from '../../density/densityOverlay.js';
 
 let isolationOverlay = null;
 let densityOverlay = null;

@@ -1,10 +1,9 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { cachedRadToMollweide, getMollweideLambda0 } from '../../shared/geometryUtils.js';
-import { rebuildConstellationMeshFromSegments } from '../constellations/constellationRenderer.js';
 import { initializeEditState } from './editState.js';
 import { downloadLabelEdits, applyLabelEdits, buildSerializableEditState } from './editPersistence.js';
 import { setupEditIOControls } from './editIOControls.js';
-import { getLineKeyFromObject } from './editCommands.js';
+import { updateEditOverlayPosition, registerEditableLabels } from './labelEditor.js';
+import { getLineKey as getStoredLineKey, applyStoredLineEdits, registerEditableLines } from './lineEditor.js';
 
 export class EditManager {
   constructor(mollweideMap, cachedStars, constellationLabelsMoll, galacticDirectionLabelsMoll, getStarId, buildAndApplyFilters, maybePersistPresets, requestRender) {
@@ -42,178 +41,23 @@ export class EditManager {
   }
 
   updateEditOverlay() {
-    if (!this.editOverlay) return;
-    if (!this.selectedLabel) {
-      this.editOverlay.style.display = 'none';
-      return;
-    }
-    const rect = this.mollweideMap.canvas.getBoundingClientRect();
-    const pos = this.selectedLabel.position.clone().project(this.mollweideMap.camera);
-    const x = (pos.x * 0.5 + 0.5) * rect.width + rect.left;
-    const y = (-pos.y * 0.5 + 0.5) * rect.height + rect.top;
-    this.editOverlay.style.display = 'block';
-    this.editOverlay.style.left = `${x}px`;
-    this.editOverlay.style.top = `${y}px`;
-
-    const center = this.selectedLabel.position.clone();
-    const halfW = this.selectedLabel.scale.x / 2;
-    const rightVec = new THREE.Vector3(1, 0, 0)
-      .applyQuaternion(this.mollweideMap.camera.quaternion)
-      .multiplyScalar(halfW);
-    const leftWorld = center.clone().sub(rightVec);
-    const rightWorld = center.clone().add(rightVec);
-    const lp = leftWorld.clone().project(this.mollweideMap.camera);
-    const rp = rightWorld.clone().project(this.mollweideMap.camera);
-    const lx = (lp.x * 0.5 + 0.5) * rect.width + rect.left;
-    const rx = (rp.x * 0.5 + 0.5) * rect.width + rect.left;
-    const labelWidth = Math.abs(rx - lx);
-    const iconSize = 36;
-    const offset = labelWidth / 2 + iconSize / 2 + 10;
-    this.rotateHandle.style.left = `-${offset}px`;
-    this.scaleHandle.style.left = `${offset}px`;
+    updateEditOverlayPosition(this);
   }
 
   registerMollweideEditableLabels() {
-    this.editableLabels = [];
-    this.mollweideMap.labelManager.sprites.forEach((sprite, star) => {
-      const id = this.getStarId(star);
-      sprite.userData = sprite.userData || {};
-      sprite.userData.editType = 'star';
-      sprite.userData.editId = id;
-      sprite.userData.lineObj = this.mollweideMap.labelManager.lines.get(star);
-      sprite.userData.starRef = star;
-      sprite.userData.anchorFunc = () => star.mollweidePosition.clone();
-      this.editableLabels.push(sprite);
-      if (this.starLabelOffsets.has(id)) {
-        const off = this.starLabelOffsets.get(id);
-        star.mollLabelOffset = new THREE.Vector3(off.x, off.y, 0);
-        sprite.position.copy(star.mollweidePosition.clone().add(star.mollLabelOffset));
-      }
-      if (this.starLabelRotations.has(id)) {
-        const rot = this.starLabelRotations.get(id);
-        sprite.material.rotation = rot;
-        star.mollLabelRotation = rot;
-      }
-      if (this.starLabelScales.has(id)) {
-        const sc = this.starLabelScales.get(id);
-        sprite.scale.set(sc.x, sc.y, 1);
-        star.mollLabelScale = new THREE.Vector3(sc.x, sc.y, 1);
-      }
-    });
-    this.constellationLabelsMoll.forEach(sprite => {
-      if (!sprite.userData) return;
-      sprite.userData.editType = 'constellation';
-      sprite.userData.editId = sprite.userData.name;
-      sprite.userData.anchorFunc = () => {
-        const p = cachedRadToMollweide(sprite.userData.ra, sprite.userData.dec, 100, getMollweideLambda0());
-        return new THREE.Vector3(p.x, p.y, 0);
-      };
-      this.editableLabels.push(sprite);
-      const anchor = sprite.userData.anchorFunc();
-      sprite.position.copy(anchor);
-      if (this.constellationLabelOffsets.has(sprite.userData.name)) {
-        const off = this.constellationLabelOffsets.get(sprite.userData.name);
-        const offsetVec = new THREE.Vector3(off.x, off.y, 0);
-        sprite.position.add(offsetVec);
-        sprite.userData.offset = offsetVec.clone();
-      }
-      if (this.starLabelRotations.has(sprite.userData.name)) {
-        const rot = this.starLabelRotations.get(sprite.userData.name);
-        sprite.material.rotation = rot;
-      }
-      if (this.starLabelScales.has(sprite.userData.name)) {
-        const sc = this.starLabelScales.get(sprite.userData.name);
-        sprite.scale.set(sc.x, sc.y, 1);
-      }
-    });
-    this.galacticDirectionLabelsMoll.forEach(sprite => {
-      if (!sprite.userData) return;
-      sprite.userData.editType = 'galactic';
-      sprite.userData.editId = sprite.userData.name;
-      sprite.userData.anchorFunc = () => {
-        const p = cachedRadToMollweide(sprite.userData.ra, sprite.userData.dec, 100, getMollweideLambda0());
-        return new THREE.Vector3(p.x, p.y, 0);
-      };
-      this.editableLabels.push(sprite);
-      const gAnchor = sprite.userData.anchorFunc();
-      sprite.position.copy(gAnchor);
-      if (this.galacticLabelOffsets.has(sprite.userData.name)) {
-        const off = this.galacticLabelOffsets.get(sprite.userData.name);
-        const offsetVec = new THREE.Vector3(off.x, off.y, 0);
-        sprite.position.add(offsetVec);
-        sprite.userData.offset = offsetVec.clone();
-      }
-      if (this.starLabelRotations.has(sprite.userData.name)) {
-        const rot = this.starLabelRotations.get(sprite.userData.name);
-        sprite.material.rotation = rot;
-      }
-      if (this.starLabelScales.has(sprite.userData.name)) {
-        const sc = this.starLabelScales.get(sprite.userData.name);
-        sprite.scale.set(sc.x, sc.y, 1);
-      }
-    });
+    registerEditableLabels(this);
   }
 
   getLineKey(obj) {
-    return getLineKeyFromObject(obj);
+    return getStoredLineKey(obj);
   }
 
   applyStoredLineEdits(root) {
-    if (!root) return;
-    root.traverse(obj => {
-      const key = this.getLineKey(obj);
-      if (key && this.hiddenLineKeys.has(key)) {
-        obj.visible = false;
-      }
-      if (obj.type !== 'Line' && obj.type !== 'LineSegments') {
-        return;
-      }
-      const posAttr = obj.geometry && obj.geometry.getAttribute('position');
-      if (!posAttr) return;
-      const array = posAttr.array;
-      const alphaAttr = obj.geometry.getAttribute('alpha');
-      let changed = false;
-      for (let i = 0; i + 5 < array.length; i += 6) {
-        const segKey = [
-          array[i], array[i + 1], array[i + 2],
-          array[i + 3], array[i + 4], array[i + 5]
-        ].join(',');
-        if (this.removedLineSegments.has(segKey)) {
-          for (let j = 0; j < 6; j++) array[i + j] = NaN;
-          if (alphaAttr) {
-            const idx = (i / 3);
-            alphaAttr.array[idx] = 0;
-            alphaAttr.array[idx + 1] = 0;
-            alphaAttr.needsUpdate = true;
-          }
-          changed = true;
-        }
-      }
-      if (changed) {
-        posAttr.needsUpdate = true;
-        if (obj.userData && obj.userData.visibleMesh) {
-          rebuildConstellationMeshFromSegments(obj);
-        }
-      }
-    });
+    applyStoredLineEdits(this, root);
   }
 
   registerMollweideEditableLines() {
-    this.editableLines = [];
-    if (this.mollweideMap.connectionGroup) {
-      this.mollweideMap.connectionGroup.traverse(obj => {
-        if (obj.isLine || obj.type === 'Line' || obj.type === 'LineSegments') {
-          this.editableLines.push(obj);
-        }
-      });
-    }
-    if (this.constellationLinesMoll && Array.isArray(this.constellationLinesMoll)) {
-      this.constellationLinesMoll.forEach(l => this.editableLines.push(l));
-    }
-    if (this.isolationOverlay && this.isolationOverlay.adjacentLines) {
-      this.isolationOverlay.adjacentLines.forEach(o => this.editableLines.push(o.lineM));
-    }
-    this.editableLines.forEach(line => this.applyStoredLineEdits(line));
+    registerEditableLines(this);
   }
 
   onLinePointerDown = (e) => {

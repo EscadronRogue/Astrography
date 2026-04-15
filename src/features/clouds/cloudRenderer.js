@@ -1,1 +1,1 @@
-export { createCloudOverlay, updateCloudsOverlay, createMollweideCloudSegments, updateMollweideCloudSegments } from './cloudsFilter.js';
+export { createCloudOverlay, updateCloudsOverlay, createMollweideCloudSegments, updateMollweideCloudSegments } from './cloudOverlay.js';

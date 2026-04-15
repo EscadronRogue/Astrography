@@ -5,4 +5,4 @@ export {
   mergeConnectionLines,
   createWideLineMaterial,
   buildWideLineGeometry
-} from './connectionsFilter.js';
+} from './connectionPairs.js';

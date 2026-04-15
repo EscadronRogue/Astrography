@@ -1,1 +1,1 @@
-export { computeConstellationColorMapping, createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './constellationOverlayFilter.js';
+export { computeConstellationColorMapping, createConstellationOverlayForGlobe, createConstellationOverlayForMollweide } from './constellationOverlayMeshes.js';

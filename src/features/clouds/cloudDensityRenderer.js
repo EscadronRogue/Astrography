@@ -1,1 +1,1 @@
-export { createCloudDensityOverlay, updateCloudDensityOverlay } from './cloudDensityFilter.js';
+export { createCloudDensityOverlay, updateCloudDensityOverlay } from './cloudDensityOverlay.js';

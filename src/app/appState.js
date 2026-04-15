@@ -1,3 +1,13 @@
+export const APP_STATE_DOMAINS = Object.freeze({
+  data: 'data',
+  selection: 'selection',
+  projections: 'projections',
+  overlays: 'overlays',
+  planes: 'planes',
+  labels: 'labels',
+  editing: 'editing'
+});
+
 export function createAppState(accessors) {
   const state = {};
   const descriptors = {};
