@@ -9,8 +9,7 @@ export async function loadConstellationBoundaries() {
     const resp = await fetch('constellation_boundaries.txt');
     if (!resp.ok) throw new Error(`Failed to load constellation_boundaries.txt: ${resp.status}`);
     const raw = await resp.text();
-    const lines = raw.split('
-').map(l => l.trim()).filter(Boolean);
+    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
     boundaryData = [];
     for (const line of lines) {
       const parts = line.split(/\s+/);
