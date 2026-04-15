@@ -58,8 +58,8 @@ export function createMollweideBackground(R = 100, segments = 1024) {
   const points = [];
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2;
-    const x = 2 * Math.SQRT2 * R * Math.cos(t);
-    const y = Math.SQRT2 * R * Math.sin(t);
+    const x = 2 * R * Math.cos(t);
+    const y = R * Math.sin(t);
     points.push(new THREE.Vector2(x, y));
   }
   const shape = new THREE.Shape(points);
@@ -74,8 +74,8 @@ export function createMollweideBorder(R = 100, thickness = 1, opacity = 1, segme
   const borderPoints = [];
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2;
-    const x = 2 * Math.SQRT2 * R * Math.cos(t);
-    const y = Math.SQRT2 * R * Math.sin(t);
+    const x = 2 * R * Math.cos(t);
+    const y = R * Math.sin(t);
     borderPoints.push(new THREE.Vector3(x, y, 0.05));
   }
   const geometry = buildWideLineGeometry(borderPoints, thickness);
@@ -106,8 +106,8 @@ export function createMollweideMask(R = 100, segments = 1024) {
   const hole = new THREE.Path();
   for (let i = 0; i <= segments; i++) {
     const t = (i / segments) * Math.PI * 2;
-    const x = 2 * Math.SQRT2 * R * Math.cos(t);
-    const y = Math.SQRT2 * R * Math.sin(t);
+    const x = 2 * R * Math.cos(t);
+    const y = R * Math.sin(t);
     if (i === 0) hole.moveTo(x, y);
     else hole.lineTo(x, y);
   }
