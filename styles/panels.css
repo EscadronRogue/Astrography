@@ -1,0 +1,84 @@
+/* Fullscreen Button for Maps */
+.fullscreen-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 24px;
+  background: rgba(20, 20, 20, 0.7);
+  border: none;
+  color: #ff6f61;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+/* Export Controls */
+.export-controls {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  background: rgba(20, 20, 20, 0.7);
+  padding: 5px;
+  border-radius: 4px;
+  z-index: 1100;
+}
+.export-controls select,
+.export-controls button {
+  background: rgba(20, 20, 20, 0.9);
+  color: #ff6f61;
+  border: 1px solid #555;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.export-btn {
+  cursor: pointer;
+}
+.export-btn.active {
+  background: #ff6f61;
+  color: #000;
+}
+
+/* Tooltip */
+#tooltip {
+  position: absolute;
+  background-color: rgba(20, 20, 20, 0.95);
+  color: #e0e0e0;
+  padding: 10px;
+  border-radius: 4px;
+  pointer-events: none;
+  font-size: 14px;
+  max-width: 220px;
+  z-index: 1200;
+  transition: opacity 0.3s, visibility 0.3s;
+}
+#tooltip.hidden {
+  opacity: 0;
+  visibility: hidden;
+}
+#tooltip.visible {
+  opacity: 0.95;
+  visibility: visible;
+}
+#tooltip-starName {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ff6f61;
+}
+#tooltip-systemName {
+  font-size: 14px;
+  color: #ff8566;
+}
+#tooltip-distance,
+#tooltip-stellarClass,
+#tooltip-mass,
+#tooltip-apparentMag,
+#tooltip-absoluteMag {
+  font-size: 12px;
+  color: #e0e0e0;
+  margin-top: 4px;
+}
+

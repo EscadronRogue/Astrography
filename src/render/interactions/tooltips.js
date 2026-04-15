@@ -1,0 +1,87 @@
+function clearTooltip(tooltip) {
+  while (tooltip.firstChild) tooltip.removeChild(tooltip.firstChild);
+}
+
+function appendRow(tooltip, id, label, value) {
+  const row = document.createElement('div');
+  row.id = id;
+  const strong = document.createElement('strong');
+  strong.textContent = `${label}: `;
+  row.appendChild(strong);
+  row.appendChild(document.createTextNode(value));
+  tooltip.appendChild(row);
+}
+
+function formatNumber(value, digits = 2, suffix = '') {
+  return Number.isFinite(value) ? `${value.toFixed(digits)}${suffix}` : 'N/A';
+}
+
+function sanitizeCatalogUrl(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url, window.location.href);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+export function showTooltip(x, y, star) {
+  const tooltip = document.getElementById('tooltip');
+  if (!tooltip) return;
+  tooltip.style.pointerEvents = 'auto';
+  if (!tooltip.hasAttribute('data-stop-propagation')) {
+    tooltip.addEventListener('click', event => event.stopPropagation());
+    tooltip.setAttribute('data-stop-propagation', 'true');
+  }
+
+  clearTooltip(tooltip);
+  appendRow(tooltip, 'tooltip-starName', 'Name', star.Common_name_of_the_star || 'Unknown Star');
+  appendRow(tooltip, 'tooltip-systemName', 'System', star.Common_name_of_the_star_system || 'Unknown System');
+  appendRow(tooltip, 'tooltip-distance', 'Distance', formatNumber(star.distance, 2, ' LY'));
+  appendRow(tooltip, 'tooltip-constellation', 'Constellation', star.Constellation || 'N/A');
+  appendRow(tooltip, 'tooltip-stellarClass', 'Stellar Class', star.stellarClass || star.Stellar_class || 'N/A');
+  appendRow(tooltip, 'tooltip-mass', 'Mass', Number.isFinite(star.Mass) ? String(star.Mass) : 'N/A');
+  appendRow(tooltip, 'tooltip-size', 'Size', Number.isFinite(star.Size) ? String(star.Size) : 'N/A');
+  appendRow(tooltip, 'tooltip-absoluteMag', 'Absolute Mag', formatNumber(star.absoluteMagnitude));
+  appendRow(tooltip, 'tooltip-parallax', 'Parallax', Number.isFinite(star.Parallax) ? String(star.Parallax) : 'N/A');
+
+  const catalogRow = document.createElement('div');
+  catalogRow.id = 'tooltip-catalogLink';
+  const strong = document.createElement('strong');
+  strong.textContent = 'Catalog: ';
+  catalogRow.appendChild(strong);
+  const safeUrl = sanitizeCatalogUrl(star.Catalog_link);
+  if (safeUrl) {
+    const link = document.createElement('a');
+    link.href = safeUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.style.color = '#ff6f61';
+    link.style.textDecoration = 'underline';
+    link.textContent = 'Catalog';
+    catalogRow.appendChild(link);
+  } else {
+    catalogRow.appendChild(document.createTextNode('N/A'));
+  }
+  tooltip.appendChild(catalogRow);
+
+  const offset = 15;
+  tooltip.classList.add('visible');
+  tooltip.classList.remove('hidden');
+  const rect = tooltip.getBoundingClientRect();
+  const maxLeft = Math.max(0, window.innerWidth - rect.width - 8);
+  const maxTop = Math.max(0, window.innerHeight - rect.height - 8);
+  tooltip.style.left = `${Math.min(x + offset, maxLeft)}px`;
+  tooltip.style.top = `${Math.min(y + offset, maxTop)}px`;
+}
+
+export function hideTooltip() {
+  const tooltip = document.getElementById('tooltip');
+  if (tooltip) {
+    tooltip.classList.remove('visible');
+    tooltip.classList.add('hidden');
+    tooltip.style.pointerEvents = 'none';
+  }
+}

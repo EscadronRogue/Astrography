@@ -1,0 +1,96 @@
+/* Maps Section */
+.maps-section {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: #121212;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.map-container {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto 30px;
+  background-color: rgba(20, 20, 20, 0.95);
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 10px;
+  box-shadow: 0 0 15px rgba(255, 111, 97, 0.5);
+}
+
+.map-container h2 {
+  text-align: center;
+  margin-bottom: 10px;
+  font-size: 18px;
+  color: #ff6f61;
+  text-shadow: 0 0 3px rgba(255, 111, 97, 0.7);
+}
+
+.map-container canvas {
+  width: 100%;
+  height: 1000px;
+  background-color: #0d0d0d;
+  display: block;
+  border-radius: 4px;
+  touch-action: none;
+}
+.map-container canvas.edit-mode {
+  cursor: move;
+}
+.map-container canvas.edit-mode.dragging {
+  cursor: grabbing;
+}
+
+#label-edit-overlay {
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  display: none;
+  transform: translate(-50%, -50%);
+  z-index: 1500;
+}
+#label-edit-overlay .handle {
+  width: 36px;
+  height: 36px;
+  background: #ff6f61;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  position: absolute;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 30px;
+}
+#label-edit-overlay .rotate-handle {
+  top: 0;
+  cursor: grab;
+  transform: translate(-100%, -50%);
+}
+#label-edit-overlay .scale-handle {
+  top: 0;
+  cursor: nwse-resize;
+  transform: translate(0, -50%);
+}
+
+#export-selection-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  cursor: crosshair;
+  display: none;
+  z-index: 1000;
+}
+#export-selection-rect {
+  position: absolute;
+  border: 2px dashed #ff6f61;
+  background: rgba(255, 111, 97, 0.2);
+  pointer-events: none;
+}
+

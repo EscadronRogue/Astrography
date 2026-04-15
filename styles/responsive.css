@@ -1,0 +1,44 @@
+/* Responsive */
+@media (max-width:1200px) {
+  .map-container canvas {
+    height: 800px;
+  }
+}
+@media (max-width:800px) {
+  .sidebar {
+    width: 220px;
+  }
+  .map-container {
+    max-width: 100%;
+  }
+  .map-container canvas {
+    height:600px;
+  }
+  header h1 {
+    font-size: 20px;
+  }
+  #menu-toggle {
+    font-size: 36px;
+  }
+  .sidebar h2 {
+    font-size: 20px;
+  }
+  .sidebar fieldset {
+    padding:12px;
+  }
+  .filter-item label {
+    font-size:13px;
+  }
+  #tooltip {
+    font-size:13px;
+    max-width:200px;
+  }
+  .label-container .label {
+    font-size:11px;
+  }
+}
+
+
+.is-hidden {
+  display: none !important;
+}
