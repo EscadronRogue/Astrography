@@ -30,7 +30,7 @@ export const EPSILON = 1e-10;
 export const SOL_STAR_NAME = 'Sol';
 
 /** Recognized Morgan-Keenan stellar spectral classes. */
-export const STELLAR_CLASSES = Object.freeze(['O', 'B', 'A', 'F', 'G', 'K', 'M', 'L', 'T', 'Y']);
+export const STELLAR_CLASSES = Object.freeze(['O', 'B', 'A', 'D', 'F', 'G', 'K', 'M', 'L', 'T', 'Y']);
 
 /** Set version of STELLAR_CLASSES for O(1) lookups. */
 export const STELLAR_CLASS_SET = new Set(STELLAR_CLASSES);
@@ -38,9 +38,10 @@ export const STELLAR_CLASS_SET = new Set(STELLAR_CLASSES);
 /** Human-readable names for each stellar class. */
 export const STELLAR_CLASS_NAMES = Object.freeze({
   O: 'Blue Giant',
-  B: 'Blue-White Dwarf',
-  A: 'White Dwarf',
-  F: 'Yellow-White Dwarf',
+  B: 'Blue-White',
+  A: 'White',
+  D: 'White Dwarf',
+  F: 'Yellow-White',
   G: 'Yellow Dwarf',
   K: 'Orange Dwarf',
   M: 'Red Dwarf',

@@ -9,21 +9,15 @@ import { bindAdditionalOpacitySliders } from '../ui/filterUI.js';
 import {
   createCollapsibleFieldset,
   createCheckbox,
-  createRangeControl
+  createRangeControl,
+  bindCollapsibleTrigger
 } from '../shared/uiFactory.js';
 
 let filterForm = null;
 
 function bindCollapsibleLegend(legend) {
   const content = legend?.nextElementSibling;
-  if (!legend || !content) return;
-  content.style.maxHeight = '0px';
-  legend.addEventListener('click', () => {
-    legend.classList.toggle('active');
-    const isActive = legend.classList.contains('active');
-    legend.setAttribute('aria-expanded', String(isActive));
-    content.style.maxHeight = isActive ? content.scrollHeight + 'px' : '0px';
-  });
+  bindCollapsibleTrigger(legend, content);
 }
 
 export async function setupFilterUI(allStars) {

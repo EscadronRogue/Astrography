@@ -1,4 +1,5 @@
-const STELLAR_CLASSES = ['O', 'B', 'A', 'F', 'G', 'K', 'M', 'L', 'T', 'Y', 'Other'];
+import { STELLAR_CLASSES } from '../shared/constants.js';
+
 
 function readNumericValue(formData, name, fallback, parser = Number.parseFloat) {
   const rawValue = formData.get(name);
@@ -12,7 +13,7 @@ function readCheckboxValue(formData, name) {
 }
 
 function readClassScaleMap(formData, suffix) {
-  return STELLAR_CLASSES.reduce((accumulator, stellarClass) => {
+  return [...STELLAR_CLASSES, 'Other'].reduce((accumulator, stellarClass) => {
     accumulator[stellarClass] = readNumericValue(
       formData,
       `class-${stellarClass}-${suffix}`,

@@ -5,6 +5,7 @@ import { getStellarClassData } from './stellarClassData.js';
 import { getStableConstellationColor } from './densityColorUtils.js';
 import { interpolateHex } from '../shared/colorUtils.js';
 import { DEFAULT_STAR_COLOR, EPSILON } from '../shared/constants.js';
+import { getPrimaryClass } from '../shared/stellarClassUtils.js';
 
 /**
  * Applies the selected color mode to each star's displayColor property.
@@ -17,7 +18,7 @@ export function applyColorFilter(stars, filters) {
 
   if (filters.color === 'stellar-class') {
     stars.forEach(star => {
-      const primaryClass = star.Stellar_class ? star.Stellar_class.charAt(0).toUpperCase() : 'G';
+      const primaryClass = getPrimaryClass(star);
       const classData = stellarClassData[primaryClass];
       star.displayColor = classData ? classData.color : DEFAULT_STAR_COLOR;
     });

@@ -1,6 +1,6 @@
 /**
  * @file Handles stellar class visibility logic and builds the UI subcategories.
- * Each spectral class (O, B, A, F, G, K, M, L, T, Y, Other) gets a collapsible
+ * Each spectral class (O, B, A, D, F, G, K, M, L, T, Y, Other) gets a collapsible
  * section with class-level and individual star visibility controls.
  */
 import { getStellarClassData } from './stellarClassData.js';
@@ -76,7 +76,7 @@ export function applyStellarClassLogic(stars, form) {
 
 /**
  * Builds the UI for a single stellar class subcategory.
- * @param {string} cls - Class letter (e.g. 'O') or 'Other'.
+ * @param {string} cls - Class letter (e.g. 'O', 'D') or 'Other'.
  * @param {string} commonName - Human-readable name.
  * @param {Array} starsInClass - Stars belonging to this class.
  * @param {number} defaultSize - Default star/label size from stellar class data.

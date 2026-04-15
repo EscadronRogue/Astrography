@@ -3,6 +3,51 @@
  * Eliminates duplication across filterUISetup.js, filterUI.js, and stellarClassFilter.js.
  */
 
+function refreshAncestorCollapsibleHeights(startNode) {
+  let current = startNode?.parentElement || null;
+  while (current) {
+    if (
+      current.classList?.contains('filter-content') &&
+      current.previousElementSibling?.classList?.contains('active')
+    ) {
+      current.style.maxHeight = current.scrollHeight + 'px';
+    } else if (
+      current.classList?.contains('subcategory-content') &&
+      current.previousElementSibling?.classList?.contains('active')
+    ) {
+      current.style.maxHeight = current.scrollHeight + 'px';
+    }
+    current = current.parentElement;
+  }
+}
+
+function bindCollapsibleTrigger(trigger, contentDiv, { maxScrollHeight = null } = {}) {
+  if (!trigger || !contentDiv || trigger.dataset.collapsibleBound === 'true') return;
+
+  trigger.dataset.collapsibleBound = 'true';
+  trigger.addEventListener('click', () => {
+    trigger.classList.toggle('active');
+    const isActive = trigger.classList.contains('active');
+    trigger.setAttribute('aria-expanded', String(isActive));
+
+    if (isActive) {
+      const contentHeight = contentDiv.scrollHeight;
+      if (maxScrollHeight !== null && contentHeight > maxScrollHeight) {
+        contentDiv.style.maxHeight = maxScrollHeight + 'px';
+        contentDiv.style.overflowY = 'auto';
+      } else {
+        contentDiv.style.maxHeight = contentHeight + 'px';
+        contentDiv.style.overflowY = 'visible';
+      }
+    } else {
+      contentDiv.style.maxHeight = '0px';
+      contentDiv.style.overflowY = 'hidden';
+    }
+
+    refreshAncestorCollapsibleHeights(contentDiv);
+  });
+}
+
 /**
  * Creates a collapsible fieldset with legend and content container.
  * @param {string} title - Legend text.
@@ -21,13 +66,9 @@ export function createCollapsibleFieldset(title, { contentClasses = [] } = {}) {
   const contentDiv = document.createElement('div');
   contentDiv.classList.add('filter-content', ...contentClasses);
   contentDiv.style.maxHeight = '0px';
+  contentDiv.style.overflowY = 'hidden';
 
-  legend.addEventListener('click', () => {
-    legend.classList.toggle('active');
-    const isActive = legend.classList.contains('active');
-    legend.setAttribute('aria-expanded', String(isActive));
-    contentDiv.style.maxHeight = isActive ? contentDiv.scrollHeight + 'px' : '0px';
-  });
+  bindCollapsibleTrigger(legend, contentDiv);
 
   fieldset.appendChild(contentDiv);
   return { fieldset, contentDiv, legend };
@@ -113,7 +154,6 @@ export function createRangeControl({ id, name, label, min, max, value, step = '1
     container.appendChild(document.createTextNode(unit));
   }
 
-  // Synchronize slider <-> number (and optional display span)
   slider.addEventListener('input', () => {
     number.value = slider.value;
     if (span) span.textContent = slider.value;
@@ -161,26 +201,10 @@ export function createSubcategoryHeader(text, subcontentDiv, maxScrollHeight = 3
   header.classList.add('collapsible-subcategory', 'subcategory-header');
   header.textContent = text;
   header.setAttribute('aria-expanded', 'false');
+  subcontentDiv.style.maxHeight = '0px';
+  subcontentDiv.style.overflowY = 'hidden';
 
-  header.addEventListener('click', () => {
-    header.classList.toggle('active');
-    const isActive = header.classList.contains('active');
-    header.setAttribute('aria-expanded', String(isActive));
-
-    if (isActive) {
-      const contentHeight = subcontentDiv.scrollHeight;
-      if (contentHeight > maxScrollHeight) {
-        subcontentDiv.style.maxHeight = maxScrollHeight + 'px';
-        subcontentDiv.style.overflowY = 'auto';
-      } else {
-        subcontentDiv.style.maxHeight = contentHeight + 'px';
-        subcontentDiv.style.overflowY = 'visible';
-      }
-    } else {
-      subcontentDiv.style.maxHeight = '0';
-      subcontentDiv.style.overflowY = 'hidden';
-    }
-  });
+  bindCollapsibleTrigger(header, subcontentDiv, { maxScrollHeight });
 
   return header;
 }
@@ -193,3 +217,5 @@ export function createSubcategoryHeader(text, subcontentDiv, maxScrollHeight = 3
 export function sanitizeName(name) {
   return (name || '').replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-]/g, '');
 }
+
+export { bindCollapsibleTrigger, refreshAncestorCollapsibleHeights };
