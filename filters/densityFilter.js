@@ -271,7 +271,7 @@ class DensityGridOverlay {
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 2;
-          const mollMat = createWideLineMaterial(0xff0000, { fadePower: this.fadePower });
+          const mollMat = createWideLineMaterial(0xff0000, this.fadePower);
           const lineM = new THREE.Mesh(geomM, mollMat);
           lineM.renderOrder = 2;
           this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
