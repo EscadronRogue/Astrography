@@ -64,9 +64,7 @@ function updateMapDisplays(ctx, options) {
   );
   mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
   uvMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  uvMap?.labelManager.refreshLabels(state.currentGlobeFilteredStars);
   uvGlobeMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  uvGlobeMap?.labelManager.refreshLabels(state.currentGlobeFilteredStars);
   if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
 }
 
@@ -196,9 +194,7 @@ export async function updateMollweideView(ctx) {
   mollweideMap.updateConnectionPositions(state.currentMollweideFilteredStars, state.currentMollweideConnections);
   mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
   uvMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  uvMap?.labelManager.refreshLabels(state.currentGlobeFilteredStars);
   uvGlobeMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  uvGlobeMap?.labelManager.refreshLabels(state.currentGlobeFilteredStars);
   if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
 
   refreshMollweideConstellationVisuals(ctx);

@@ -112,6 +112,8 @@ export async function bootstrapApp() {
     mollweideMap = new MapManager({ canvasId: 'legacyMollweideMap', mapType: 'Mollweide', state, scheduleMollweideUpdate, getEditManager: () => editManager });
     uvMap = new UVMapManager({ canvasId: 'uvMap', mapType: 'Equirectangular', state });
     uvGlobeMap = new UVMapManager({ canvasId: 'sphereMap', mapType: 'UVGlobe', state });
+    uvMap.setLegacySourceScene(globeMap.scene);
+    uvGlobeMap.setLegacySourceScene(globeMap.scene);
     mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap);
 
     // Initialize EditManager
