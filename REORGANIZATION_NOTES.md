@@ -12,7 +12,7 @@ This repository was reorganized to move runtime ownership out of the root-level 
 - Shared utilities consolidated under `src/shared/*`
 - UI sidebar logic moved under `src/ui/sidebar/*`
 - Styles split into `styles/*.css`
-- Legacy root/module paths were kept as compatibility re-export shims where helpful
+- Legacy root/module paths were kept as compatibility re-export shims during transition (now removed)
 
 ## Important limitation
 
@@ -62,3 +62,35 @@ Still not fully complete relative to the ideal target:
 
 - 2026-04-15: Split `src/app/createApp.js` further by extracting map decoration helpers, the `MapManager` implementation, projection visibility wiring, and frame rendering coordination into dedicated `src/app/*` modules. This makes app composition easier to trace and keeps `createApp.js` focused on bootstrap wiring.
 - 2026-04-15: Split remaining edit interaction responsibilities out of `src/features/editing/editManager.js` into `labelDragControls.js` and `transformControls.js`, so the manager now coordinates dedicated editing modules instead of owning drag/rotate/scale behavior directly.
+
+## Final reorganization pass (2026-04-15)
+
+Completed the migration from transitional structure to clean architecture:
+
+### createApp.js decomposition
+- Extracted all mutable state and filterRuntimeState into `src/app/appStateFactory.js` — single explicit state owner
+- Extracted globe surface rendering into `src/app/globeSurface.js`
+- Extracted Mollweide position updates and scheduler into `src/app/mollweideUpdater.js`
+- Extracted star data preprocessing (position calc + edit offset application) into `src/app/starPreprocessor.js`
+- `createApp.js` is now a thin bootstrap orchestrator (~160 lines) that wires services and calls start
+
+### Legacy shim removal
+- Removed all 48+ compatibility re-export shims from root-level directories:
+  - `filters/` (25 files), `script/` (6 files), `shared/` (7 files), `ui/` (1 file), `app/` (2 files)
+  - Root-level `script.js`, `cameraControls.js`, `labelManager.js`, `tooltips.js`
+  - Root-level `styles.css` wrapper
+- All imports now resolve entirely within `src/`
+
+### Barrel file cleanup
+- Removed 7 unused barrel re-export files from features/:
+  - `densityFilter.js`, `isolationFilter.js`, `constellationFilter.js`, `connectionsFilter.js`, `planesFilter.js`, `cloudsFilter.js`, `cloudDensityFilter.js`
+- All code imports directly from source modules
+
+### index.html
+- Fixed truncated HTML (missing tooltip div, closing tags)
+- Updated script entry point from `script.js` to `src/main.js` directly
+- All CSS links already pointed to `styles/*.css`
+
+### Verification
+- All 166 imports across 90 source files verified to resolve to existing files
+- Zero broken imports, zero legacy path references remaining
