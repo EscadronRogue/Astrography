@@ -10,7 +10,6 @@ import {
 import { minimalRADifference } from '../utils.js';
 import { lightenColor } from './densityColorUtils.js';
 import { getStarDistance } from '../shared/starUtils.js';
-import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
 
 // Helper material and geometry builders for wide fading lines on the Mollweide map
 function createWideLineMaterial(color, fadePower = 1.0) {
@@ -317,7 +316,7 @@ class DensityGridOverlay {
     this.texture.needsUpdate = true;
   }
 
-  update(stars, sceneTC, sceneGlobe, sceneMoll, options = null) {
+  update(stars, sceneTC, sceneGlobe, sceneMoll) {
     const radiusSlider = document.getElementById('density-slider');
     const tolSlider = document.getElementById('density-tolerance-slider');
     const bottomSlider = document.getElementById('density-bottom-slider');
@@ -325,15 +324,14 @@ class DensityGridOverlay {
     const opacitySlider = document.getElementById('density-opacity-slider');
     const widthSlider = document.getElementById('density-line-width-slider');
     const fadeSlider = document.getElementById('density-fade-slider');
-    const radius = Number.isFinite(options?.density) ? options.density : (radiusSlider ? parseFloat(radiusSlider.value) : 10);
-    const tolerance = Number.isFinite(options?.densityTolerance) ? options.densityTolerance : (tolSlider ? parseInt(tolSlider.value) : 0);
-    const bottomPct = Number.isFinite(options?.densityBottomPercent) ? options.densityBottomPercent : (bottomSlider ? parseFloat(bottomSlider.value) : 10);
-    const topPct = Number.isFinite(options?.densityTopPercent) ? options.densityTopPercent : (topSlider ? parseFloat(topSlider.value) : 10);
-    this.opacityFactor = Number.isFinite(options?.densityOpacity) ? options.densityOpacity : (opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0);
-    let newWidth = Number.isFinite(options?.densityLineWidth) ? options.densityLineWidth : this.mollLineWidth;
-    if (!Number.isFinite(options?.densityLineWidth) && widthSlider) newWidth = parseFloat(widthSlider.value);
-    if (Number.isFinite(options?.densityFade)) this.fadePower = options.densityFade;
-    else if (fadeSlider) this.fadePower = parseFloat(fadeSlider.value);
+    const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
+    const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
+    const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
+    const topPct = topSlider ? parseFloat(topSlider.value) : 10;
+    this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
+    let newWidth = this.mollLineWidth;
+    if (widthSlider) newWidth = parseFloat(widthSlider.value);
+    if (fadeSlider) this.fadePower = parseFloat(fadeSlider.value);
 
     if (newWidth !== this.mollLineWidth) {
       this.mollLineWidth = newWidth;
@@ -387,8 +385,6 @@ class DensityGridOverlay {
       cell.globeMesh.material.color.copy(color);
       cell.mollweideMesh.material.color.copy(color);
       cell.tcMesh.visible = cell.active;
-      cell.globeMesh.visible = cell.active;
-      cell.mollweideMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
     });
@@ -413,21 +409,17 @@ class DensityGridOverlay {
       }
     });
     if (sceneTC) {
-      this.cubesData.forEach(c => { if (!sceneTC.children.includes(c.tcMesh)) sceneTC.add(c.tcMesh); });
+      this.cubesData.forEach(c => { sceneTC.add(c.tcMesh); });
     }
     if (sceneGlobe) {
-      this.cubesData.forEach(c => { if (!sceneGlobe.children.includes(c.globeMesh)) sceneGlobe.add(c.globeMesh); });
-      this.adjacentLines.forEach(o => { if (!sceneGlobe.children.includes(o.line)) sceneGlobe.add(o.line); });
+      this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
     }
     if (sceneMoll) {
-      this.cubesData.forEach(c => { if (!sceneMoll.children.includes(c.mollweideMesh)) sceneMoll.add(c.mollweideMesh); });
-      this.adjacentLines.forEach(o => { if (!sceneMoll.children.includes(o.lineM)) sceneMoll.add(o.lineM); });
       if (!sceneMoll.children.includes(this.textureMesh)) {
         sceneMoll.add(this.textureMesh);
       }
     }
     this.drawHeatmap(getMollweideLambda0());
-    requestRenderIfAvailable();
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
@@ -457,7 +449,6 @@ class DensityGridOverlay {
       }
     });
     this.drawHeatmap(lambda0);
-    requestRenderIfAvailable();
   }
 }
 
@@ -467,7 +458,7 @@ export function initDensityFilter(minDistance, maxDistance, starArray, gridSize 
   return overlay;
 }
 
-export function updateDensityFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll, options = null) {
+export function updateDensityFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll) {
   if (!overlay) return;
-  overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll, options);
+  overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll);
 }
