@@ -251,7 +251,8 @@ export class UVMapManager {
 
   drawConnections(ctx, connections) {
     const opacity = clamp01(this.connectionOpacity);
-    const lineWidth = Math.max(1, readNumberInput('connection-width', 5) * 0.45);
+    const lineWidth = Math.max(1, readNumberInput('connection-width-slider', 5) * 0.45);
+    const labelSize = readNumberInput('connection-label-size-slider', 1);
     connections.forEach(connection => {
       if (!connection?.starA || !connection?.starB) return;
       const startVec = connection.starA.spherePosition;
@@ -274,6 +275,36 @@ export class UVMapManager {
         splitWrappedUvSegment(uvPoints[i], uvPoints[i + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
       }
       ctx.restore();
+
+      // Distance label at midpoint
+      if (connection.distance != null && opacity > 0.05 && labelSize > 0.01) {
+        const midIdx = Math.floor(uvPoints.length / 2);
+        const midUv = uvPoints[midIdx];
+        if (midUv) {
+          const distText = `${connection.distance < 10 ? connection.distance.toFixed(1) : connection.distance.toFixed(0)} ly`;
+          const fontSize = Math.round(THREE.MathUtils.clamp(10 * labelSize, 6, 24));
+          const labelColor = rgbaFromHex(
+            connection.starA.displayColor || '#8fb5ff',
+            opacity * 0.85
+          );
+          ctx.save();
+          ctx.font = `${fontSize}px Oswald`;
+          ctx.fillStyle = labelColor;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.7})`;
+          ctx.lineWidth = 2;
+          const px = midUv.u * ATLAS_WIDTH;
+          const py = midUv.v * ATLAS_HEIGHT;
+          [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
+            const drawX = px + shiftX;
+            if (drawX < -60 || drawX > ATLAS_WIDTH + 60) return;
+            ctx.strokeText(distText, drawX, py);
+            ctx.fillText(distText, drawX, py);
+          });
+          ctx.restore();
+        }
+      }
     });
   }
 
@@ -508,7 +539,7 @@ export class UVMapManager {
 
   drawConstellationNames(ctx) {
     if (!this.state.showConstellationNamesFlag) return;
-    const opacity = clamp01(readNumberInput('constellation-name-opacity', 80) / 100);
+    const opacity = clamp01(readNumberInput('constellation-name-opacity-slider', 80) / 100);
     if (opacity <= 0.001) return;
     const centers = getConstellationLabelAnchors();
     const fullNames = getConstellationFullNames();
@@ -530,8 +561,8 @@ export class UVMapManager {
   }
 
   drawConstellationBoundaries(ctx, boundaries) {
-    const opacity = clamp01(readNumberInput('constellation-line-opacity', 40) / 100);
-    const lineWidth = Math.max(0.1, readNumberInput('constellation-line-width', 1));
+    const opacity = clamp01(readNumberInput('constellation-line-opacity-slider', 40) / 100);
+    const lineWidth = Math.max(0.1, readNumberInput('constellation-line-width-slider', 1));
     if (opacity <= 0.001) return;
     ctx.save();
     ctx.strokeStyle = constellationLineCss(opacity);
@@ -567,58 +598,142 @@ export class UVMapManager {
   drawDensityOverlay(ctx) {
     if (!this.state.enableDensityFilterFlag || !this.state.densityOverlay) return;
     const overlay = this.state.densityOverlay;
+    const opacityFactor = clamp01(readNumberInput('density-opacity-slider', 100) / 100);
+    if (opacityFactor <= 0.001) return;
+
+    // Smooth heatmap pass (inspired by Mollweide heatmap canvas approach)
+    ctx.save();
+    ctx.filter = 'blur(6px)';
     (overlay.cubesData || []).forEach(cell => {
-      if (!cell?.active || !cell?.globeMesh?.position) return;
-      const uv = spherePositionToUv(cell.globeMesh.position, 100);
+      if (!cell?.active) return;
+      const uv = (cell.raRad != null && cell.decRad != null)
+        ? raDecToUV(cell.raRad, cell.decRad)
+        : spherePositionToUv(cell.globeMesh.position, 100);
       const x = uv.u * ATLAS_WIDTH;
       const y = uv.v * ATLAS_HEIGHT;
-      const color = cell.mollweideMesh?.material?.color ? `#${cell.mollweideMesh.material.color.getHexString()}` : '#ff8844';
-      const alpha = clamp01((cell.mollweideMesh?.material?.opacity ?? 0.15) * readNumberInput('density-opacity', 100) / 100);
-      ctx.save();
-      ctx.fillStyle = rgbaFromHex(color, alpha);
-      this.drawWrappedCircle(ctx, x, y, Math.max(3, overlay.gridSize * 2));
-      ctx.restore();
+      const color = cell.tcMesh?.material?.color ? `#${cell.tcMesh.material.color.getHexString()}` : '#ff8844';
+      const cellAlpha = cell.tcMesh?.material?.opacity ?? 0.15;
+      const alpha = clamp01(cellAlpha * opacityFactor);
+      const distRatio = cell.tcPos ? Math.min(1, cell.tcPos.length() / (overlay.maxDistance || 20)) : 0.5;
+      const scale = THREE.MathUtils.lerp(12, 1, distRatio);
+      const radius = Math.max(4, overlay.gridSize * scale * 0.6);
+      const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      grd.addColorStop(0, rgbaFromHex(color, alpha));
+      grd.addColorStop(0.7, rgbaFromHex(color, alpha * 0.3));
+      grd.addColorStop(1, rgbaFromHex(color, 0));
+      ctx.fillStyle = grd;
+      this.drawWrappedCircle(ctx, x, y, radius);
     });
+    ctx.filter = 'none';
+
+    // Draw adjacent lines between active cells
+    (overlay.adjacentLines || []).forEach(({ cell1, cell2 }) => {
+      if (!cell1?.active || !cell2?.active) return;
+      const uv1 = (cell1.raRad != null) ? raDecToUV(cell1.raRad, cell1.decRad) : spherePositionToUv(cell1.globeMesh.position, 100);
+      const uv2 = (cell2.raRad != null) ? raDecToUV(cell2.raRad, cell2.decRad) : spherePositionToUv(cell2.globeMesh.position, 100);
+      const c1 = cell1.tcMesh?.material?.color;
+      const c2 = cell2.tcMesh?.material?.color;
+      const avgColor = c1 ? `#${c1.clone().lerp(c2 || c1, 0.5).getHexString()}` : '#ff8844';
+      const avgAlpha = clamp01(((cell1.tcMesh?.material?.opacity ?? 0) + (cell2.tcMesh?.material?.opacity ?? 0)) / 2 * opacityFactor);
+      ctx.strokeStyle = rgbaFromHex(avgColor, avgAlpha);
+      ctx.lineWidth = 1.5;
+      const segments = sampleGreatCircleUvFromRaDec(
+        cell1.raRad ?? 0, cell1.decRad ?? 0,
+        cell2.raRad ?? 0, cell2.decRad ?? 0,
+        100, 12
+      );
+      for (let j = 0; j < segments.length - 1; j++) {
+        splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+      }
+    });
+    ctx.restore();
   }
 
   drawIsolationOverlay(ctx) {
     if (!this.state.enableIsolationFilterFlag || !this.state.isolationOverlay) return;
     const overlay = this.state.isolationOverlay;
+
+    // Draw adjacent lines between active cells first (behind cell dots)
+    ctx.save();
+    (overlay.adjacentLines || []).forEach(({ line, cell1, cell2 }) => {
+      if (!cell1?.active || !cell2?.active) return;
+      const uv1 = (cell1.raRad != null) ? raDecToUV(cell1.raRad, cell1.decRad) : spherePositionToUv(cell1.globeMesh.position, 100);
+      const uv2 = (cell2.raRad != null) ? raDecToUV(cell2.raRad, cell2.decRad) : spherePositionToUv(cell2.globeMesh.position, 100);
+      const c1 = cell1.tcMesh?.material?.color;
+      const c2 = cell2.tcMesh?.material?.color;
+      const avgColor = c1 ? `#${c1.clone().lerp(c2 || c1, 0.5).getHexString()}` : '#4f97ff';
+      const avgAlpha = clamp01(((cell1.tcMesh?.material?.opacity ?? 0) + (cell2.tcMesh?.material?.opacity ?? 0)) / 2);
+      ctx.strokeStyle = rgbaFromHex(avgColor, avgAlpha * 0.6);
+      ctx.lineWidth = 1.2;
+      const segments = sampleGreatCircleUvFromRaDec(
+        cell1.raRad ?? 0, cell1.decRad ?? 0,
+        cell2.raRad ?? 0, cell2.decRad ?? 0,
+        100, 12
+      );
+      for (let j = 0; j < segments.length - 1; j++) {
+        splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+      }
+    });
+
+    // Draw cell indicators
     (overlay.cubesData || []).forEach(cell => {
-      if (!cell?.active || !cell?.globeMesh?.position) return;
-      const uv = spherePositionToUv(cell.globeMesh.position, 100);
+      if (!cell?.active) return;
+      const uv = (cell.raRad != null && cell.decRad != null)
+        ? raDecToUV(cell.raRad, cell.decRad)
+        : spherePositionToUv(cell.globeMesh.position, 100);
       const x = uv.u * ATLAS_WIDTH;
       const y = uv.v * ATLAS_HEIGHT;
       const color = cell.tcMesh?.material?.color ? `#${cell.tcMesh.material.color.getHexString()}` : '#4f97ff';
       const alpha = clamp01(cell.tcMesh?.material?.opacity ?? 0.35);
-      ctx.save();
+      const distRatio = cell.tcPos ? Math.min(1, cell.tcPos.length() / (overlay.maxDistance || 20)) : 0.5;
+      const scale = THREE.MathUtils.lerp(12, 1, distRatio);
+      const radius = Math.max(3, overlay.gridSize * scale * 0.5);
       ctx.fillStyle = rgbaFromHex(color, alpha);
-      this.drawWrappedCircle(ctx, x, y, Math.max(3, overlay.gridSize * 2));
-      ctx.restore();
+      this.drawWrappedCircle(ctx, x, y, radius);
     });
+    ctx.restore();
   }
 
   drawCloudDensityOverlay(ctx) {
     if (!this.state.showCloudDensityFlag || !Array.isArray(this.state.cloudDensityOverlays)) return;
+    const cdOpacity = clamp01(readNumberInput('cloud-density-opacity-slider', 100) / 100);
+    if (cdOpacity <= 0.001) return;
+    ctx.save();
+    ctx.filter = 'blur(4px)';
     this.state.cloudDensityOverlays.forEach(overlay => {
       (overlay?.cubesData || []).forEach(cell => {
         if (!cell?.globeMesh) return;
         const color = cell.globeMesh.material?.color ? `#${cell.globeMesh.material.color.getHexString()}` : '#ff6600';
-        const alpha = clamp01(cell.globeMesh.material?.opacity ?? 0.2);
-        this.fillProjectedMesh(ctx, cell.globeMesh, color, alpha);
+        const alpha = clamp01((cell.globeMesh.material?.opacity ?? 0.2) * cdOpacity);
+        // Use native UV from globe position
+        const uv = spherePositionToUv(cell.globeMesh.position, 100);
+        const x = uv.u * ATLAS_WIDTH;
+        const y = uv.v * ATLAS_HEIGHT;
+        const radius = Math.max(6, 18);
+        const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        grd.addColorStop(0, rgbaFromHex(color, alpha));
+        grd.addColorStop(0.6, rgbaFromHex(color, alpha * 0.4));
+        grd.addColorStop(1, rgbaFromHex(color, 0));
+        ctx.fillStyle = grd;
+        this.drawWrappedCircle(ctx, x, y, radius);
       });
     });
+    ctx.filter = 'none';
+    ctx.restore();
   }
 
   drawCloudsOverlay(ctx) {
     const overlays = this.sourceGlobeScene?.userData?.cloudOverlays;
     if (!this.state.showCloudsFlag || !Array.isArray(overlays)) return;
+    const cloudOpacity = clamp01(readNumberInput('cloud-opacity-slider', 100) / 100);
+    if (cloudOpacity <= 0.001) return;
     overlays.forEach(lineSegments => {
       const geometry = lineSegments?.geometry;
       const pos = geometry?.getAttribute?.('position');
       if (!pos) return;
       const color = lineSegments.material?.color ? `#${lineSegments.material.color.getHexString()}` : '#ff6600';
-      const alpha = clamp01(lineSegments.material?.opacity ?? 0.8);
+      const baseAlpha = lineSegments.material?.opacity ?? 0.8;
+      const alpha = clamp01(baseAlpha * cloudOpacity);
       ctx.save();
       ctx.strokeStyle = rgbaFromHex(color, alpha);
       ctx.lineWidth = 1.6;
@@ -632,7 +747,7 @@ export class UVMapManager {
   }
 
   drawPlanes(ctx) {
-    const planeOpacity = clamp01(readNumberInput('plane-opacity', 50) / 100);
+    const planeOpacity = clamp01(readNumberInput('plane-opacity-slider', 50) / 100);
     if (planeOpacity <= 0.001) return;
     if (this.state.showGalacticPlaneFlag) {
       this.drawEquatorialCurve(ctx, angle => galacticToEquatorial(angle, 0), '#7effb2', planeOpacity);

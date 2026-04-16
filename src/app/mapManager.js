@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { createConnectionLines, mergeConnectionLines } from '../features/connections/connectionsRenderer.js';
 import { buildWideLineGeometry } from '../render/engine/renderUtils.js';
+import { getConnectionLineParams } from '../features/connections/connectionSettings.js';
 import { ThreeDControls, TwoDControls } from '../render/interactions/cameraControls.js';
 import { LabelManager } from '../features/labels/labelManager.js';
 import { getMollweideLambda0, setMollweideLambda0 } from '../shared/geometryUtils.js';
@@ -266,11 +267,65 @@ export class MapManager {
       createConnectionLines(stars, connectionObjs, 'Mollweide', opacity).forEach(line => this.connectionGroup.add(line));
     } else {
       this.connectionGroup.add(mergeConnectionLines(connectionObjs, this.mapType, opacity));
+      // Add distance labels for TrueCoordinates
+      if (this.mapType === 'TrueCoordinates') {
+        this.addTCDistanceLabels(connectionObjs, opacity);
+      }
     }
     this.scene.add(this.connectionGroup);
     const editManager = this.getEditManager();
     if (editManager) editManager.applyStoredLineEdits(this.connectionGroup);
     requestRenderIfAvailable();
+  }
+
+  addTCDistanceLabels(connectionObjs, opacityFactor) {
+    const { connectionLabelSize } = getConnectionLineParams();
+    if (connectionLabelSize <= 0.01) return;
+    const distances = connectionObjs.map(p => p.distance);
+    const largest = Math.max(...distances);
+    const smallest = Math.min(...distances);
+    connectionObjs.forEach(pair => {
+      const { starA, starB, distance } = pair;
+      const posA = starA.truePosition || new THREE.Vector3(starA.x_coordinate, starA.y_coordinate, starA.z_coordinate);
+      const posB = starB.truePosition || new THREE.Vector3(starB.x_coordinate, starB.y_coordinate, starB.z_coordinate);
+      if (!posA || !posB) return;
+      const normDist = (distance - smallest) / (largest - smallest || 1);
+      const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
+      const mid = posA.clone().lerp(posB, 0.5);
+      const distText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
+      const baseFontSize = 72;
+      const fontSize = baseFontSize * connectionLabelSize;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.font = `${fontSize}px Oswald`;
+      const metrics = ctx.measureText(distText);
+      const padX = 10;
+      canvas.width = metrics.width + padX * 2;
+      canvas.height = fontSize + 10;
+      ctx.font = `${fontSize}px Oswald`;
+      const c1 = new THREE.Color(starA.displayColor || '#ffffff');
+      const c2 = new THREE.Color(starB.displayColor || '#ffffff');
+      const labelColor = c1.clone().lerp(c2, 0.5);
+      ctx.fillStyle = `#${labelColor.getHexString()}`;
+      ctx.textBaseline = 'middle';
+      ctx.fillText(distText, padX, canvas.height / 2);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.needsUpdate = true;
+      const spriteMat = new THREE.SpriteMaterial({
+        map: texture,
+        depthWrite: false,
+        depthTest: true,
+        transparent: true,
+        opacity: lineOpacity
+      });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.renderOrder = 5;
+      const scale = 0.15;
+      sprite.scale.set(canvas.width / 100 * scale, canvas.height / 100 * scale, 1);
+      sprite.position.copy(mid);
+      this.connectionGroup.add(sprite);
+    });
   }
 
   updateConnectionPositions(stars, connectionObjs) {

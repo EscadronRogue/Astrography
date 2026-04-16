@@ -104,10 +104,18 @@ function ensurePlane(ctx, type, opacity) {
     if (state[keys.trueLabels].length === 0) {
       state[keys.trueLabels] = config.createTrueLabels(opacity);
       state[keys.trueLabels].forEach(label => trueCoordinatesMap.scene.add(label));
+    } else {
+      state[keys.trueLabels].forEach(label => {
+        if (label.material) label.material.opacity = opacity;
+      });
     }
     if (state[keys.globeLabels].length === 0) {
       state[keys.globeLabels] = config.createGlobeLabels(opacity);
       state[keys.globeLabels].forEach(label => globeMap.scene.add(label));
+    } else {
+      state[keys.globeLabels].forEach(label => {
+        if (label.material) label.material.opacity = opacity;
+      });
     }
     if (state[keys.mollLabels].length === 0) {
       state[keys.mollLabels] = config.createMollLabels(opacity);

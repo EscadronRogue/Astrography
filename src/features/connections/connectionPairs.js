@@ -197,6 +197,39 @@ export function updateMollweideConnectionSegments(lineSegs) {
   lineSegs.computeLineDistances();
 }
 
+function createDistanceLabelSprite(distance, color, opacity, scaleFactor = 1) {
+  const distanceText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
+  const baseFontSize = 72;
+  const { connectionLabelSize } = getConnectionLineParams();
+  const fontSize = baseFontSize * connectionLabelSize;
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  ctx.font = `${fontSize}px Oswald`;
+  const metrics = ctx.measureText(distanceText);
+  const padX = 10;
+  const padY = 5;
+  canvas.width = metrics.width + padX * 2;
+  canvas.height = fontSize + padY * 2;
+  ctx.font = `${fontSize}px Oswald`;
+  ctx.fillStyle = `#${color.getHexString()}`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(distanceText, padX, canvas.height / 2);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const spriteMat = new THREE.SpriteMaterial({
+    map: texture,
+    depthWrite: true,
+    depthTest: true,
+    transparent: true,
+    opacity
+  });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.renderOrder = 5;
+  sprite.scale.set(canvas.width / 100 * scaleFactor, canvas.height / 100 * scaleFactor, 1);
+  return sprite;
+}
+
 export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5) {
   if (!pairs || pairs.length === 0) return [];
 
@@ -261,39 +294,13 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       if (rot > Math.PI / 2) rot -= Math.PI;
       if (rot < -Math.PI / 2) rot += Math.PI;
 
-      const distanceText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
-      const baseFontSize = 72;
-      const { connectionLabelSize } = getConnectionLineParams();
-      const fontSize = baseFontSize * connectionLabelSize;
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.font = `${fontSize}px Oswald`;
-      const metrics = ctx.measureText(distanceText);
-      const padX = 10;
-      const padY = 5;
-      canvas.width = metrics.width + padX * 2;
-      canvas.height = fontSize + padY * 2;
-      ctx.font = `${fontSize}px Oswald`;
       const labelColor = c1.clone().lerp(c2, 0.5);
-      ctx.fillStyle = `#${labelColor.getHexString()}`;
-      ctx.textBaseline = 'middle';
-      ctx.fillText(distanceText, padX, canvas.height / 2);
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.needsUpdate = true;
-      const spriteMat = new THREE.SpriteMaterial({
-        map: texture,
-        depthWrite: true,
-        depthTest: true,
-        transparent: true,
-        opacity,
-      });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.renderOrder = 5;
-      sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
-      sprite.position.copy(mid);
-      sprite.material.rotation = rot;
-      group.add(sprite);
+      const sprite = createDistanceLabelSprite(distance, labelColor, opacity);
+      if (sprite) {
+        sprite.position.copy(mid);
+        sprite.material.rotation = rot;
+        group.add(sprite);
+      }
 
       lines.push(group);
       return;
@@ -315,6 +322,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       points = [posA, posB];
     }
 
+    const group = new THREE.Group();
     const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
     const materialLine = new THREE.LineBasicMaterial({
       color: gradientColor,
@@ -326,10 +334,26 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     line.userData = { baseLineWidth: lineThickness };
     if (mapType === 'Globe') {
       line.renderOrder = 1;
-    } else if (mapType === 'Mollweide') {
-      line.renderOrder = 3;
     }
-    lines.push(line);
+    group.add(line);
+
+    // Distance label at midpoint
+    const midIdx = Math.floor(points.length / 2);
+    const midPos = points[midIdx];
+    const labelColor = gradientColor.clone();
+    const labelScaleFactor = mapType === 'Globe' ? 0.5 : 0.15;
+    const sprite = createDistanceLabelSprite(distance, labelColor, lineOpacity, labelScaleFactor);
+    if (sprite && midPos) {
+      sprite.position.copy(midPos);
+      if (mapType === 'Globe') {
+        // Offset label slightly outward from sphere surface
+        const outward = midPos.clone().normalize().multiplyScalar(2);
+        sprite.position.add(outward);
+      }
+      group.add(sprite);
+    }
+
+    lines.push(group);
   });
   return lines;
 }
