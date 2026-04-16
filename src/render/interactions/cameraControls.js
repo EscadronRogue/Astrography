@@ -7,11 +7,15 @@ export class ThreeDControls {
     this.domElement = domElement;
     this.target = options.target || new THREE.Vector3(0, 0, 0);
     this.rotationSpeed = options.rotationSpeed ?? 0.005;
+    this.touchRotationSpeed = options.touchRotationSpeed ?? this.rotationSpeed * 0.65;
     this.zoomSpeed = options.zoomSpeed ?? 0.1;
+    this.pinchZoomSpeed = options.pinchZoomSpeed ?? 0.005;
     this.minDistance = options.minDistance ?? 5;
     this.maxDistance = options.maxDistance ?? 2000;
     this.isRotating = false;
     this.previousPointerPosition = { x: 0, y: 0 };
+    this.activePointers = new Map();
+    this.pinchDistance = null;
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerMove = this.onPointerMove.bind(this);
@@ -26,23 +30,48 @@ export class ThreeDControls {
   }
 
   onPointerDown(event) {
-    this.isRotating = true;
+    this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY, pointerType: event.pointerType });
+    this.isRotating = this.activePointers.size === 1;
     this.previousPointerPosition.x = event.clientX;
     this.previousPointerPosition.y = event.clientY;
+    if (this.activePointers.size >= 2) this.pinchDistance = this.getPinchDistance();
     this.domElement.setPointerCapture?.(event.pointerId);
   }
 
   onPointerMove(event) {
+    if (!this.activePointers.has(event.pointerId)) return;
+    this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY, pointerType: event.pointerType });
+
+    if (this.activePointers.size >= 2) {
+      const nextPinchDistance = this.getPinchDistance();
+      if (this.pinchDistance != null && nextPinchDistance != null) {
+        const delta = nextPinchDistance - this.pinchDistance;
+        if (Math.abs(delta) > 0) {
+          const offset = this.camera.position.clone().sub(this.target);
+          const distance = offset.length();
+          const factor = 1 - delta * this.pinchZoomSpeed;
+          const next = THREE.MathUtils.clamp(distance * factor, this.minDistance, this.maxDistance);
+          offset.setLength(next);
+          this.camera.position.copy(this.target.clone().add(offset));
+          this.camera.lookAt(this.target);
+          requestRenderIfAvailable();
+        }
+      }
+      this.pinchDistance = nextPinchDistance;
+      return;
+    }
+
     if (!this.isRotating) return;
     const deltaX = event.clientX - this.previousPointerPosition.x;
     const deltaY = event.clientY - this.previousPointerPosition.y;
     this.previousPointerPosition.x = event.clientX;
     this.previousPointerPosition.y = event.clientY;
 
+    const speed = event.pointerType === 'touch' ? this.touchRotationSpeed : this.rotationSpeed;
     const offset = this.camera.position.clone().sub(this.target);
     const spherical = new THREE.Spherical().setFromVector3(offset);
-    spherical.theta -= deltaX * this.rotationSpeed;
-    spherical.phi -= deltaY * this.rotationSpeed;
+    spherical.theta -= deltaX * speed;
+    spherical.phi -= deltaY * speed;
     spherical.phi = THREE.MathUtils.clamp(spherical.phi, 0.01, Math.PI - 0.01);
     offset.setFromSpherical(spherical);
     this.camera.position.copy(this.target.clone().add(offset));
@@ -51,8 +80,23 @@ export class ThreeDControls {
   }
 
   onPointerUp(event) {
-    this.isRotating = false;
+    this.activePointers.delete(event.pointerId);
+    this.isRotating = this.activePointers.size === 1;
+    if (this.activePointers.size === 1) {
+      const remaining = Array.from(this.activePointers.values())[0];
+      this.previousPointerPosition.x = remaining.x;
+      this.previousPointerPosition.y = remaining.y;
+    } else {
+      this.pinchDistance = null;
+    }
     this.domElement.releasePointerCapture?.(event.pointerId);
+  }
+
+  getPinchDistance() {
+    const pointers = Array.from(this.activePointers.values());
+    if (pointers.length < 2) return null;
+    const [a, b] = pointers;
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
   onWheel(event) {
@@ -80,11 +124,15 @@ export class TwoDControls {
     this.camera = camera;
     this.domElement = domElement;
     this.panSpeed = options.panSpeed ?? 1;
+    this.touchPanSpeed = options.touchPanSpeed ?? this.panSpeed * 0.65;
     this.zoomSpeed = options.zoomSpeed ?? 0.001;
+    this.pinchZoomSpeed = options.pinchZoomSpeed ?? 0.0035;
     this.minZoom = options.minZoom ?? 0.25;
     this.maxZoom = options.maxZoom ?? 20;
     this.isPanning = false;
     this.previousPointerPosition = { x: 0, y: 0 };
+    this.activePointers = new Map();
+    this.pinchDistance = null;
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerMove = this.onPointerMove.bind(this);
@@ -99,26 +147,60 @@ export class TwoDControls {
   }
 
   onPointerDown(event) {
-    this.isPanning = true;
+    this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY, pointerType: event.pointerType });
+    this.isPanning = this.activePointers.size === 1;
     this.previousPointerPosition.x = event.clientX;
     this.previousPointerPosition.y = event.clientY;
+    if (this.activePointers.size >= 2) this.pinchDistance = this.getPinchDistance();
     this.domElement.setPointerCapture?.(event.pointerId);
   }
 
   onPointerMove(event) {
+    if (!this.activePointers.has(event.pointerId)) return;
+    this.activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY, pointerType: event.pointerType });
+
+    if (this.activePointers.size >= 2) {
+      const nextPinchDistance = this.getPinchDistance();
+      if (this.pinchDistance != null && nextPinchDistance != null) {
+        const delta = nextPinchDistance - this.pinchDistance;
+        const zoomFactor = 1 + delta * this.pinchZoomSpeed;
+        this.camera.zoom = THREE.MathUtils.clamp(this.camera.zoom * zoomFactor, this.minZoom, this.maxZoom);
+        this.camera.updateProjectionMatrix();
+        requestRenderIfAvailable();
+      }
+      this.pinchDistance = nextPinchDistance;
+      return;
+    }
+
     if (!this.isPanning) return;
     const dx = event.clientX - this.previousPointerPosition.x;
     const dy = event.clientY - this.previousPointerPosition.y;
     this.previousPointerPosition.x = event.clientX;
     this.previousPointerPosition.y = event.clientY;
-    this.camera.position.x -= dx * this.panSpeed / this.camera.zoom;
-    this.camera.position.y += dy * this.panSpeed / this.camera.zoom;
+    const speed = event.pointerType === 'touch' ? this.touchPanSpeed : this.panSpeed;
+    this.camera.position.x -= dx * speed / this.camera.zoom;
+    this.camera.position.y += dy * speed / this.camera.zoom;
     requestRenderIfAvailable();
   }
 
   onPointerUp(event) {
-    this.isPanning = false;
+    this.activePointers.delete(event.pointerId);
+    this.isPanning = this.activePointers.size === 1;
+    if (this.activePointers.size === 1) {
+      const remaining = Array.from(this.activePointers.values())[0];
+      this.previousPointerPosition.x = remaining.x;
+      this.previousPointerPosition.y = remaining.y;
+    } else {
+      this.pinchDistance = null;
+    }
     this.domElement.releasePointerCapture?.(event.pointerId);
+  }
+
+  getPinchDistance() {
+    const pointers = Array.from(this.activePointers.values());
+    if (pointers.length < 2) return null;
+    const [a, b] = pointers;
+    return Math.hypot(a.x - b.x, a.y - b.y);
   }
 
   onWheel(event) {

@@ -22,8 +22,8 @@ import { applyCanvasConstellationLabelStyle, constellationLineCss } from '../fea
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
 import { galacticToEquatorial, eclipticToEquatorial } from '../features/planes/planeDefinitions.js';
 
-const ATLAS_WIDTH = 4096;
-const ATLAS_HEIGHT = 2048;
+const ATLAS_WIDTH = 8192;
+const ATLAS_HEIGHT = 4096;
 const PLANE_WIDTH = EQUIRECT_WIDTH;
 const PLANE_HEIGHT = EQUIRECT_HEIGHT;
 const GLOBE_RADIUS = 99;
@@ -91,6 +91,9 @@ export class UVMapManager {
     this.atlasTexture = new THREE.CanvasTexture(this.atlasCanvas);
     this.atlasTexture.wrapS = THREE.RepeatWrapping;
     this.atlasTexture.wrapT = THREE.ClampToEdgeWrapping;
+    this.atlasTexture.minFilter = THREE.LinearFilter;
+    this.atlasTexture.magFilter = THREE.LinearFilter;
+    this.atlasTexture.generateMipmaps = true;
     this.atlasTexture.needsUpdate = true;
 
     if (mapType === 'Equirectangular') {
@@ -223,8 +226,8 @@ export class UVMapManager {
     }
     this.drawConnections(ctx, connectionObjs || []);
     this.drawStars(ctx, stars || []);
-    this.drawStarLabels(ctx, stars || []);
     this.drawConstellationNames(ctx);
+    this.drawStarLabels(ctx, stars || []);
     this.atlasTexture.needsUpdate = true;
   }
 
@@ -545,6 +548,8 @@ export class UVMapManager {
     const fullNames = getConstellationFullNames();
     ctx.save();
     applyCanvasConstellationLabelStyle(ctx, opacity);
+    const fontSize = Math.round(THREE.MathUtils.clamp(ATLAS_WIDTH / 240, 18, 34));
+    ctx.font = `300 ${fontSize}px "Cormorant Garamond", "Times New Roman", serif`;
     centers.forEach(center => {
       const { u, v } = raDecToUV(center.ra, center.dec);
       const x = u * ATLAS_WIDTH;

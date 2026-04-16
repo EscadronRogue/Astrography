@@ -228,7 +228,11 @@ export function createConstellationLabelsForGlobe(opacity = 0.8) {
     const desiredRight = new THREE.Vector3().crossVectors(desiredUp, normal).normalize();
     const matrix = new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal);
     label.setRotationFromMatrix(matrix);
-    label.renderOrder = 1;
+    label.renderOrder = 0.5;
+    if (label.material) {
+      label.material.depthWrite = false;
+      label.material.depthTest = true;
+    }
     label.userData = { name: c.name, displayName, ra: c.ra, dec: c.dec };
     labels.push(label);
   });
@@ -248,7 +252,9 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
     texture.needsUpdate = true;
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
     const sprite = new THREE.Sprite(material);
-    sprite.renderOrder = 1;
+    sprite.renderOrder = 0.5;
+    sprite.material.depthWrite = false;
+    sprite.material.depthTest = true;
     sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
     sprite.position.copy(p);
     sprite.userData = { name: c.name, displayName, ra: c.ra, dec: c.dec };
