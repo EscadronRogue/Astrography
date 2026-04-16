@@ -16,7 +16,9 @@ import {
   unwrapUvSequence,
   unwrapUvAroundReference
 } from '../shared/uvUtils.js';
-import { loadConstellationCenters, loadConstellationFullNames, getConstellationCenters, getConstellationFullNames } from '../features/constellations/constellationDataService.js';
+import { loadConstellationCenters, loadConstellationFullNames, getConstellationFullNames } from '../features/constellations/constellationDataService.js';
+import { getConstellationLabelAnchors } from '../features/constellations/constellationLabelPlacement.js';
+import { applyCanvasConstellationLabelStyle, constellationLineCss } from '../features/constellations/constellationStyle.js';
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
 import { galacticToEquatorial, eclipticToEquatorial } from '../features/planes/planeDefinitions.js';
 
@@ -508,12 +510,10 @@ export class UVMapManager {
     if (!this.state.showConstellationNamesFlag) return;
     const opacity = clamp01(readNumberInput('constellation-name-opacity', 80) / 100);
     if (opacity <= 0.001) return;
-    const centers = getConstellationCenters();
+    const centers = getConstellationLabelAnchors();
     const fullNames = getConstellationFullNames();
     ctx.save();
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'center';
-    ctx.font = '20px Oswald';
+    applyCanvasConstellationLabelStyle(ctx, opacity);
     centers.forEach(center => {
       const { u, v } = raDecToUV(center.ra, center.dec);
       const x = u * ATLAS_WIDTH;
@@ -522,9 +522,6 @@ export class UVMapManager {
       [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
         const drawX = x + shiftX;
         if (drawX < -180 || drawX > ATLAS_WIDTH + 180) return;
-        ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.7})`;
-        ctx.fillStyle = `rgba(255,255,255,${opacity})`;
-        ctx.lineWidth = 4;
         ctx.strokeText(name, drawX, y);
         ctx.fillText(name, drawX, y);
       });
@@ -533,9 +530,12 @@ export class UVMapManager {
   }
 
   drawConstellationBoundaries(ctx, boundaries) {
+    const opacity = clamp01(readNumberInput('constellation-line-opacity', 40) / 100);
+    const lineWidth = Math.max(0.1, readNumberInput('constellation-line-width', 1));
+    if (opacity <= 0.001) return;
     ctx.save();
-    ctx.strokeStyle = 'rgba(94, 152, 255, 0.5)';
-    ctx.lineWidth = 1.25;
+    ctx.strokeStyle = constellationLineCss(opacity);
+    ctx.lineWidth = lineWidth;
     boundaries.forEach(boundary => {
       const points = Array.isArray(boundary?.raDecPolygon) ? boundary.raDecPolygon : [];
       if (points.length < 2) return;

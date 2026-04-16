@@ -8,9 +8,11 @@ import {
   loadConstellationBoundaries,
   loadConstellationCenters,
   loadConstellationFullNames,
-  getConstellationCenters,
+  getConstellationFullNames,
   getConstellationBoundaries
 } from './constellationDataService.js';
+import { getConstellationLabelAnchors } from './constellationLabelPlacement.js';
+import { CONSTELLATION_LINE_COLOR, createConstellationLabelCanvas, makeConstellationLineColor } from './constellationStyle.js';
 
 
 /**
@@ -19,6 +21,7 @@ import {
 export function createConstellationBoundariesForGlobe(opacity = 0.4, lineWidth = 1) {
   const lines = [];
   const R = 100;
+  const lineColor = makeConstellationLineColor();
   getConstellationBoundaries().forEach(b => {
     const p1 = radToSphere(b.ra1, b.dec1, R);
     const p2 = radToSphere(b.ra2, b.dec2, R);
@@ -28,16 +31,13 @@ export function createConstellationBoundariesForGlobe(opacity = 0.4, lineWidth =
     );
     const points = curve.getPoints(32);
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineDashedMaterial({
-      color: 0x888888,
-      dashSize: 2,
-      gapSize: 1,
+    const material = new THREE.LineBasicMaterial({
+      color: lineColor,
       linewidth: lineWidth,
       transparent: true,
       opacity
     });
     const line = new THREE.Line(geometry, material);
-    line.computeLineDistances();
     line.userData = {
       baseLineWidth: lineWidth,
       baseOpacity: opacity
@@ -54,7 +54,7 @@ function ensureVisibleConstellationMesh(lineSegs) {
     const mesh = new THREE.Mesh(
       new THREE.BufferGeometry(),
       new THREE.MeshBasicMaterial({
-        color: 0x888888,
+        color: CONSTELLATION_LINE_COLOR,
         transparent: true,
         opacity: 1,
         depthWrite: false,
@@ -66,7 +66,7 @@ function ensureVisibleConstellationMesh(lineSegs) {
     mesh.userData = {
       baseWidth: 1,
       baseOpacity: 1,
-      baseColor: 0x888888,
+      baseColor: CONSTELLATION_LINE_COLOR,
       exportLineWidthFactor: 1.5,
       exportOpacityFactor: 1,
       points: []
@@ -122,15 +122,15 @@ export function rebuildConstellationMeshFromSegments(lineSegs, overrideWidth, ov
   }
   const clampedOpacity = Math.max(0, Math.min(1, baseOpacity));
   if (mesh.material && mesh.material.color) {
-    mesh.material.color.setHex(0x888888);
+    mesh.material.color.setHex(CONSTELLATION_LINE_COLOR);
   }
   mesh.material.opacity = clampedOpacity;
   mesh.material.needsUpdate = true;
   mesh.userData.baseWidth = width;
   mesh.userData.baseOpacity = clampedOpacity;
   mesh.userData.points = pts.map(p => p.clone());
-  mesh.userData.baseColor = 0x888888;
-  if (mesh.userData.exportColor === undefined) mesh.userData.exportColor = 0x888888;
+  mesh.userData.baseColor = CONSTELLATION_LINE_COLOR;
+  if (mesh.userData.exportColor === undefined) mesh.userData.exportColor = CONSTELLATION_LINE_COLOR;
   if (mesh.userData.exportLineWidthFactor === undefined) mesh.userData.exportLineWidthFactor = 1.5;
   if (mesh.userData.exportOpacityFactor === undefined) mesh.userData.exportOpacityFactor = 1;
   lineSegs.userData.baseLineWidth = width;
@@ -141,10 +141,8 @@ export function createConstellationBoundariesForMollweide(opacity = 0.4, lineWid
   const R = 100;
   const sanitizedWidth = Math.max(0.1, lineWidth);
   const sanitizedOpacity = Math.max(0, Math.min(1, opacity));
-  const material = new THREE.LineDashedMaterial({
-    color: 0x888888,
-    dashSize: 2,
-    gapSize: 1,
+  const material = new THREE.LineBasicMaterial({
+    color: CONSTELLATION_LINE_COLOR,
     linewidth: sanitizedWidth,
     transparent: true,
     opacity: 0
@@ -211,28 +209,17 @@ export function updateConstellationBoundariesForMollweide(lineSegs) {
 export function createConstellationLabelsForGlobe(opacity = 0.8) {
   const labels = [];
   const R = 100;
-  // For each center from the loaded centerData
-  getConstellationCenters().forEach(c => {
+  const fullNames = getConstellationFullNames();
+  getConstellationLabelAnchors().forEach(c => {
     const p = radToSphere(c.ra, c.dec, R);
-    const baseFontSize = 300; // Very large base font size
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas context unavailable');
-    ctx.font = `${baseFontSize}px Oswald`;
-    const textWidth = ctx.measureText(c.name).width;
-    canvas.width = textWidth + 20;
-    canvas.height = baseFontSize * 1.2;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `${baseFontSize}px Oswald`;
-    ctx.fillStyle = '#888888';
-    ctx.fillText(c.name, 10, baseFontSize);
+    const displayName = fullNames[c.name] || c.name;
+    const canvas = createConstellationLabelCanvas(displayName, opacity, 300);
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
     const material = getDoubleSidedLabelMaterial(texture, opacity);
     const planeGeom = new THREE.PlaneGeometry(canvas.width / 100, canvas.height / 100);
     const label = new THREE.Mesh(planeGeom, material);
     label.position.copy(p);
-    // Orient the label so that its up vector is aligned with the projection of global up onto the tangent plane.
     const normal = p.clone().normalize();
     const globalUp = new THREE.Vector3(0, 1, 0);
     let desiredUp = globalUp.clone().sub(normal.clone().multiplyScalar(globalUp.dot(normal)));
@@ -242,6 +229,7 @@ export function createConstellationLabelsForGlobe(opacity = 0.8) {
     const matrix = new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal);
     label.setRotationFromMatrix(matrix);
     label.renderOrder = 1;
+    label.userData = { name: c.name, displayName, ra: c.ra, dec: c.dec };
     labels.push(label);
   });
   return labels;
@@ -251,27 +239,19 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
   const labels = [];
   const R = 100;
   const lambda0 = getMollweideLambda0();
-  getConstellationCenters().forEach(c => {
+  const fullNames = getConstellationFullNames();
+  getConstellationLabelAnchors().forEach(c => {
     const p = cachedRadToMollweide(c.ra, c.dec, R, lambda0);
-    const baseFontSize = 300;
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas context unavailable');
-    ctx.font = `${baseFontSize}px Oswald`;
-    const textWidth = ctx.measureText(c.name).width;
-    canvas.width = textWidth + 20;
-    canvas.height = baseFontSize * 1.2;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.font = `${baseFontSize}px Oswald`;
-    ctx.fillStyle = '#888888';
-    ctx.fillText(c.name, 10, baseFontSize);
+    const displayName = fullNames[c.name] || c.name;
+    const canvas = createConstellationLabelCanvas(displayName, opacity, 300);
     const texture = new THREE.CanvasTexture(canvas);
+    texture.needsUpdate = true;
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
     const sprite = new THREE.Sprite(material);
     sprite.renderOrder = 1;
     sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
     sprite.position.copy(p);
-    sprite.userData = { name: c.name, ra: c.ra, dec: c.dec };
+    sprite.userData = { name: c.name, displayName, ra: c.ra, dec: c.dec };
     labels.push(sprite);
   });
   return labels;
