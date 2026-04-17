@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { showTooltip, hideTooltip } from './tooltips.js';
+import { showTooltip, hideTooltip, pinTooltip, unpinTooltip, getPinnedTooltipPosition } from './tooltips.js';
 import { getStarEquirectangularPosition } from '../../shared/uvUtils.js';
 
 function createHighlight(radius, position, { planar = false } = {}) {
@@ -79,8 +79,16 @@ export function initStarInteractions(ctx, map) {
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, map.camera);
     const hoveredStar = resolveHoveredOrClickedStar(map, raycaster);
+    const selectedStar = ctx.state.selectedStarData;
 
-    if (hoveredStar) {
+    if (selectedStar) {
+      const pinnedPosition = getPinnedTooltipPosition();
+      if (pinnedPosition) {
+        showTooltip(pinnedPosition.x, pinnedPosition.y, selectedStar);
+      } else {
+        showTooltip(event.clientX, event.clientY, selectedStar);
+      }
+    } else if (hoveredStar) {
       showTooltip(event.clientX, event.clientY, hoveredStar);
     } else {
       hideTooltip();
@@ -110,8 +118,10 @@ export function initStarInteractions(ctx, map) {
     ctx.state.selectedStarData = clickedStar;
     updateSelectedStarHighlight(ctx);
     if (clickedStar) {
+      pinTooltip(event.clientX, event.clientY);
       showTooltip(event.clientX, event.clientY, clickedStar);
     } else {
+      unpinTooltip();
       hideTooltip();
     }
   });

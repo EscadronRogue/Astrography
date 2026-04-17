@@ -31,6 +31,15 @@ function getTooltipStarKey(star) {
   return star?.starId || star?.Source_id || star?.HIP_number || star?.Catalog_link || star?.Common_name_of_the_star || 'unknown';
 }
 
+function getTooltipElement() {
+  return document.getElementById('tooltip');
+}
+
+function getTooltipPositionValue(rawValue) {
+  const value = Number(rawValue);
+  return Number.isFinite(value) ? value : null;
+}
+
 function populateTooltip(tooltip, star) {
   clearTooltip(tooltip);
   appendRow(tooltip, 'tooltip-starName', 'Name', star.Common_name_of_the_star || 'Unknown Star');
@@ -64,8 +73,33 @@ function populateTooltip(tooltip, star) {
   tooltip.appendChild(catalogRow);
 }
 
+export function pinTooltip(x, y) {
+  const tooltip = getTooltipElement();
+  if (!tooltip) return;
+  tooltip.dataset.pinned = 'true';
+  tooltip.dataset.pinnedX = String(x);
+  tooltip.dataset.pinnedY = String(y);
+}
+
+export function unpinTooltip() {
+  const tooltip = getTooltipElement();
+  if (!tooltip) return;
+  delete tooltip.dataset.pinned;
+  delete tooltip.dataset.pinnedX;
+  delete tooltip.dataset.pinnedY;
+}
+
+export function getPinnedTooltipPosition() {
+  const tooltip = getTooltipElement();
+  if (!tooltip || tooltip.dataset.pinned !== 'true') return null;
+  const x = getTooltipPositionValue(tooltip.dataset.pinnedX);
+  const y = getTooltipPositionValue(tooltip.dataset.pinnedY);
+  if (x === null || y === null) return null;
+  return { x, y };
+}
+
 export function showTooltip(x, y, star) {
-  const tooltip = document.getElementById('tooltip');
+  const tooltip = getTooltipElement();
   if (!tooltip) return;
   tooltip.style.display = 'block';
   tooltip.style.pointerEvents = 'auto';
@@ -91,7 +125,7 @@ export function showTooltip(x, y, star) {
 }
 
 export function hideTooltip() {
-  const tooltip = document.getElementById('tooltip');
+  const tooltip = getTooltipElement();
   if (tooltip) {
     tooltip.classList.remove('visible');
     tooltip.classList.add('hidden');
