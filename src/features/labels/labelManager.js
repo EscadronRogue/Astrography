@@ -39,6 +39,34 @@ function getOrAssignSystemAngle(systemAngles, system, starKey) {
   return angle;
 }
 
+function getTrueCoordinateLabelMetrics(labelSize) {
+  const normalized = THREE.MathUtils.clamp(
+    THREE.MathUtils.mapLinear(labelSize ?? 1, 0.1, 8, 0, 1),
+    0,
+    1
+  );
+  return {
+    fontSize: Math.round(THREE.MathUtils.lerp(14, 24, normalized)),
+    worldScale: THREE.MathUtils.lerp(0.18, 0.42, normalized),
+    offsetDistance: THREE.MathUtils.lerp(2.4, 4.8, normalized)
+  };
+}
+
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  const safeRadius = Math.min(radius, width * 0.5, height * 0.5);
+  ctx.beginPath();
+  ctx.moveTo(x + safeRadius, y);
+  ctx.lineTo(x + width - safeRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  ctx.lineTo(x + width, y + height - safeRadius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  ctx.lineTo(x + safeRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  ctx.lineTo(x, y + safeRadius);
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
+  ctx.closePath();
+}
+
 export class LabelManager {
   constructor(mapType, scene) {
     this.mapType = mapType;
@@ -67,19 +95,34 @@ export class LabelManager {
 
       const isGlobeLike = this.mapType === 'Globe' || this.mapType === 'UVGlobe';
       const isFlatProjected = this.mapType === 'Mollweide' || this.mapType === 'Equirectangular';
+      const isTrueCoordinates = this.mapType === 'TrueCoordinates';
+      const trueCoordinateMetrics = isTrueCoordinates ? getTrueCoordinateLabelMetrics(labelSize) : null;
       const baseFontSize = isGlobeLike ? 64 : (isFlatProjected ? 72 : 24);
       const scaleFactor = THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(labelSize, 0.1, 8, 0.1, 5), 0.1, 5);
-      const fontSize = baseFontSize * scaleFactor;
+      const fontSize = trueCoordinateMetrics ? trueCoordinateMetrics.fontSize : baseFontSize * scaleFactor;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas context unavailable');
+      if (!ctx) throw new Error('2D canvas context unavailable');
       ctx.font = `${fontSize}px Oswald`;
       const textWidth = ctx.measureText(displayName).width;
-      const paddingX = 10;
-      const paddingY = 5;
+      const paddingX = isTrueCoordinates ? 12 : 10;
+      const paddingY = isTrueCoordinates ? 7 : 5;
       canvas.width = textWidth + paddingX * 2;
       canvas.height = fontSize + paddingY * 2;
       ctx.font = `${fontSize}px Oswald`;
+      ctx.textBaseline = 'middle';
+      if (isTrueCoordinates) {
+        ctx.lineJoin = 'round';
+        drawRoundedRect(ctx, 1, 1, canvas.width - 2, canvas.height - 2, Math.max(8, fontSize * 0.45));
+        ctx.fillStyle = 'rgba(8, 11, 18, 0.76)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(0,0,0,0.82)';
+        ctx.lineWidth = 3;
+        ctx.strokeText(displayName, paddingX, canvas.height / 2);
+      }
       ctx.fillStyle = '#' + interpolateColor('#ffffff', starColor, 0.5).toString(16).padStart(6, '0');
       ctx.textBaseline = 'middle';
       ctx.fillText(displayName, paddingX, canvas.height / 2);
@@ -89,7 +132,6 @@ export class LabelManager {
       if (isGlobeLike) {
         labelObj = new THREE.Mesh(new THREE.PlaneGeometry((canvas.width / 100) * scaleFactor, (canvas.height / 100) * scaleFactor), getDoubleSidedLabelMaterial(texture, this.labelOpacity));
       } else {
-        const isTrueCoordinates = this.mapType === 'TrueCoordinates';
         labelObj = new THREE.Sprite(new THREE.SpriteMaterial({
           map: texture,
           depthWrite: !isTrueCoordinates,
@@ -97,17 +139,18 @@ export class LabelManager {
           transparent: true,
           opacity: this.labelOpacity
         }));
-        labelObj.scale.set((canvas.width / 100) * scaleFactor, (canvas.height / 100) * scaleFactor, 1);
+        const worldScale = trueCoordinateMetrics ? trueCoordinateMetrics.worldScale : scaleFactor;
+        labelObj.scale.set((canvas.width / 100) * worldScale, (canvas.height / 100) * worldScale, 1);
       }
-      labelObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
+      labelObj.renderOrder = this.mapType === 'TrueCoordinates' ? 6 : (this.mapType === 'Mollweide' ? 5 : 1);
       lineObj = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({
         color: new THREE.Color(starColor),
         transparent: true,
-        opacity: this.mapType === 'TrueCoordinates' ? 0.12 : 0.2,
+        opacity: this.mapType === 'TrueCoordinates' ? 0.18 : 0.2,
         depthWrite: this.mapType !== 'TrueCoordinates',
         linewidth: 2
       }));
-      lineObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
+      lineObj.renderOrder = this.mapType === 'TrueCoordinates' ? 5 : (this.mapType === 'Mollweide' ? 5 : 1);
       this.sprites.set(star, labelObj);
       this.lines.set(star, lineObj);
       this.labelCache.set(cacheKey, { lastText: displayName, lastColor: starColor, lastSize: labelSize });
@@ -145,14 +188,18 @@ export class LabelManager {
       labelObj.setRotationFromMatrix(new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal));
     }
 
-    lineObj.geometry.setFromPoints([starPos, labelPos]);
+    let lineEnd = labelPos;
+    if (this.mapType === 'TrueCoordinates' && offset.lengthSq() > 1e-8) {
+      const pullback = Math.max(labelObj.scale.x, labelObj.scale.y) * 0.35;
+      lineEnd = labelPos.clone().add(offset.clone().normalize().multiplyScalar(-pullback));
+    }
+    lineObj.geometry.setFromPoints([starPos, lineEnd]);
     lineObj.material.color.set(star.displayColor || '#888888');
   }
 
   computeLabelOffset(star, starPos) {
     const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
     if (this.mapType === 'TrueCoordinates') {
-      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
       const normal = starPos.lengthSq() > 1e-8 ? starPos.clone().normalize() : new THREE.Vector3(0, 0, 1);
       let tangent = new THREE.Vector3(0, 1, 0);
       if (Math.abs(normal.dot(tangent)) > 0.9) tangent = new THREE.Vector3(1, 0, 0);
@@ -160,7 +207,7 @@ export class LabelManager {
       const bitangent = normal.clone().cross(tangent).normalize();
       const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
       const angle = getOrAssignSystemAngle(this.systemAngles, system, getStarCacheKey(star));
-      return tangent.multiplyScalar(Math.cos(angle)).add(bitangent.multiplyScalar(Math.sin(angle))).multiplyScalar(1.8 * scaleFactor);
+      return tangent.multiplyScalar(Math.cos(angle)).add(bitangent.multiplyScalar(Math.sin(angle))).multiplyScalar(getTrueCoordinateLabelMetrics(labelSize).offsetDistance);
     }
     if (this.mapType === 'Mollweide' || this.mapType === 'Equirectangular') {
       const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
