@@ -56,6 +56,7 @@ export function readFilterState(filterForm) {
     enableDensityLabeling: readCheckboxValue(formData, 'enable-density-labeling'),
     minDistance: readNumericValue(formData, 'min-distance', 0),
     maxDistance: readNumericValue(formData, 'max-distance', 20),
+    showDistanceInLabels: readCheckboxValue(formData, 'show-distance-in-labels'),
     isolationGridSize: readNumericValue(formData, 'isolation-grid-size', 1),
     densityGridSize: readNumericValue(formData, 'density-grid-size', 1),
     densityOpacity: readNumericValue(formData, 'density-opacity', 100) / 100,

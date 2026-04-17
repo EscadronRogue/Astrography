@@ -3,20 +3,35 @@
  * Each spectral class (O, B, A, D, F, G, K, M, L, T, Y, Other) gets a collapsible
  * section with class-level and individual star visibility controls.
  */
-import { getStellarClassData } from './stellarClassData.js';
 import { getPrimaryClass, groupStarsByClass } from '../../../shared/stellarClassUtils.js';
 import { STELLAR_CLASSES, STELLAR_CLASS_NAMES, STELLAR_CLASS_SET, STELLAR_SIZE_SLIDER, SUBCATEGORY_MAX_HEIGHT } from '../../../shared/constants.js';
 import { createRangeControl, createCheckbox, createSubcategoryHeader, sanitizeName } from '../../../shared/uiFactory.js';
+
+function formatLabelDistance(distance) {
+  if (!Number.isFinite(distance)) return '';
+  const precision = distance >= 100 ? 0 : 1;
+  const formatted = distance.toFixed(precision);
+  return formatted.endsWith('.0') ? formatted.slice(0, -2) : formatted;
+}
+
+function buildDisplayName(star, showDistanceInLabels) {
+  const baseName = star.Common_name_of_the_star || star.Common_name_of_the_star_system || '';
+  if (!baseName) return '';
+  if (!showDistanceInLabels || !Number.isFinite(star.distance)) return baseName;
+  return `${baseName} (${formatLabelDistance(star.distance)})`;
+}
 
 /**
  * Applies stellar class visibility logic to filter stars and set display names.
  * @param {Array} stars - Array of star objects.
  * @param {HTMLFormElement} form - The filters form element.
+ * @param {Object} filters - Current filter state.
  * @returns {Array} Filtered array of visible stars.
  */
-export function applyStellarClassLogic(stars, form) {
+export function applyStellarClassLogic(stars, form, filters = {}) {
   const stellarClassShowName = {};
   const stellarClassShowStar = {};
+  const showDistanceInLabels = filters.showDistanceInLabels !== false;
 
   form.querySelectorAll('input[name="stellar-class-show-name"]').forEach(cb => {
     stellarClassShowName[cb.value] = cb.checked;
@@ -61,7 +76,7 @@ export function applyStellarClassLogic(stars, form) {
       : true;
 
     if (classShowName && starShowName) {
-      star.displayName = starName || star.Common_name_of_the_star_system || '';
+      star.displayName = buildDisplayName(star, showDistanceInLabels);
     } else {
       star.displayName = '';
     }

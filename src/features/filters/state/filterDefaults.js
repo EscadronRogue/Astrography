@@ -42,6 +42,7 @@ export function createDefaultFilterResult(allStars) {
     enableDensityLabeling: false,
     minDistance: 0,
     maxDistance: 20,
+    showDistanceInLabels: true,
     isolationGridSize: 1,
     densityGridSize: 1,
     showClouds: false,
