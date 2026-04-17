@@ -686,6 +686,7 @@ export class MapManager {
     if (this.points && this.points.material.uniforms.cameraZoom) {
       this.points.material.uniforms.cameraZoom.value = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
     }
+    this.labelManager.render?.(this.camera);
     this.renderer.render(this.scene, this.camera);
   }
 }

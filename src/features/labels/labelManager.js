@@ -46,9 +46,9 @@ function getTrueCoordinateLabelMetrics(labelSize) {
     1
   );
   return {
-    fontSize: Math.round(THREE.MathUtils.lerp(14, 24, normalized)),
-    worldScale: THREE.MathUtils.lerp(0.18, 0.42, normalized),
-    offsetDistance: THREE.MathUtils.lerp(2.4, 4.8, normalized)
+    fontSize: Math.round(THREE.MathUtils.lerp(16, 28, normalized)),
+    worldScale: THREE.MathUtils.lerp(0.24, 0.5, normalized),
+    offsetDistance: THREE.MathUtils.lerp(1.05, 1.85, normalized)
   };
 }
 
@@ -67,6 +67,50 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
+function getOrAssignSystemSlot(systemSlots, system, starKey) {
+  let starMap = systemSlots.get(system);
+  if (!starMap) {
+    starMap = new Map();
+    systemSlots.set(system, starMap);
+  }
+
+  let slot = starMap.get(starKey);
+  if (slot !== undefined) {
+    return slot;
+  }
+
+  if (starMap.size === 0) {
+    slot = 0;
+  } else {
+    const existing = new Set(starMap.values());
+    const slots = [1, 2, 3, 4, 5, 0];
+    const baseIndex = Math.floor((stableAngleFromString(`${system}|${starKey}`) / (Math.PI * 2)) * slots.length) % slots.length;
+    slot = slots[baseIndex];
+    for (let i = 0; i < slots.length; i++) {
+      const candidate = slots[(baseIndex + i) % slots.length];
+      if (!existing.has(candidate)) {
+        slot = candidate;
+        break;
+      }
+    }
+  }
+
+  starMap.set(starKey, slot);
+  return slot;
+}
+
+function getTrueCoordinateSlotDirection(slot) {
+  const directions = [
+    new THREE.Vector2(0.96, 0.28),
+    new THREE.Vector2(0.94, -0.06),
+    new THREE.Vector2(0.8, 0.62),
+    new THREE.Vector2(0.74, -0.46),
+    new THREE.Vector2(0.48, 0.88),
+    new THREE.Vector2(0.42, -0.82)
+  ];
+  return directions[slot] || directions[0];
+}
+
 export class LabelManager {
   constructor(mapType, scene) {
     this.mapType = mapType;
@@ -76,6 +120,7 @@ export class LabelManager {
     this.lines = new Map();
     this.labelCache = new Map();
     this.systemAngles = new Map();
+    this.systemSlots = new Map();
   }
 
   createOrUpdateLabel(star) {
@@ -188,12 +233,7 @@ export class LabelManager {
       labelObj.setRotationFromMatrix(new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal));
     }
 
-    let lineEnd = labelPos;
-    if (this.mapType === 'TrueCoordinates' && offset.lengthSq() > 1e-8) {
-      const pullback = Math.max(labelObj.scale.x, labelObj.scale.y) * 0.35;
-      lineEnd = labelPos.clone().add(offset.clone().normalize().multiplyScalar(-pullback));
-    }
-    lineObj.geometry.setFromPoints([starPos, lineEnd]);
+    this.updateLineGeometry(starPos, labelPos, offset, labelObj, lineObj);
     lineObj.material.color.set(star.displayColor || '#888888');
   }
 
@@ -225,11 +265,46 @@ export class LabelManager {
     return tangent.multiplyScalar(Math.cos(angle)).add(bitangent.multiplyScalar(Math.sin(angle))).multiplyScalar(2 * THREE.MathUtils.clamp(labelSize / 2, 0.1, 5));
   }
 
+  getTrueCoordinateCameraOffset(star, starPos, camera) {
+    const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
+    const metrics = getTrueCoordinateLabelMetrics(labelSize);
+    const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
+    const slot = getOrAssignSystemSlot(this.systemSlots, system, getStarCacheKey(star));
+    const screenDirection = getTrueCoordinateSlotDirection(slot);
+    const cameraRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    const cameraUp = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+    return cameraRight.multiplyScalar(screenDirection.x).add(cameraUp.multiplyScalar(screenDirection.y)).normalize().multiplyScalar(metrics.offsetDistance);
+  }
+
+  updateLineGeometry(starPos, labelPos, offset, labelObj, lineObj) {
+    let lineEnd = labelPos;
+    if (this.mapType === 'TrueCoordinates' && offset.lengthSq() > 1e-8) {
+      const pullback = Math.max(labelObj.scale.x, labelObj.scale.y) * 0.44;
+      lineEnd = labelPos.clone().add(offset.clone().normalize().multiplyScalar(-pullback));
+    }
+    lineObj.geometry.setFromPoints([starPos, lineEnd]);
+  }
+
+  render(camera) {
+    if (this.mapType !== 'TrueCoordinates' || !camera) return;
+    this.sprites.forEach((labelObj, star) => {
+      const lineObj = this.lines.get(star);
+      if (!labelObj || !lineObj || !star?.displayVisible || !star?.displayName) return;
+      const starPos = star.truePosition
+        ? new THREE.Vector3(star.truePosition.x, star.truePosition.y, star.truePosition.z)
+        : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
+      const offset = this.getTrueCoordinateCameraOffset(star, starPos, camera);
+      const labelPos = starPos.clone().add(offset);
+      labelObj.position.copy(labelPos);
+      this.updateLineGeometry(starPos, labelPos, offset, labelObj, lineObj);
+    });
+  }
+
   refreshLabels(stars) {
     const inNewSet = new Set(stars);
-    stars.forEach(star => { if (star.displayVisible) this.createOrUpdateLabel(star); });
+    stars.forEach(star => { if (star.displayVisible && star.displayName) this.createOrUpdateLabel(star); });
     this.sprites.forEach((labelObj, star) => {
-      if (!inNewSet.has(star) || !star.displayVisible) {
+      if (!inNewSet.has(star) || !star.displayVisible || !star.displayName) {
         this.scene.remove(labelObj); disposeObject3D(labelObj); this.sprites.delete(star);
         const line = this.lines.get(star);
         if (line) { this.scene.remove(line); disposeObject3D(line); this.lines.delete(star); }
@@ -240,7 +315,7 @@ export class LabelManager {
   removeAllLabels() {
     this.sprites.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
     this.lines.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
-    this.sprites.clear(); this.lines.clear(); this.labelCache.clear();
+    this.sprites.clear(); this.lines.clear(); this.labelCache.clear(); this.systemSlots.clear();
   }
 
   setLabelOpacity(opacity) {
