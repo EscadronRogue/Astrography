@@ -5,6 +5,7 @@
  */
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { getDustCloudColor } from '../features/clouds/dustCloudColors.js';
+import { AUTO_COLOR_SATURATION, AUTO_COLOR_LIGHTNESS } from './constants.js';
 
 /**
  * Deterministic hash of a string to an integer.
@@ -32,7 +33,7 @@ export function uniqueColorFromName(name) {
     return new THREE.Color(predefined);
   }
   const hue = (hashString(name) % 360 + 360) % 360;
-  return new THREE.Color(`hsl(${hue}, 70%, 50%)`);
+  return new THREE.Color(`hsl(${hue}, ${AUTO_COLOR_SATURATION}%, ${AUTO_COLOR_LIGHTNESS}%)`);
 }
 
 /**
@@ -45,7 +46,7 @@ export function uniqueColorFromName(name) {
  */
 export function hslColorFromHash(str, { start = 0, spread = 360 } = {}) {
   const hue = start + (Math.abs(hashString(str)) % spread);
-  return new THREE.Color(`hsl(${hue}, 70%, 50%)`);
+  return new THREE.Color(`hsl(${hue}, ${AUTO_COLOR_SATURATION}%, ${AUTO_COLOR_LIGHTNESS}%)`);
 }
 
 /**

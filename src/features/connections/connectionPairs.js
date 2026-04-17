@@ -4,10 +4,10 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/thr
 import { splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../../shared/geometryUtils.js';
 import { createWideLineMaterial, buildWideLineGeometry } from '../../render/engine/renderUtils.js';
 import { getStarId, getStarTruePosition } from '../../shared/starUtils.js';
-import { GLOBE_RADIUS, DEFAULT_STAR_COLOR } from '../../shared/constants.js';
+import { GLOBE_RADIUS, DEFAULT_STAR_COLOR, CIRCLE_SEGMENTS } from '../../shared/constants.js';
 import { getConnectionLineParams } from './connectionSettings.js';
 
-const GC_SEGMENTS = 32;
+const GC_SEGMENTS = CIRCLE_SEGMENTS;
 const STAR_POSITION_CACHE_KEY = Symbol('connectionPositionCache');
 
 function getPosition(star) {

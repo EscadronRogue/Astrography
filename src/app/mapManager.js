@@ -1,5 +1,5 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { createConnectionLines, createWideLineMaterial, mergeConnectionLines } from '../features/connections/connectionsRenderer.js';
+import { createConnectionLines, createWideLineMaterial, mergeConnectionLines } from '../features/connections/connectionPairs.js';
 import { buildWideLineGeometry, disposeObject3D } from '../render/engine/renderUtils.js';
 import { getConnectionLineParams } from '../features/connections/connectionSettings.js';
 import { ThreeDControls, TwoDControls } from '../render/interactions/cameraControls.js';
@@ -7,20 +7,8 @@ import { LabelManager } from '../features/labels/labelManager.js';
 import { getMollweideLambda0, setMollweideLambda0, splitMollweideWrap } from '../shared/geometryUtils.js';
 import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { createMollweideBackground, createMollweideBorder, createMollweideMask, debounce } from './mapDecorations.js';
-
-function hashString(value) {
-  const str = String(value ?? '');
-  let hash = 2166136261;
-  for (let index = 0; index < str.length; index++) {
-    hash ^= str.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function mixHash(hash, value) {
-  return Math.imul(hash ^ value, 16777619) >>> 0;
-}
+import { hashString, mixHash } from '../shared/hashUtils.js';
+import { STAR_TEXTURE_SIZE, CONNECTION_LABEL_BASE_FONT } from '../shared/constants.js';
 
 function getConnectionPairKey(pair) {
   return pair?.pairKey || `${pair?.starA?.starId || 'a'}|${pair?.starB?.starId || 'b'}`;
@@ -57,7 +45,7 @@ function getConnectionDistanceBounds(connectionObjs) {
 }
 
 function createStarTexture() {
-  const size = 64;
+  const size = STAR_TEXTURE_SIZE;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext('2d');
@@ -548,7 +536,7 @@ export class MapManager {
       const lineOpacity = lineOpacityScale * opacityFactor;
       const mid = posA.clone().lerp(posB, 0.5);
       const distText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
-      const baseFontSize = 72;
+      const baseFontSize = CONNECTION_LABEL_BASE_FONT;
       const fontSize = baseFontSize * connectionLabelSize;
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');

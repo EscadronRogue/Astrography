@@ -17,7 +17,7 @@
 </head>
 <body>
   <!-- Loader -->
-  <div id="loader" class="active">Loading Stars...</div>
+  <div id="loader" class="active" role="status" aria-live="polite">Loading Stars...</div>
 
   <!-- Header with Menu Toggle Button -->
   <header>
@@ -304,7 +304,7 @@
             <div class="filter-item">
               <button type="button" id="download-edits">Download Edits</button>
               <button type="button" id="upload-edits">Upload Edits</button>
-              <input type="file" id="upload-edits-input" accept="application/json" style="display:none" />
+              <input type="file" id="upload-edits-input" accept="application/json" class="visually-hidden" />
             </div>
           </div>
         </fieldset>
@@ -344,8 +344,8 @@
         <canvas id="legacyMollweideMap"></canvas>
         <div class="export-controls">
           <button id="export-mollweide" class="export-btn">Export</button>
-          <button id="export-png" class="export-btn" style="display:none">PNG</button>
-          <button id="export-pdf" class="export-btn" style="display:none">PDF</button>
+          <button id="export-png" class="export-btn hidden-control">PNG</button>
+          <button id="export-pdf" class="export-btn hidden-control">PDF</button>
           <button id="toggle-label-editor" class="export-btn">Edit Labels</button>
           <button id="toggle-line-editor" class="export-btn">Edit Lines</button>
           <button id="undo-edit" class="export-btn">Undo</button>
@@ -359,7 +359,7 @@
   </div>
 
   <!-- Tooltip -->
-  <div id="tooltip" style="display:none; position:absolute; pointer-events:none;"></div>
+  <div id="tooltip" class="tooltip" hidden></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script type="module" src="src/main.js"></script>

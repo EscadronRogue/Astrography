@@ -101,7 +101,7 @@ export function getPinnedTooltipPosition() {
 export function showTooltip(x, y, star) {
   const tooltip = getTooltipElement();
   if (!tooltip) return;
-  tooltip.style.display = 'block';
+  tooltip.removeAttribute('hidden');
   tooltip.style.pointerEvents = 'auto';
   if (!tooltip.hasAttribute('data-stop-propagation')) {
     tooltip.addEventListener('click', event => event.stopPropagation());
@@ -129,7 +129,7 @@ export function hideTooltip() {
   if (tooltip) {
     tooltip.classList.remove('visible');
     tooltip.classList.add('hidden');
-    tooltip.style.display = 'none';
+    tooltip.setAttribute('hidden', '');
     tooltip.style.pointerEvents = 'none';
   }
 }

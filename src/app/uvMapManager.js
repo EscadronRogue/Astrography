@@ -12,23 +12,27 @@ import {
   normalizeRightAscension,
   splitWrappedUvSegment,
   sampleGreatCircleUvFromVectors,
-  sampleGreatCircleUvFromRaDec,
-  unwrapUvSequence,
-  unwrapUvAroundReference
+  sampleGreatCircleUvFromRaDec
 } from '../shared/uvUtils.js';
 import { loadConstellationCenters, loadConstellationFullNames, getConstellationFullNames } from '../features/constellations/constellationDataService.js';
 import { getConstellationLabelAnchors } from '../features/constellations/constellationLabelPlacement.js';
 import { applyCanvasConstellationLabelStyle, constellationLineCss } from '../features/constellations/constellationStyle.js';
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
 import { galacticToEquatorial, eclipticToEquatorial } from '../features/planes/planeDefinitions.js';
+import { hashString, mixHash } from '../shared/hashUtils.js';
+import { GLOBE_RADIUS, ATLAS_WIDTH, ATLAS_HEIGHT } from '../shared/constants.js';
+import {
+  drawWrappedCircle,
+  strokeUvSegment,
+  splitWrappedSegment,
+  fillProjectedMesh,
+  fillWrappedTriangle
+} from './uvAtlasDrawing.js';
+import { getLabelPriority, computeUvLabelPlacement, LabelSpatialIndex } from './uvLabelPlacement.js';
 
-const ATLAS_WIDTH = 8192;
-const ATLAS_HEIGHT = 4096;
 const PLANE_WIDTH = EQUIRECT_WIDTH;
 const PLANE_HEIGHT = EQUIRECT_HEIGHT;
-const GLOBE_RADIUS = 99;
 const TAU = Math.PI * 2;
-const LABEL_MARGIN_Y = 10;
 
 function createHiddenPointsMaterial() {
   return new THREE.PointsMaterial({
@@ -54,20 +58,6 @@ function readNumberInput(id, fallback) {
 
 function clamp01(value) {
   return THREE.MathUtils.clamp(value, 0, 1);
-}
-
-function hashString(value) {
-  const str = String(value ?? '');
-  let hash = 2166136261;
-  for (let index = 0; index < str.length; index++) {
-    hash ^= str.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function mixHash(hash, value) {
-  return Math.imul(hash ^ value, 16777619) >>> 0;
 }
 
 function hashNumber(value, precision = 1000) {
@@ -468,7 +458,7 @@ export class UVMapManager {
       ctx.strokeStyle = rgbaFromHex(connection.starA.displayColor || '#8fb5ff', opacity * 0.7);
       ctx.lineWidth = lineWidth;
       for (let i = 0; i < uvPoints.length - 1; i++) {
-        splitWrappedUvSegment(uvPoints[i], uvPoints[i + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+        splitWrappedUvSegment(uvPoints[i], uvPoints[i + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
       }
       ctx.restore();
 
@@ -515,7 +505,7 @@ export class UVMapManager {
       const radius = THREE.MathUtils.clamp((star.displaySize || 1) * 1.6, 1.2, 10);
       ctx.save();
       ctx.fillStyle = rgbaFromHex(star.displayColor || '#ffffff', opacity);
-      this.drawWrappedCircle(ctx, x, y, radius);
+      drawWrappedCircle(ctx, x, y, radius);
       ctx.restore();
     });
   }
@@ -539,6 +529,7 @@ export class UVMapManager {
       });
 
     const placedBoxes = [];
+    const spatialIndex = new LabelSpatialIndex();
     ctx.save();
     ctx.textBaseline = 'middle';
     ctx.lineCap = 'round';
@@ -546,9 +537,9 @@ export class UVMapManager {
 
     visibleLabeledStars
       .slice()
-      .sort((a, b) => this.getLabelPriority(b) - this.getLabelPriority(a))
+      .sort((a, b) => getLabelPriority(b) - getLabelPriority(a))
       .forEach(star => {
-        const placement = this.computeUvLabelPlacement(ctx, star, visibleStarAnchors, placedBoxes);
+        const placement = computeUvLabelPlacement(ctx, star, visibleStarAnchors, placedBoxes, spatialIndex);
         if (!placement) return;
 
         const textColor = rgbaFromHex(star.displayColor || '#ffffff', opacity);
@@ -557,7 +548,7 @@ export class UVMapManager {
         ctx.strokeStyle = lineColor;
         ctx.lineWidth = 1.35;
 
-        this.strokeUvSegment(
+        strokeUvSegment(
           ctx,
           placement.connector.startUv,
           placement.connector.endUv
@@ -573,165 +564,20 @@ export class UVMapManager {
           ctx.fillText(star.displayName, drawX, placement.drawY);
         });
 
-        placedBoxes.push({
+        const box = {
           x: placement.bounds.x,
           y: placement.bounds.y,
           width: placement.bounds.width,
           height: placement.bounds.height,
           starX: placement.starPx.x,
           starY: placement.starPx.y
-        });
+        };
+        placedBoxes.push(box);
+        spatialIndex.insert(box);
       });
     ctx.restore();
   }
 
-  getLabelPriority(star) {
-    const nameWeight = Math.max(1, (star.displayName || '').length * 0.05);
-    const sizeWeight = star.displayLabelSize !== undefined ? star.displayLabelSize : (star.displaySize || 1);
-    const magWeight = Number.isFinite(star.absoluteMagnitude) ? (8 - star.absoluteMagnitude) * 0.35 : 0;
-    return sizeWeight * 2 + magWeight + nameWeight;
-  }
-
-  computeUvLabelPlacement(ctx, star, visibleStarAnchors, placedBoxes) {
-    const starPos = getStarEquirectangularPosition(star);
-    const starPx = {
-      x: ((starPos.x / EQUIRECT_WIDTH) + 0.5) * ATLAS_WIDTH,
-      y: (0.5 - (starPos.y / EQUIRECT_HEIGHT)) * ATLAS_HEIGHT
-    };
-    const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
-    const fontSize = Math.round(THREE.MathUtils.clamp(10 + labelSize * 4, 10, 28));
-    const paddingX = 8;
-    const textHeight = Math.max(fontSize + 4, 14);
-    ctx.font = `${fontSize}px Oswald`;
-    const textWidth = ctx.measureText(star.displayName).width;
-
-    const baseRadius = THREE.MathUtils.clamp((star.displaySize || 1) * 2.8 + 10, 12, 30);
-    const directions = [
-      new THREE.Vector2(1, 0),
-      new THREE.Vector2(-1, 0),
-      new THREE.Vector2(0.84, -0.54),
-      new THREE.Vector2(0.84, 0.54),
-      new THREE.Vector2(-0.84, -0.54),
-      new THREE.Vector2(-0.84, 0.54),
-      new THREE.Vector2(0, -1),
-      new THREE.Vector2(0, 1)
-    ];
-    const radii = [baseRadius, baseRadius + 8, baseRadius + 16, baseRadius + 24];
-
-    let best = null;
-    for (const radius of radii) {
-      for (const dir of directions) {
-        const candidate = this.evaluateUvLabelCandidate({
-          starPx,
-          dir,
-          radius,
-          textWidth,
-          textHeight,
-          paddingX,
-          fontSize,
-          visibleStarAnchors,
-          placedBoxes
-        });
-        if (!candidate) continue;
-        if (!best || candidate.score < best.score) {
-          best = candidate;
-        }
-      }
-    }
-
-    if (!best) return null;
-
-    const starUv = { u: starPx.x / ATLAS_WIDTH, v: starPx.y / ATLAS_HEIGHT };
-    const anchorUv = { u: best.anchorX / ATLAS_WIDTH, v: best.anchorY / ATLAS_HEIGHT };
-    const endUv = { u: unwrapUvAroundReference(starUv.u, anchorUv.u), v: anchorUv.v };
-
-    return {
-      fontSize,
-      drawX: best.drawX,
-      drawY: best.drawY,
-      bounds: best.bounds,
-      starPx,
-      connector: {
-        startUv: starUv,
-        endUv
-      }
-    };
-  }
-
-  evaluateUvLabelCandidate({ starPx, dir, radius, textWidth, textHeight, paddingX, fontSize, visibleStarAnchors, placedBoxes }) {
-    const anchorXRaw = starPx.x + dir.x * radius;
-    const anchorY = THREE.MathUtils.clamp(starPx.y + dir.y * radius, LABEL_MARGIN_Y + textHeight * 0.5, ATLAS_HEIGHT - LABEL_MARGIN_Y - textHeight * 0.5);
-    const preferRight = dir.x >= 0;
-    const drawXRaw = preferRight ? (anchorXRaw + paddingX) : (anchorXRaw - paddingX - textWidth);
-    const drawX = this.wrapPixelX(drawXRaw);
-    const drawY = anchorY;
-    const bounds = {
-      x: drawX,
-      y: drawY - textHeight * 0.5,
-      width: textWidth,
-      height: textHeight
-    };
-
-    let overlapPenalty = 0;
-    for (const box of placedBoxes) {
-      if (this.boxesOverlapWrapped(bounds, box)) overlapPenalty += 5000;
-    }
-
-    let starPenalty = 0;
-    const expandedBounds = {
-      x: bounds.x - 5,
-      y: bounds.y - 4,
-      width: bounds.width + 10,
-      height: bounds.height + 8
-    };
-    for (const anchor of visibleStarAnchors) {
-      if (anchor.x === starPx.x && anchor.y === starPx.y) continue;
-      if (this.pointInWrappedRect(anchor.x, anchor.y, expandedBounds)) {
-        starPenalty += 220;
-      }
-    }
-
-    const verticalPenalty = Math.abs(anchorY - starPx.y) * 0.28;
-    const radialPenalty = radius * 0.9;
-    const sideBias = dir.x < 0 ? 6 : 0;
-    const polarPenalty = (anchorY < 70 || anchorY > ATLAS_HEIGHT - 70) ? 40 : 0;
-    const score = overlapPenalty + starPenalty + verticalPenalty + radialPenalty + sideBias + polarPenalty;
-
-    return {
-      score,
-      anchorX: this.wrapPixelX(anchorXRaw),
-      anchorY,
-      drawX,
-      drawY,
-      bounds
-    };
-  }
-
-  wrapPixelX(value) {
-    let wrapped = value % ATLAS_WIDTH;
-    if (wrapped < 0) wrapped += ATLAS_WIDTH;
-    return wrapped;
-  }
-
-  pointInWrappedRect(x, y, rect) {
-    if (y < rect.y || y > rect.y + rect.height) return false;
-    for (const shift of [-ATLAS_WIDTH, 0, ATLAS_WIDTH]) {
-      const shiftedX = x + shift;
-      if (shiftedX >= rect.x && shiftedX <= rect.x + rect.width) return true;
-    }
-    return false;
-  }
-
-  boxesOverlapWrapped(a, b) {
-    const yOverlap = a.y < (b.y + b.height) && (a.y + a.height) > b.y;
-    if (!yOverlap) return false;
-    for (const shift of [-ATLAS_WIDTH, 0, ATLAS_WIDTH]) {
-      const bx = b.x + shift;
-      const xOverlap = a.x < (bx + b.width) && (a.x + a.width) > bx;
-      if (xOverlap) return true;
-    }
-    return false;
-  }
 
   drawConstellationNames(ctx) {
     if (!this.state.showConstellationNamesFlag) return;
@@ -777,7 +623,7 @@ export class UVMapManager {
         const next = closedPoints[(i + 1) % closedPoints.length];
         const uvPoints = sampleGreatCircleUvFromRaDec(current.ra, current.dec, next.ra, next.dec, 100, 12);
         for (let j = 0; j < uvPoints.length - 1; j++) {
-          splitWrappedUvSegment(uvPoints[j], uvPoints[j + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+          splitWrappedUvSegment(uvPoints[j], uvPoints[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
         }
       }
     });
@@ -789,7 +635,7 @@ export class UVMapManager {
     this.state.constellationOverlayGlobe.forEach(mesh => {
       const color = mesh?.material?.color ? `#${mesh.material.color.getHexString()}` : '#7aa2ff';
       const alpha = clamp01(mesh?.material?.opacity ?? 0.15);
-      this.fillProjectedMesh(ctx, mesh, color, alpha);
+      fillProjectedMesh(ctx, mesh, rgbaFromHex(color, alpha));
     });
   }
 
@@ -820,7 +666,7 @@ export class UVMapManager {
       grd.addColorStop(0.7, rgbaFromHex(color, alpha * 0.3));
       grd.addColorStop(1, rgbaFromHex(color, 0));
       ctx.fillStyle = grd;
-      this.drawWrappedCircle(ctx, x, y, radius);
+      drawWrappedCircle(ctx, x, y, radius);
     });
     ctx.filter = 'none';
 
@@ -841,7 +687,7 @@ export class UVMapManager {
         100, 12
       );
       for (let j = 0; j < segments.length - 1; j++) {
-        splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+        splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
       }
     });
     ctx.restore();
@@ -869,7 +715,7 @@ export class UVMapManager {
         100, 12
       );
       for (let j = 0; j < segments.length - 1; j++) {
-        splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+        splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
       }
     });
 
@@ -887,7 +733,7 @@ export class UVMapManager {
       const scale = THREE.MathUtils.lerp(12, 1, distRatio);
       const radius = Math.max(3, overlay.gridSize * scale * 0.5);
       ctx.fillStyle = rgbaFromHex(color, alpha);
-      this.drawWrappedCircle(ctx, x, y, radius);
+      drawWrappedCircle(ctx, x, y, radius);
     });
     ctx.restore();
   }
@@ -913,7 +759,7 @@ export class UVMapManager {
         grd.addColorStop(0.6, rgbaFromHex(color, alpha * 0.4));
         grd.addColorStop(1, rgbaFromHex(color, 0));
         ctx.fillStyle = grd;
-        this.drawWrappedCircle(ctx, x, y, radius);
+        drawWrappedCircle(ctx, x, y, radius);
       });
     });
     ctx.filter = 'none';
@@ -938,7 +784,7 @@ export class UVMapManager {
       for (let i = 0; i <= pos.count - 2; i += 2) {
         const a = new THREE.Vector3().fromBufferAttribute(pos, i);
         const b = new THREE.Vector3().fromBufferAttribute(pos, i + 1);
-        this.splitWrappedSegment(spherePositionToUv(a, 100), spherePositionToUv(b, 100)).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+        splitWrappedSegment(spherePositionToUv(a, 100), spherePositionToUv(b, 100)).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
       }
       ctx.restore();
     });
@@ -968,94 +814,13 @@ export class UVMapManager {
       const t = (i / samples) * TAU;
       const current = raDecToUV(curveFn(t).ra, curveFn(t).dec);
       if (prev) {
-        this.splitWrappedSegment(prev, current).forEach(([s, e]) => this.strokeUvSegment(ctx, s, e));
+        splitWrappedSegment(prev, current).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
       }
       prev = current;
     }
     ctx.restore();
   }
 
-  fillProjectedMesh(ctx, mesh, color, alpha) {
-    const geometry = mesh?.geometry;
-    const positionAttr = geometry?.getAttribute?.('position');
-    if (!positionAttr) return;
-    const index = geometry.index;
-    ctx.save();
-    ctx.fillStyle = rgbaFromHex(color, alpha);
-    if (index) {
-      for (let i = 0; i <= index.count - 3; i += 3) {
-        const a = new THREE.Vector3().fromBufferAttribute(positionAttr, index.getX(i)).applyMatrix4(mesh.matrixWorld);
-        const b = new THREE.Vector3().fromBufferAttribute(positionAttr, index.getX(i + 1)).applyMatrix4(mesh.matrixWorld);
-        const c = new THREE.Vector3().fromBufferAttribute(positionAttr, index.getX(i + 2)).applyMatrix4(mesh.matrixWorld);
-        this.fillWrappedTriangle(ctx, a, b, c);
-      }
-    } else {
-      for (let i = 0; i <= positionAttr.count - 3; i += 3) {
-        const a = new THREE.Vector3().fromBufferAttribute(positionAttr, i).applyMatrix4(mesh.matrixWorld);
-        const b = new THREE.Vector3().fromBufferAttribute(positionAttr, i + 1).applyMatrix4(mesh.matrixWorld);
-        const c = new THREE.Vector3().fromBufferAttribute(positionAttr, i + 2).applyMatrix4(mesh.matrixWorld);
-        this.fillWrappedTriangle(ctx, a, b, c);
-      }
-    }
-    ctx.restore();
-  }
-
-  fillWrappedTriangle(ctx, aVec, bVec, cVec) {
-    const tri = [spherePositionToUv(aVec, 100), spherePositionToUv(bVec, 100), spherePositionToUv(cVec, 100)];
-    const normalized = this.normalizeWrappedTriangle(tri);
-    [-1, 0, 1].forEach(copyOffset => {
-      const points = normalized.map(({ u, v }) => ({ x: (u + copyOffset) * ATLAS_WIDTH, y: v * ATLAS_HEIGHT }));
-      const xs = points.map(p => p.x);
-      const minX = Math.min(...xs);
-      const maxX = Math.max(...xs);
-      if (maxX < -8 || minX > ATLAS_WIDTH + 8) return;
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      ctx.lineTo(points[1].x, points[1].y);
-      ctx.lineTo(points[2].x, points[2].y);
-      ctx.closePath();
-      ctx.fill();
-    });
-  }
-
-  normalizeWrappedTriangle(triangle) {
-    return unwrapUvSequence(triangle.map(point => ({ ...point })));
-  }
-
-  equirectToAtlas(position) {
-    return {
-      x: ((position.x / EQUIRECT_WIDTH) + 0.5) * ATLAS_WIDTH,
-      y: (0.5 - (position.y / EQUIRECT_HEIGHT)) * ATLAS_HEIGHT
-    };
-  }
-
-  drawWrappedCircle(ctx, x, y, radius) {
-    [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
-      const drawX = x + shiftX;
-      if (drawX + radius < 0 || drawX - radius > ATLAS_WIDTH) return;
-      ctx.beginPath();
-      ctx.arc(drawX, y, radius, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  }
-
-  strokeUvSegment(ctx, s, e) {
-    [-1, 0, 1].forEach(copyOffset => {
-      const x1 = (s.u + copyOffset) * ATLAS_WIDTH;
-      const y1 = s.v * ATLAS_HEIGHT;
-      const x2 = (e.u + copyOffset) * ATLAS_WIDTH;
-      const y2 = e.v * ATLAS_HEIGHT;
-      if (Math.max(x1, x2) < 0 || Math.min(x1, x2) > ATLAS_WIDTH) return;
-      ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
-      ctx.stroke();
-    });
-  }
-
-  splitWrappedSegment(a, b) {
-    return splitWrappedUvSegment(a, b);
-  }
 
   updateInteractionGeometry(stars) {
     while (this.starGroup.children.length) {

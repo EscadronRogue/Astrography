@@ -12,15 +12,18 @@ export function minimalRADifference(ra) {
   return ra;
 }
 
-// Global central meridian for Mollweide projection
-let mollweideLambda0 = 0;
+/**
+ * Module-private central meridian for Mollweide projection.
+ * Accessed exclusively via get/set functions — never import the variable directly.
+ */
+const _mollweideState = { lambda0: 0 };
 
 export function setMollweideLambda0(lambda0) {
-  mollweideLambda0 = lambda0;
+  _mollweideState.lambda0 = lambda0;
 }
 
 export function getMollweideLambda0() {
-  return mollweideLambda0;
+  return _mollweideState.lambda0;
 }
 
 /**
@@ -192,7 +195,7 @@ export function cachedRadToSphere(ra, dec, R) {
  * @param {number} [lambda0=0] - Central meridian in radians.
  * @returns {THREE.Vector3}
  */
-export function radToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda0) {
+export function radToMollweide(ra, dec, R = 100, lambda0 = _mollweideState.lambda0) {
   const lambda = minimalRADifference(ra - lambda0);
   const phi = dec;
   let theta = phi;
@@ -208,7 +211,7 @@ export function radToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda0) {
 }
 
 const radToMollweideCache = new Map();
-export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = mollweideLambda0) {
+export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = _mollweideState.lambda0) {
   const key = `${ra}_${dec}_${R}_${lambda0}`;
   if (radToMollweideCache.has(key)) {
     return radToMollweideCache.get(key).clone();
@@ -290,7 +293,7 @@ export function splitMollweideWrap(p1, p2) {
  * @param {number} [lambda0=mollweideLambda0] - Central meridian for projection.
  * @returns {THREE.Vector3[]} Array of Mollweide coordinates along the arc.
  */
-export function greatCircleToMollweide(p1, p2, R = 100, segments = 32, lambda0 = mollweideLambda0) {
+export function greatCircleToMollweide(p1, p2, R = 100, segments = 32, lambda0 = _mollweideState.lambda0) {
   const gcPoints = getGreatCirclePoints(p1, p2, R, segments);
   return gcPoints.map(v => {
     const { ra, dec } = vectorToRaDecRad(v, R);

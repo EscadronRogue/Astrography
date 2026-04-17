@@ -35,12 +35,28 @@ export function normalizeStarRecord(star) {
   };
 }
 
+import { DATA_LOAD_TIMEOUT } from '../../shared/constants.js';
+
+/**
+ * Wraps a promise with a timeout. Rejects if the promise doesn't settle
+ * within the given number of milliseconds.
+ */
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Data load timed out after ${ms}ms`)), ms);
+    promise.then(
+      value => { clearTimeout(timer); resolve(value); },
+      error => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
 export async function loadStarData() {
   const manifestUrl = 'data/manifest.json';
   try {
-    const manifestResp = await fetch(manifestUrl);
+    const manifestResp = await withTimeout(fetch(manifestUrl), DATA_LOAD_TIMEOUT);
     if (!manifestResp.ok) {
-      console.warn(`Could not load manifest at ${manifestUrl}`);
+      console.warn(`Could not load manifest at ${manifestUrl} (HTTP ${manifestResp.status})`);
       return [];
     }
 
@@ -53,9 +69,9 @@ export async function loadStarData() {
     }
 
     const dataPromises = fileNames.map(async name => {
-      const resp = await fetch(`data/${name}`);
+      const resp = await withTimeout(fetch(`data/${name}`), DATA_LOAD_TIMEOUT);
       if (!resp.ok) {
-        console.warn(`Missing star data file: data/${name}`);
+        console.warn(`Missing star data file: data/${name} (HTTP ${resp.status})`);
         return [];
       }
       return resp.json();
@@ -64,7 +80,7 @@ export async function loadStarData() {
     const filesData = await Promise.all(dataPromises);
     return filesData.flat().map(normalizeStarRecord);
   } catch (error) {
-    console.warn('Error loading star data:', error);
+    console.error('Error loading star data:', error);
     return [];
   }
 }

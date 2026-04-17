@@ -99,3 +99,29 @@ export const DUST_CLOUDS = Object.freeze([
   { name: 'Ophiucus', file: 'data/Ophiucus_cloud_data.json' },
   { name: 'Vela', file: 'data/Vela_cloud_data.json' }
 ]);
+
+// ---------------------------------------------------------------------------
+// Visual / Theme constants
+// ---------------------------------------------------------------------------
+
+/** UV atlas texture dimensions. */
+export const ATLAS_WIDTH = 8192;
+export const ATLAS_HEIGHT = 4096;
+
+/** Export resolution target (8K). */
+export const EXPORT_TARGET_WIDTH = 7680;
+export const EXPORT_TARGET_HEIGHT = 4320;
+export const EXPORT_MAX_TILE_SIZE = 8192;
+
+/** Connection label base font size (px). */
+export const CONNECTION_LABEL_BASE_FONT = 72;
+
+/** Star texture size (px). */
+export const STAR_TEXTURE_SIZE = 64;
+
+/** HSL saturation and lightness for auto-generated colors. */
+export const AUTO_COLOR_SATURATION = 70;
+export const AUTO_COLOR_LIGHTNESS = 50;
+
+/** Data loading timeout (ms). */
+export const DATA_LOAD_TIMEOUT = 30000;

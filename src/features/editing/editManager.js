@@ -150,6 +150,19 @@ export class EditManager {
     this.setupEditIOControls();
   }
 
+  dispose() {
+    if (this.mollweideMap?.canvas) {
+      this.mollweideMap.canvas.removeEventListener('pointerdown', this.onEditPointerDown);
+      this.mollweideMap.canvas.removeEventListener('pointermove', this.onEditPointerMove);
+      this.mollweideMap.canvas.removeEventListener('pointerdown', this.onLinePointerDown);
+    }
+    window.removeEventListener('pointerup', this.onEditPointerUp);
+    window.removeEventListener('pointermove', this.onRotateMove);
+    window.removeEventListener('pointerup', this.onRotateUp);
+    window.removeEventListener('pointermove', this.onScaleMove);
+    window.removeEventListener('pointerup', this.onScaleUp);
+  }
+
   setConstellationLinesMoll(constellationLinesMoll) {
     this.constellationLinesMoll = constellationLinesMoll;
   }

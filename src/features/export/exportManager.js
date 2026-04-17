@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { buildWideLineGeometry } from '../../render/engine/renderUtils.js';
+import { EXPORT_TARGET_WIDTH, EXPORT_TARGET_HEIGHT, EXPORT_MAX_TILE_SIZE } from '../../shared/constants.js';
 
 function getJsPdfConstructor() {
   const constructor = window.jspdf?.jsPDF;
@@ -92,7 +93,7 @@ export class ExportManager {
   exportMollweideMap(format = 'png', rect = null) {
     const baseWidth = this.mollweideMap.renderer.domElement.width;
     const baseHeight = this.mollweideMap.renderer.domElement.height;
-    const scale = Math.max(1, 7680 / baseWidth, 4320 / baseHeight);
+    const scale = Math.max(1, EXPORT_TARGET_WIDTH / baseWidth, EXPORT_TARGET_HEIGHT / baseHeight);
     this.scaleMollweideSceneForExport(scale);
     const exportWidth = Math.round(baseWidth * scale);
     const exportHeight = Math.round(baseHeight * scale);
@@ -118,7 +119,7 @@ export class ExportManager {
     const ctx = finalCanvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas context unavailable');
     const maxSize = exportRenderer.capabilities.maxTextureSize;
-    const tile = Math.min(Math.floor(maxSize / scale), 8192);
+    const tile = Math.min(Math.floor(maxSize / scale), EXPORT_MAX_TILE_SIZE);
     for (let y = cropY; y < cropY + cropH; y += tile) {
       for (let x = cropX; x < cropX + cropW; x += tile) {
         const tileW = Math.min(tile, cropW - (x - cropX));
@@ -183,8 +184,8 @@ export class ExportManager {
       this.exportRectElem.style.width = '0px';
       this.exportRectElem.style.height = '0px';
     }
-    if (this.exportPngBtn) this.exportPngBtn.style.display = 'none';
-    if (this.exportPdfBtn) this.exportPdfBtn.style.display = 'none';
+    if (this.exportPngBtn) this.exportPngBtn.classList.add('hidden-control');
+    if (this.exportPdfBtn) this.exportPdfBtn.classList.add('hidden-control');
     const btn = document.getElementById('export-mollweide');
     if (btn) btn.classList.remove('active');
     this.exportCurrentRect = null;
@@ -240,7 +241,7 @@ export class ExportManager {
     this.exportRectElem = document.getElementById('export-selection-rect');
     if (!btn || !this.exportOverlay || !this.exportRectElem || !this.exportPngBtn || !this.exportPdfBtn) return;
 
-    this.exportPngBtn.addEventListener('click', () => {
+    this._onPngClick = () => {
       try {
         if (this.exportCurrentRect) this.exportMollweideMap('png', this.exportCurrentRect);
       } catch (error) {
@@ -248,8 +249,8 @@ export class ExportManager {
         alert(`PNG export failed: ${error.message}`);
       }
       this.exitExportSelection();
-    });
-    this.exportPdfBtn.addEventListener('click', () => {
+    };
+    this._onPdfClick = () => {
       try {
         if (this.exportCurrentRect) this.exportMollweideMap('pdf', this.exportCurrentRect);
       } catch (error) {
@@ -257,24 +258,38 @@ export class ExportManager {
         alert(`PDF export failed: ${error.message}`);
       }
       this.exitExportSelection();
-    });
-
-    this.exportOverlay.addEventListener('pointerdown', this.onExportPointerDown);
-    this.exportOverlay.addEventListener('pointermove', this.onExportPointerMove);
-    window.addEventListener('pointerup', this.onExportPointerUp);
-
-    btn.addEventListener('click', () => {
+    };
+    this._onToggleClick = () => {
       this.exportSelectMode = !this.exportSelectMode;
       btn.classList.toggle('active', this.exportSelectMode);
       if (this.exportSelectMode) {
         this.exportOverlay.style.display = 'block';
-        this.exportPngBtn.style.display = 'inline-block';
-        this.exportPdfBtn.style.display = 'inline-block';
+        this.exportPngBtn.classList.remove('hidden-control');
+        this.exportPdfBtn.classList.remove('hidden-control');
         this.exportRectElem.style.display = 'none';
         this.exportCurrentRect = null;
       } else {
         this.exitExportSelection();
       }
-    });
+    };
+
+    this.exportPngBtn.addEventListener('click', this._onPngClick);
+    this.exportPdfBtn.addEventListener('click', this._onPdfClick);
+    this.exportOverlay.addEventListener('pointerdown', this.onExportPointerDown);
+    this.exportOverlay.addEventListener('pointermove', this.onExportPointerMove);
+    window.addEventListener('pointerup', this.onExportPointerUp);
+    this._exportToggleBtn = btn;
+    btn.addEventListener('click', this._onToggleClick);
+  }
+
+  dispose() {
+    if (this.exportPngBtn) this.exportPngBtn.removeEventListener('click', this._onPngClick);
+    if (this.exportPdfBtn) this.exportPdfBtn.removeEventListener('click', this._onPdfClick);
+    if (this.exportOverlay) {
+      this.exportOverlay.removeEventListener('pointerdown', this.onExportPointerDown);
+      this.exportOverlay.removeEventListener('pointermove', this.onExportPointerMove);
+    }
+    window.removeEventListener('pointerup', this.onExportPointerUp);
+    if (this._exportToggleBtn) this._exportToggleBtn.removeEventListener('click', this._onToggleClick);
   }
 }

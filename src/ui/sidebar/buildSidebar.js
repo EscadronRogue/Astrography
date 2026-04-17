@@ -179,7 +179,7 @@ function initSliderSync() {
     });
   });
 
-  document.addEventListener('fullscreenchange', () => {
+  const onFullscreenChange = () => {
     if (!document.fullscreenElement) {
       document.querySelectorAll('.map-container canvas').forEach(canvas => {
         canvas.style.width = '';
@@ -187,7 +187,15 @@ function initSliderSync() {
       });
       window.dispatchEvent(new Event('resize'));
     }
-  });
+  };
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+
+  /** Call to remove the fullscreenchange listener when tearing down the sidebar. */
+  return {
+    dispose() {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    }
+  };
 }
 
 /**
@@ -310,6 +318,7 @@ function addCloudDensityFieldset(filterForm) {
   const toggleBtn = document.createElement('button');
   toggleBtn.type = 'button';
   toggleBtn.textContent = 'Toggle All Clouds';
+  toggleBtn.setAttribute('aria-label', 'Toggle all dust cloud density checkboxes');
   toggleBtn.addEventListener('click', () => {
     const chks = contentDiv.querySelectorAll("input[name='dust-density-clouds']");
     const allChecked = Array.from(chks).every(c => c.checked);

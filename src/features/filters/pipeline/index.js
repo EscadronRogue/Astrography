@@ -4,7 +4,8 @@ import { applySizeFilter } from '../logic/sizeFilter.js';
 import { applyColorFilter } from '../logic/colorFilter.js';
 import { applyOpacityFilter } from '../logic/opacityFilter.js';
 import { applyStarsShownFilter } from '../logic/starsShownFilter.js';
-import { computeConnectionPairs } from '../../connections/connectionsBuilder.js';
+import { computeConnectionPairs } from '../../connections/connectionPairs.js';
+import { setConnectionLineParams, getConnectionLineParams } from '../../connections/connectionSettings.js';
 import { applyStellarClassLogic } from '../logic/stellarClassFilter.js';
 import { applyDistanceFilter } from '../logic/distanceFilter.js';
 import { createDefaultFilterResult } from '../state/filterDefaults.js';
@@ -61,13 +62,23 @@ export function applyFilters(allStars, context = {}) {
 
   return {
     ...filters,
-    filteredStars,
+    currentFilteredStars: filteredStars,
     stellarClassCandidates,
-    connections,
-    globeFilteredStars: nonSolStars,
-    globeConnections,
-    mollweideFilteredStars: nonSolStars,
-    mollweideConnections,
+    currentConnections: connections,
+    currentGlobeFilteredStars: nonSolStars,
+    currentGlobeConnections: globeConnections,
+    currentMollweideFilteredStars: nonSolStars,
+    currentMollweideConnections: mollweideConnections,
+    showConstellationBoundariesFlag: filters.showConstellationBoundaries,
+    showConstellationNamesFlag: filters.showConstellationNames,
+    showConstellationOverlayFlag: filters.showConstellationOverlay,
+    enableIsolationFilterFlag: filters.enableIsolationFilter,
+    enableDensityFilterFlag: filters.enableDensityFilter,
+    showCloudsFlag: filters.showClouds,
+    showCloudDensityFlag: filters.showCloudDensity,
+    showGalacticPlaneFlag: filters.showGalacticPlane,
+    showEclipticPlaneFlag: filters.showEclipticPlane,
+    showCelestialEquatorFlag: filters.showCelestialEquator,
     ...overlayState
   };
 }

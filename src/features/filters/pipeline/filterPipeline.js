@@ -1,11 +1,11 @@
 import { applyFilters, generateStellarClassFilters } from './index.js';
-import { setConnectionLineParams } from '../../connections/connectionsBuilder.js';
+import { setConnectionLineParams } from '../../connections/connectionSettings.js';
 import { disposeObject3D } from '../../../render/engine/renderUtils.js';
 import {
   updateCloudsOverlay,
   updateMollweideCloudSegments
-} from '../../clouds/cloudRenderer.js';
-import { createCloudDensityOverlay, updateCloudDensityOverlay } from '../../clouds/cloudDensityRenderer.js';
+} from '../../clouds/cloudOverlay.js';
+import { createCloudDensityOverlay, updateCloudDensityOverlay } from '../../clouds/cloudDensityOverlay.js';
 import { captureFormState, restoreFormState } from '../../../shared/formUtils.js';
 import { syncFilterResultsToAppState } from '../state/filterStateStore.js';
 import { applyPlanes, refreshMollweidePlanes } from '../../planes/planeManager.js';
@@ -154,7 +154,7 @@ export async function buildAndApplyFilters(ctx) {
   });
   const scContainer = document.getElementById('stellar-class-container');
   const previousStellarClassState = scContainer ? captureFormState(scContainer) : null;
-  generateStellarClassFilters(filters.stellarClassCandidates || filters.filteredStars);
+  generateStellarClassFilters(filters.stellarClassCandidates || filters.currentFilteredStars);
   if (previousStellarClassState && scContainer) {
     restoreFormState(scContainer, previousStellarClassState, { dispatchEvents: false });
   }

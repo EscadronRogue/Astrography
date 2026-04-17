@@ -195,8 +195,12 @@ export async function bootstrapApp() {
     requestRender();
     loader.classList.add('hidden');
   } catch (err) {
-    console.error('Error initializing starmap:', err);
-    alert('Initialization failed. Check console for details.');
-    loader.classList.add('hidden');
+    const errorDetail = err?.message || String(err);
+    console.error('Starmap initialization failed:', err);
+    const loaderEl = document.getElementById('loader');
+    if (loaderEl) {
+      loaderEl.textContent = `Initialization failed: ${errorDetail}`;
+      loaderEl.classList.remove('hidden');
+    }
   }
 }
