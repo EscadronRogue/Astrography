@@ -6,6 +6,7 @@
 import { getPrimaryClass, groupStarsByClass } from '../../../shared/stellarClassUtils.js';
 import { STELLAR_CLASSES, STELLAR_CLASS_NAMES, STELLAR_CLASS_SET, STELLAR_SIZE_SLIDER, SUBCATEGORY_MAX_HEIGHT } from '../../../shared/constants.js';
 import { createRangeControl, createCheckbox, createSubcategoryHeader, sanitizeName } from '../../../shared/uiFactory.js';
+import { getStellarClassData } from './stellarClassData.js';
 
 function formatLabelDistance(distance) {
   if (!Number.isFinite(distance)) return '';
