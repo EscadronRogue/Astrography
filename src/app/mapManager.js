@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { createConnectionLines, mergeConnectionLines } from '../features/connections/connectionsRenderer.js';
-import { buildWideLineGeometry } from '../render/engine/renderUtils.js';
+import { buildWideLineGeometry, disposeObject3D } from '../render/engine/renderUtils.js';
 import { getConnectionLineParams } from '../features/connections/connectionSettings.js';
 import { ThreeDControls, TwoDControls } from '../render/interactions/cameraControls.js';
 import { LabelManager } from '../features/labels/labelManager.js';
@@ -257,6 +257,7 @@ export class MapManager {
   updateConnections(stars, connectionObjs, opacity = 0.5) {
     if (this.connectionGroup) {
       this.scene.remove(this.connectionGroup);
+      disposeObject3D(this.connectionGroup);
       this.connectionGroup = null;
     }
     if (!connectionObjs || connectionObjs.length === 0) return;

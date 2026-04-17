@@ -1,4 +1,11 @@
-export function setupMapProjectionToggles({ requestRender, maybePersistPresets, trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap }) {
+function requestMapSync(syncVisibleMaps) {
+  if (typeof syncVisibleMaps !== 'function') return;
+  Promise.resolve(syncVisibleMaps()).catch(error => {
+    console.error('Failed to sync visible projections:', error);
+  });
+}
+
+export function setupMapProjectionToggles({ requestRender, maybePersistPresets, syncVisibleMaps, trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap }) {
   const mapsSection = document.querySelector('.maps-section');
   const containers = {
     trueCoordinates: document.getElementById('map3D').parentElement,
@@ -27,7 +34,11 @@ export function setupMapProjectionToggles({ requestRender, maybePersistPresets, 
     }
 
     checkbox.addEventListener('change', () => {
+      const wasConnected = container.isConnected;
       updateVisibility();
+      if (!wasConnected && container.isConnected) {
+        requestMapSync(syncVisibleMaps);
+      }
       maybePersistPresets();
     });
 
@@ -48,6 +59,9 @@ export function setupMapProjectionToggles({ requestRender, maybePersistPresets, 
       const legacySection = document.getElementById('legacy-projection-controls');
       if (legacySection) legacySection.hidden = !legacyToggle.checked;
       refreshers.forEach(fn => fn());
+      if (legacyToggle.checked) {
+        requestMapSync(syncVisibleMaps);
+      }
       maybePersistPresets();
     });
     const legacySection = document.getElementById('legacy-projection-controls');

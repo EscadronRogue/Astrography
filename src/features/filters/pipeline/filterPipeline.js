@@ -12,6 +12,10 @@ import { applyPlanes, refreshMollweidePlanes } from '../../planes/planeManager.j
 import { rebuildConstellationVisuals, refreshMollweideConstellationVisuals } from '../../constellations/constellationManager.js';
 import { getStarEquirectangularPosition } from '../../../shared/uvUtils.js';
 
+function isMapVisible(map) {
+  return Boolean(map?.canvas?.isConnected);
+}
+
 function updateProjectedPositions(ctx) {
   const { state } = ctx;
   state.currentGlobeFilteredStars.forEach(star => {
@@ -51,21 +55,31 @@ function updateMapDisplays(ctx, options) {
   globeMap.connectionOpacity = options.connectionOpacity;
   mollweideMap.connectionOpacity = options.connectionOpacity;
 
-  trueCoordinatesMap.updateMap(state.currentFilteredStars, state.currentConnections);
-  trueCoordinatesMap.labelManager.refreshLabels(state.currentFilteredStars);
-  globeMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  globeMap.labelManager.refreshLabels(state.currentGlobeFilteredStars);
-  mollweideMap.addStars(state.currentMollweideFilteredStars);
-  mollweideMap.updateStarPositions(state.currentMollweideFilteredStars);
-  mollweideMap.updateConnections(
-    state.currentMollweideFilteredStars,
-    state.currentMollweideConnections,
-    mollweideMap.connectionOpacity
-  );
-  mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
-  uvMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  uvGlobeMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
+  if (isMapVisible(trueCoordinatesMap)) {
+    trueCoordinatesMap.updateMap(state.currentFilteredStars, state.currentConnections);
+    trueCoordinatesMap.labelManager.refreshLabels(state.currentFilteredStars);
+  }
+  if (isMapVisible(globeMap)) {
+    globeMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+    globeMap.labelManager.refreshLabels(state.currentGlobeFilteredStars);
+  }
+  if (isMapVisible(mollweideMap)) {
+    mollweideMap.addStars(state.currentMollweideFilteredStars);
+    mollweideMap.updateStarPositions(state.currentMollweideFilteredStars);
+    mollweideMap.updateConnections(
+      state.currentMollweideFilteredStars,
+      state.currentMollweideConnections,
+      mollweideMap.connectionOpacity
+    );
+    mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
+    if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
+  }
+  if (isMapVisible(uvMap)) {
+    uvMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+  }
+  if (isMapVisible(uvGlobeMap)) {
+    uvGlobeMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+  }
 }
 
 async function refreshCloudOverlays(ctx, options) {

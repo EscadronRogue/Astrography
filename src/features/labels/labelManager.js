@@ -86,7 +86,9 @@ export class LabelManager {
 
     if (this.mapType === 'Mollweide' || this.mapType === 'Equirectangular') {
       if (star.mollLabelRotation !== undefined && labelObj.material) labelObj.material.rotation = star.mollLabelRotation;
-      if (star.mollLabelScale) labelObj.scale.multiply(star.mollLabelScale);
+      if (star.mollLabelScale) {
+        labelObj.scale.set(star.mollLabelScale.x, star.mollLabelScale.y, labelObj.scale.z);
+      }
     }
 
     if ((this.mapType === 'Globe' || this.mapType === 'UVGlobe') && labelObj instanceof THREE.Mesh) {

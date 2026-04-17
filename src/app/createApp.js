@@ -163,6 +163,18 @@ export async function bootstrapApp() {
     const globeGrid = createGlobeGrid(100, { color: 0x444444, opacity: 0.2, lineWidth: 1 });
     globeMap.scene.add(globeGrid);
 
+    // Projection toggles
+    setupMapProjectionToggles({
+      requestRender,
+      maybePersistPresets,
+      syncVisibleMaps: buildAndApplyFilters,
+      trueCoordinatesMap,
+      globeMap,
+      mollweideMap,
+      uvMap,
+      uvGlobeMap
+    });
+
     // Initial filter pass
     buildAndApplyFilters();
 
@@ -172,17 +184,6 @@ export async function bootstrapApp() {
     initStarInteractions(appContext, uvMap);
     initStarInteractions(appContext, globeMap);
     initStarInteractions(appContext, mollweideMap);
-
-    // Projection toggles
-    setupMapProjectionToggles({
-      requestRender,
-      maybePersistPresets,
-      trueCoordinatesMap,
-      globeMap,
-      mollweideMap,
-      uvMap,
-      uvGlobeMap
-    });
 
     // Export and edit managers
     exportManager = new ExportManager(mollweideMap);

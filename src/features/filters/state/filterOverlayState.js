@@ -4,6 +4,7 @@
  */
 import { initIsolationFilter, updateIsolationFilter } from '../../isolation/isolationOverlay.js';
 import { initDensityFilter, updateDensityFilter } from '../../density/densityOverlay.js';
+import { disposeObject3D } from '../../../render/engine/renderUtils.js';
 
 let isolationOverlay = null;
 let densityOverlay = null;
@@ -24,19 +25,28 @@ function normalizeScenes(scenes = {}) {
 function removeOverlayFromScenes(overlay, meshConfig, scenes) {
   if (!overlay) return;
   const normalizedScenes = normalizeScenes(scenes);
+  const disposedObjects = new Set();
+  const removeAndDispose = (scene, object) => {
+    if (!object) return;
+    scene?.remove(object);
+    if (disposedObjects.has(object)) return;
+    disposeObject3D(object);
+    disposedObjects.add(object);
+  };
+
   meshConfig.cubes.forEach(({ prop, scene }) => {
     overlay.cubesData?.forEach(cell => {
-      normalizedScenes[scene]?.remove(cell[prop]);
+      removeAndDispose(normalizedScenes[scene], cell[prop]);
     });
   });
   meshConfig.lines.forEach(({ prop, scene }) => {
     overlay.adjacentLines?.forEach(obj => {
-      normalizedScenes[scene]?.remove(obj[prop]);
+      removeAndDispose(normalizedScenes[scene], obj[prop]);
     });
   });
   if (meshConfig.extra) {
     meshConfig.extra.forEach(({ prop, scene }) => {
-      if (overlay[prop]) normalizedScenes[scene]?.remove(overlay[prop]);
+      removeAndDispose(normalizedScenes[scene], overlay[prop]);
     });
   }
 }
