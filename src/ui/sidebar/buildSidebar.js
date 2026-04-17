@@ -168,11 +168,11 @@ function initSliderSync() {
   // --- Fullscreen ---
   document.querySelectorAll('.fullscreen-btn').forEach(btn => {
     btn.addEventListener('click', function () {
-      const canvas = this.parentElement?.querySelector('canvas');
+      const mapContainer = this.parentElement;
       if (document.fullscreenElement) {
         document.exitFullscreen();
       } else {
-        canvas?.requestFullscreen().catch(err => {
+        mapContainer?.requestFullscreen().catch(err => {
           console.error('Error enabling fullscreen:', err);
         });
       }
@@ -185,8 +185,8 @@ function initSliderSync() {
         canvas.style.width = '';
         canvas.style.height = '';
       });
-      window.dispatchEvent(new Event('resize'));
     }
+    window.dispatchEvent(new Event('resize'));
   });
 }
 

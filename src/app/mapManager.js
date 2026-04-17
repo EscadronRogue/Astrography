@@ -4,6 +4,7 @@ import { buildWideLineGeometry, disposeObject3D } from '../render/engine/renderU
 import { getConnectionLineParams } from '../features/connections/connectionSettings.js';
 import { ThreeDControls, TwoDControls } from '../render/interactions/cameraControls.js';
 import { LabelManager } from '../features/labels/labelManager.js';
+import { TrueCoordinateLabelLayer } from '../features/labels/trueCoordinateLabelLayer.js';
 import { getMollweideLambda0, setMollweideLambda0, splitMollweideWrap } from '../shared/geometryUtils.js';
 import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { createMollweideBackground, createMollweideBorder, createMollweideMask, debounce } from './mapDecorations.js';
@@ -178,7 +179,13 @@ export class MapManager {
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
     }
 
-    this.labelManager = new LabelManager(mapType, this.scene);
+    this.labelManager = mapType === 'TrueCoordinates'
+      ? new TrueCoordinateLabelLayer({
+          canvas: this.canvas,
+          container: this.canvas.parentElement,
+          state
+        })
+      : new LabelManager(mapType, this.scene);
     this.labelManager.setLabelOpacity(this.labelOpacity);
     this.starGroup = new THREE.Group();
     this.scene.add(this.starGroup);
@@ -678,6 +685,7 @@ export class MapManager {
       this.points.material.uniforms.cameraZoom.value = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
     }
     this.renderer.setSize(width, height);
+    this.labelManager.onResize?.();
     requestRenderIfAvailable();
   }
 
@@ -687,5 +695,6 @@ export class MapManager {
       this.points.material.uniforms.cameraZoom.value = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
     }
     this.renderer.render(this.scene, this.camera);
+    this.labelManager.render?.(this.camera);
   }
 }
