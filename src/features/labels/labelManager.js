@@ -8,6 +8,37 @@ function getStarCacheKey(star) {
   return star.starId || star.Source_id || star.HIP_number || `${star.Common_name_of_the_star || 'star'}|${star.RA_in_degrees}|${star.DEC_in_degrees}`;
 }
 
+function getOrAssignSystemAngle(systemAngles, system, starKey) {
+  let starMap = systemAngles.get(system);
+  if (!starMap) {
+    starMap = new Map();
+    systemAngles.set(system, starMap);
+  }
+
+  let angle = starMap.get(starKey);
+  if (angle !== undefined) {
+    return angle;
+  }
+
+  const base = stableAngleFromString(`${system}|${starKey}`);
+  const existing = Array.from(starMap.values());
+  angle = base;
+  for (let i = 0; i < 8; i++) {
+    const candidate = (base + i * (Math.PI / 3)) % (Math.PI * 2);
+    if (existing.every(existingAngle => {
+      const diff = Math.abs(candidate - existingAngle) % (Math.PI * 2);
+      const minDiff = Math.min(diff, Math.PI * 2 - diff);
+      return minDiff > Math.PI / 4;
+    })) {
+      angle = candidate;
+      break;
+    }
+  }
+
+  starMap.set(starKey, angle);
+  return angle;
+}
+
 export class LabelManager {
   constructor(mapType, scene) {
     this.mapType = mapType;
@@ -58,11 +89,24 @@ export class LabelManager {
       if (isGlobeLike) {
         labelObj = new THREE.Mesh(new THREE.PlaneGeometry((canvas.width / 100) * scaleFactor, (canvas.height / 100) * scaleFactor), getDoubleSidedLabelMaterial(texture, this.labelOpacity));
       } else {
-        labelObj = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthWrite: true, depthTest: true, transparent: true, opacity: this.labelOpacity }));
+        const isTrueCoordinates = this.mapType === 'TrueCoordinates';
+        labelObj = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: texture,
+          depthWrite: !isTrueCoordinates,
+          depthTest: true,
+          transparent: true,
+          opacity: this.labelOpacity
+        }));
         labelObj.scale.set((canvas.width / 100) * scaleFactor, (canvas.height / 100) * scaleFactor, 1);
       }
       labelObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
-      lineObj = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: new THREE.Color(starColor), transparent: true, opacity: 0.2, linewidth: 2 }));
+      lineObj = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({
+        color: new THREE.Color(starColor),
+        transparent: true,
+        opacity: this.mapType === 'TrueCoordinates' ? 0.12 : 0.2,
+        depthWrite: this.mapType !== 'TrueCoordinates',
+        linewidth: 2
+      }));
       lineObj.renderOrder = this.mapType === 'Mollweide' ? 5 : 1;
       this.sprites.set(star, labelObj);
       this.lines.set(star, lineObj);
@@ -108,30 +152,21 @@ export class LabelManager {
   computeLabelOffset(star, starPos) {
     const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
     if (this.mapType === 'TrueCoordinates') {
-      return new THREE.Vector3(1, 1, 0).multiplyScalar(0.5 * THREE.MathUtils.clamp(labelSize / 2, 0.1, 5));
+      const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
+      const normal = starPos.lengthSq() > 1e-8 ? starPos.clone().normalize() : new THREE.Vector3(0, 0, 1);
+      let tangent = new THREE.Vector3(0, 1, 0);
+      if (Math.abs(normal.dot(tangent)) > 0.9) tangent = new THREE.Vector3(1, 0, 0);
+      tangent.cross(normal).normalize();
+      const bitangent = normal.clone().cross(tangent).normalize();
+      const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
+      const angle = getOrAssignSystemAngle(this.systemAngles, system, getStarCacheKey(star));
+      return tangent.multiplyScalar(Math.cos(angle)).add(bitangent.multiplyScalar(Math.sin(angle))).multiplyScalar(1.8 * scaleFactor);
     }
     if (this.mapType === 'Mollweide' || this.mapType === 'Equirectangular') {
       const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
       const dist = 2 * scaleFactor;
       const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
-      const starKey = getStarCacheKey(star);
-      let starMap = this.systemAngles.get(system);
-      if (!starMap) { starMap = new Map(); this.systemAngles.set(system, starMap); }
-      let angle = starMap.get(starKey);
-      if (angle === undefined) {
-        const base = stableAngleFromString(`${system}|${starKey}`);
-        const existing = Array.from(starMap.values());
-        angle = base;
-        for (let i = 0; i < 8; i++) {
-          const candidate = (base + i * (Math.PI / 3)) % (Math.PI * 2);
-          if (existing.every(a => {
-            const diff = Math.abs(candidate - a) % (Math.PI * 2);
-            const minDiff = Math.min(diff, Math.PI * 2 - diff);
-            return minDiff > Math.PI / 4;
-          })) { angle = candidate; break; }
-        }
-        starMap.set(starKey, angle);
-      }
+      const angle = getOrAssignSystemAngle(this.systemAngles, system, getStarCacheKey(star));
       return new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(dist);
     }
     const normal = starPos.clone().normalize();
