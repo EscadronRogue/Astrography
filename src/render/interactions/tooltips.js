@@ -27,15 +27,11 @@ function sanitizeCatalogUrl(url) {
   }
 }
 
-export function showTooltip(x, y, star) {
-  const tooltip = document.getElementById('tooltip');
-  if (!tooltip) return;
-  tooltip.style.pointerEvents = 'auto';
-  if (!tooltip.hasAttribute('data-stop-propagation')) {
-    tooltip.addEventListener('click', event => event.stopPropagation());
-    tooltip.setAttribute('data-stop-propagation', 'true');
-  }
+function getTooltipStarKey(star) {
+  return star?.starId || star?.Source_id || star?.HIP_number || star?.Catalog_link || star?.Common_name_of_the_star || 'unknown';
+}
 
+function populateTooltip(tooltip, star) {
   clearTooltip(tooltip);
   appendRow(tooltip, 'tooltip-starName', 'Name', star.Common_name_of_the_star || 'Unknown Star');
   appendRow(tooltip, 'tooltip-systemName', 'System', star.Common_name_of_the_star_system || 'Unknown System');
@@ -66,6 +62,23 @@ export function showTooltip(x, y, star) {
     catalogRow.appendChild(document.createTextNode('N/A'));
   }
   tooltip.appendChild(catalogRow);
+}
+
+export function showTooltip(x, y, star) {
+  const tooltip = document.getElementById('tooltip');
+  if (!tooltip) return;
+  tooltip.style.display = 'block';
+  tooltip.style.pointerEvents = 'auto';
+  if (!tooltip.hasAttribute('data-stop-propagation')) {
+    tooltip.addEventListener('click', event => event.stopPropagation());
+    tooltip.setAttribute('data-stop-propagation', 'true');
+  }
+
+  const starKey = getTooltipStarKey(star);
+  if (tooltip.dataset.starKey !== starKey) {
+    populateTooltip(tooltip, star);
+    tooltip.dataset.starKey = starKey;
+  }
 
   const offset = 15;
   tooltip.classList.add('visible');
@@ -82,6 +95,7 @@ export function hideTooltip() {
   if (tooltip) {
     tooltip.classList.remove('visible');
     tooltip.classList.add('hidden');
+    tooltip.style.display = 'none';
     tooltip.style.pointerEvents = 'none';
   }
 }

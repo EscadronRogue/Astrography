@@ -9,9 +9,21 @@ function createHighlight(radius, position, { planar = false } = {}) {
   } else {
     geometry = new THREE.SphereGeometry(radius, 16, 16);
   }
-  const material = new THREE.MeshBasicMaterial({ color: 0xffff00, wireframe: !planar, side: THREE.DoubleSide });
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xffff00,
+    wireframe: !planar,
+    side: THREE.DoubleSide,
+    transparent: planar,
+    opacity: planar ? 0.95 : 1,
+    depthTest: !planar,
+    depthWrite: false
+  });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.copy(position);
+  if (planar) {
+    mesh.position.z += 0.25;
+    mesh.renderOrder = 20;
+  }
   return mesh;
 }
 
