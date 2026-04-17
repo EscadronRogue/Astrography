@@ -5,6 +5,7 @@ import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from '../dens
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, vectorToRaDec } from '../../shared/geometryUtils.js';
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries, loadConstellationFullNames } from '../constellations/constellationRenderer.js';
+import { populateCellDistanceCaches } from '../../shared/cellDistanceCache.js';
 
 // Helper to create line materials that support color and opacity gradients.
 function createGradientLineMaterial() {
@@ -46,6 +47,7 @@ class IsolationGridOverlay {
     this.regionLabelsGroupTC = new THREE.Group();
     this.regionLabelsGroupGlobe = new THREE.Group();
     this.regionLabelsGroupMoll = new THREE.Group();
+    this.revision = 0;
   }
 
   createGrid(stars) {
@@ -139,15 +141,15 @@ class IsolationGridOverlay {
         }
       }
     }
-    // Compute distances using an extended star set.
-    const extendedStars = stars.filter(star => {
-      const d = star.distance;
-      return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
-    });
-    this.cubesData.forEach(cell => {
-      computeCellDistances(cell, extendedStars);
-    });
+    populateCellDistanceCaches(this.cubesData, this.getExtendedStars(stars));
     this.computeAdjacentLines();
+  }
+
+  getExtendedStars(stars) {
+    return stars.filter(star => {
+      const distance = star.distance;
+      return distance >= Math.max(0, this.minDistance - 10) && distance <= this.maxDistance + 10;
+    });
   }
 
   computeAdjacentLines() {
@@ -243,15 +245,6 @@ class IsolationGridOverlay {
     const toleranceSlider = document.getElementById('isolation-tolerance-slider');
     const isolationVal = isolationSlider ? parseFloat(isolationSlider.value) : 7;
     const toleranceVal = toleranceSlider ? parseInt(toleranceSlider.value) : 0;
-
-    // Recalculate distances for each cell based on an extended set of stars.
-    const extendedStars = stars.filter(star => {
-      const d = star.distance;
-      return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
-    });
-    this.cubesData.forEach(cell => {
-      computeCellDistances(cell, extendedStars);
-    });
 
     // Compute isolation distances and min/max for color/opacity scaling
     const isoDistances = [];
@@ -376,21 +369,7 @@ class IsolationGridOverlay {
     // Re‑add the updated meshes to the scenes. Only the cubes are shown for
     // True Coordinates, while the Globe and Mollweide maps display just the
     // connecting lines.
-    if (sceneTC) {
-      this.cubesData.forEach(cell => {
-        sceneTC.add(cell.tcMesh);
-      });
-    }
-    if (sceneGlobe) {
-      this.adjacentLines.forEach(obj => {
-        sceneGlobe.add(obj.line);
-      });
-    }
-    if (sceneMoll) {
-      this.adjacentLines.forEach(obj => {
-        sceneMoll.add(obj.lineM);
-      });
-    }
+    this.revision += 1;
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
@@ -436,6 +415,7 @@ class IsolationGridOverlay {
       obj.lineM.geometry.attributes.color.needsUpdate = true;
       obj.lineM.geometry.attributes.alpha.needsUpdate = true;
     });
+    this.revision += 1;
   }
 
   async assignConstellationsToCells() {
@@ -520,20 +500,6 @@ class IsolationGridOverlay {
       }
     });
   }
-}
-
-// Helper function to compute cell distances for the uniform grid.
-function computeCellDistances(cell, stars) {
-  const dArr = stars.map(star => {
-    let starPos = star.truePosition ? star.truePosition : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
-    const dx = cell.tcPos.x - starPos.x;
-    const dy = cell.tcPos.y - starPos.y;
-    const dz = cell.tcPos.z - starPos.z;
-    return { distance: Math.sqrt(dx * dx + dy * dy + dz * dz), star };
-  });
-  dArr.sort((a, b) => a.distance - b.distance);
-  cell.distances = dArr.map(obj => obj.distance);
-  cell.nearestStar = dArr.length > 0 ? dArr[0].star : null;
 }
 
 // Helper: Convert string to Title Case.

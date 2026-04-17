@@ -1,12 +1,60 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { createConnectionLines, mergeConnectionLines } from '../features/connections/connectionsRenderer.js';
+import { createConnectionLines, createWideLineMaterial, mergeConnectionLines } from '../features/connections/connectionsRenderer.js';
 import { buildWideLineGeometry, disposeObject3D } from '../render/engine/renderUtils.js';
 import { getConnectionLineParams } from '../features/connections/connectionSettings.js';
 import { ThreeDControls, TwoDControls } from '../render/interactions/cameraControls.js';
 import { LabelManager } from '../features/labels/labelManager.js';
-import { getMollweideLambda0, setMollweideLambda0 } from '../shared/geometryUtils.js';
+import { getMollweideLambda0, setMollweideLambda0, splitMollweideWrap } from '../shared/geometryUtils.js';
 import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { createMollweideBackground, createMollweideBorder, createMollweideMask, debounce } from './mapDecorations.js';
+
+function hashString(value) {
+  const str = String(value ?? '');
+  let hash = 2166136261;
+  for (let index = 0; index < str.length; index++) {
+    hash ^= str.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function mixHash(hash, value) {
+  return Math.imul(hash ^ value, 16777619) >>> 0;
+}
+
+function getConnectionPairKey(pair) {
+  return pair?.pairKey || `${pair?.starA?.starId || 'a'}|${pair?.starB?.starId || 'b'}`;
+}
+
+function haveSameKeys(left, right) {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+
+function buildConnectionVisualSignature(connectionObjs) {
+  let hash = 2166136261;
+  connectionObjs.forEach(pair => {
+    hash = mixHash(hash, hashString(getConnectionPairKey(pair)));
+    hash = mixHash(hash, hashString(pair.starA?.displayColor || ''));
+    hash = mixHash(hash, hashString(pair.starB?.displayColor || ''));
+  });
+  return `${connectionObjs.length}:${hash}`;
+}
+
+function getConnectionDistanceBounds(connectionObjs) {
+  if (!connectionObjs.length) {
+    return { largestDistance: 0, smallestDistance: 0 };
+  }
+
+  const distances = connectionObjs.map(pair => pair.distance);
+  return {
+    largestDistance: Math.max(...distances),
+    smallestDistance: Math.min(...distances)
+  };
+}
 
 function createStarTexture() {
   const size = 64;
@@ -78,6 +126,10 @@ export class MapManager {
     this.labelOpacity = 1.0;
     this.points = null;
     this.instancedMesh = null;
+    this.connectionGroup = null;
+    this.connectionPairKeys = [];
+    this.connectionParamSignature = '';
+    this.connectionVisualSignature = '';
 
     if (mapType === 'Mollweide') {
       const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
@@ -254,13 +306,68 @@ export class MapManager {
     requestRenderIfAvailable();
   }
 
-  updateConnections(stars, connectionObjs, opacity = 0.5) {
-    if (this.connectionGroup) {
-      this.scene.remove(this.connectionGroup);
-      disposeObject3D(this.connectionGroup);
-      this.connectionGroup = null;
-    }
-    if (!connectionObjs || connectionObjs.length === 0) return;
+  getConnectionParamSignature() {
+    const { connectionMaxWidth, connectionFadePower, connectionLabelSize } = getConnectionLineParams();
+    return `${connectionMaxWidth}|${connectionFadePower}|${connectionLabelSize}`;
+  }
+
+  clearConnectionGroup() {
+    if (!this.connectionGroup) return;
+    this.scene.remove(this.connectionGroup);
+    disposeObject3D(this.connectionGroup);
+    this.connectionGroup = null;
+    this.connectionPairKeys = [];
+    this.connectionParamSignature = '';
+    this.connectionVisualSignature = '';
+  }
+
+  storeConnectionState(connectionObjs) {
+    this.connectionPairKeys = connectionObjs.map(getConnectionPairKey);
+    this.connectionParamSignature = this.getConnectionParamSignature();
+    this.connectionVisualSignature = buildConnectionVisualSignature(connectionObjs);
+  }
+
+  captureConnectionOpacityScales(globalOpacity) {
+    if (!this.connectionGroup) return;
+    const safeOpacity = globalOpacity > 0 ? globalOpacity : 1;
+    this.connectionGroup.traverse(obj => {
+      if (Number.isFinite(obj.userData?.connectionOpacityScale)) {
+        return;
+      }
+      const uniformOpacity = obj.material?.uniforms?.opacityFactor?.value;
+      if (Number.isFinite(uniformOpacity)) {
+        obj.userData.connectionOpacityScale = uniformOpacity / safeOpacity;
+        return;
+      }
+      if (obj.material && Number.isFinite(obj.material.opacity)) {
+        obj.userData.connectionOpacityScale = obj.material.opacity / safeOpacity;
+      }
+    });
+  }
+
+  applyConnectionOpacity(opacity) {
+    this.connectionOpacity = opacity;
+    if (!this.connectionGroup) return;
+
+    this.connectionGroup.traverse(obj => {
+      const opacityScale = obj.userData?.connectionOpacityScale;
+      if (!Number.isFinite(opacityScale) || !obj.material) return;
+
+      const nextOpacity = opacityScale * opacity;
+      if (obj.material.uniforms?.opacityFactor) {
+        obj.material.uniforms.opacityFactor.value = nextOpacity;
+        obj.material.needsUpdate = true;
+      } else if (obj.material.opacity !== undefined) {
+        obj.material.opacity = nextOpacity;
+        obj.material.needsUpdate = true;
+      }
+    });
+  }
+
+  rebuildConnectionLayer(stars, connectionObjs, opacity) {
+    this.clearConnectionGroup();
+    if (!connectionObjs || connectionObjs.length === 0) return false;
+
     this.connectionGroup = new THREE.Group();
     if (this.mapType === 'Globe') {
       createConnectionLines(stars, connectionObjs, 'Globe', opacity).forEach(line => this.connectionGroup.add(line));
@@ -268,14 +375,160 @@ export class MapManager {
       createConnectionLines(stars, connectionObjs, 'Mollweide', opacity).forEach(line => this.connectionGroup.add(line));
     } else {
       this.connectionGroup.add(mergeConnectionLines(connectionObjs, this.mapType, opacity));
-      // Add distance labels for TrueCoordinates
       if (this.mapType === 'TrueCoordinates') {
         this.addTCDistanceLabels(connectionObjs, opacity);
       }
     }
+
     this.scene.add(this.connectionGroup);
+    this.storeConnectionState(connectionObjs);
+    this.captureConnectionOpacityScales(opacity);
+
     const editManager = this.getEditManager();
     if (editManager) editManager.applyStoredLineEdits(this.connectionGroup);
+    return true;
+  }
+
+  createMollweideConnectionSegment(points, color, width, opacity, opacityScale = 1) {
+    const geometry = buildWideLineGeometry(points, width);
+    const material = createWideLineMaterial(color);
+    material.uniforms.opacityFactor.value = opacity;
+    material.uniforms.fadePower.value = getConnectionLineParams().connectionFadePower;
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.renderOrder = 3;
+    mesh.userData = {
+      baseWidth: width,
+      points,
+      isMollweideConnectionSegment: true,
+      connectionOpacityScale: opacityScale
+    };
+    return mesh;
+  }
+
+  updateMollweideConnectionGroup(group, pair, bounds, opacityFactor) {
+    const { starA, starB, distance } = pair;
+    if (!starA?.mollweidePosition || !starB?.mollweidePosition) {
+      group.visible = false;
+      return;
+    }
+
+    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
+    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
+    const blendColor = c1.clone().lerp(c2, 0.5);
+    const normDist = (distance - bounds.smallestDistance) / (bounds.largestDistance - bounds.smallestDistance || 1);
+    const width = THREE.MathUtils.lerp(getConnectionLineParams().connectionMaxWidth, 1, normDist);
+    const relativeOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist);
+    const opacity = relativeOpacity * opacityFactor;
+    const segments = splitMollweideWrap(starA.mollweidePosition, starB.mollweidePosition);
+
+    const segmentMeshes = group.children.filter(child => child.userData?.isMollweideConnectionSegment);
+    if (segmentMeshes.length !== segments.length) {
+      segmentMeshes.forEach(mesh => {
+        group.remove(mesh);
+        disposeObject3D(mesh);
+      });
+      segments.forEach(([start, end]) => {
+        group.add(this.createMollweideConnectionSegment([start, end], blendColor, width, opacity, relativeOpacity));
+      });
+    } else {
+      segmentMeshes.forEach((mesh, index) => {
+        const points = segments[index];
+        mesh.geometry.dispose();
+        mesh.geometry = buildWideLineGeometry(points, width);
+        mesh.material.uniforms.color.value.copy(blendColor);
+        mesh.material.uniforms.opacityFactor.value = opacity;
+        mesh.material.uniforms.fadePower.value = getConnectionLineParams().connectionFadePower;
+        mesh.userData.baseWidth = width;
+        mesh.userData.points = points;
+      });
+    }
+
+    const segmentChildren = group.children.filter(child => child.userData?.isMollweideConnectionSegment);
+    segmentChildren.forEach(mesh => {
+      mesh.userData.connectionOpacityScale = relativeOpacity;
+    });
+
+    let totalLength = 0;
+    const segmentLengths = segments.map(([start, end]) => {
+      const length = start.distanceTo(end);
+      totalLength += length;
+      return length;
+    });
+    let midpoint = segments[0]?.[0]?.clone() || new THREE.Vector3();
+    let tangent = new THREE.Vector3(1, 0, 0);
+    const halfway = totalLength / 2;
+    let traversed = 0;
+    for (let index = 0; index < segments.length; index++) {
+      const [start, end] = segments[index];
+      const length = segmentLengths[index];
+      if (traversed + length >= halfway) {
+        const t = (halfway - traversed) / (length || 1);
+        midpoint = start.clone().lerp(end, t);
+        tangent = end.clone().sub(start);
+        break;
+      }
+      traversed += length;
+    }
+
+    let rotation = Math.atan2(tangent.y, tangent.x);
+    if (rotation > Math.PI / 2) rotation -= Math.PI;
+    if (rotation < -Math.PI / 2) rotation += Math.PI;
+
+    const labelSprite = group.children.find(child => child.userData?.isConnectionLabel);
+    if (labelSprite) {
+      labelSprite.position.copy(midpoint);
+      labelSprite.material.rotation = rotation;
+      labelSprite.material.opacity = opacity;
+      labelSprite.material.needsUpdate = true;
+      labelSprite.userData.connectionOpacityScale = relativeOpacity;
+    }
+
+    group.visible = true;
+  }
+
+  updateMollweideConnectionPositionsInPlace(connectionObjs) {
+    if (!this.connectionGroup || this.connectionGroup.children.length !== connectionObjs.length) {
+      return false;
+    }
+
+    const bounds = getConnectionDistanceBounds(connectionObjs);
+    for (let index = 0; index < connectionObjs.length; index++) {
+      const pair = connectionObjs[index];
+      const group = this.connectionGroup.children[index];
+      if (!(group instanceof THREE.Group) || group.userData?.pairKey !== getConnectionPairKey(pair)) {
+        return false;
+      }
+      this.updateMollweideConnectionGroup(group, pair, bounds, this.connectionOpacity);
+    }
+    return true;
+  }
+
+  updateConnections(stars, connectionObjs, opacity = 0.5) {
+    const safeConnections = Array.isArray(connectionObjs) ? connectionObjs : [];
+    const nextPairKeys = safeConnections.map(getConnectionPairKey);
+    const nextParamSignature = this.getConnectionParamSignature();
+    const nextVisualSignature = buildConnectionVisualSignature(safeConnections);
+
+    if (safeConnections.length === 0) {
+      this.clearConnectionGroup();
+      requestRenderIfAvailable();
+      return;
+    }
+
+    const canReuseLayer =
+      this.connectionGroup &&
+      haveSameKeys(this.connectionPairKeys, nextPairKeys) &&
+      this.connectionParamSignature === nextParamSignature &&
+      this.connectionVisualSignature === nextVisualSignature;
+
+    if (!canReuseLayer) {
+      if (this.rebuildConnectionLayer(stars, safeConnections, opacity)) {
+        requestRenderIfAvailable();
+      }
+      return;
+    }
+
+    this.applyConnectionOpacity(opacity);
     requestRenderIfAvailable();
   }
 
@@ -291,7 +544,8 @@ export class MapManager {
       const posB = starB.truePosition || new THREE.Vector3(starB.x_coordinate, starB.y_coordinate, starB.z_coordinate);
       if (!posA || !posB) return;
       const normDist = (distance - smallest) / (largest - smallest || 1);
-      const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
+      const lineOpacityScale = THREE.MathUtils.lerp(1.0, 0.3, normDist);
+      const lineOpacity = lineOpacityScale * opacityFactor;
       const mid = posA.clone().lerp(posB, 0.5);
       const distText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
       const baseFontSize = 72;
@@ -325,13 +579,38 @@ export class MapManager {
       const scale = 0.15;
       sprite.scale.set(canvas.width / 100 * scale, canvas.height / 100 * scale, 1);
       sprite.position.copy(mid);
+      sprite.userData.connectionOpacityScale = lineOpacityScale;
       this.connectionGroup.add(sprite);
     });
   }
 
   updateConnectionPositions(stars, connectionObjs) {
-    if (!this.connectionGroup) return;
-    this.updateConnections(stars, connectionObjs, this.connectionOpacity);
+    if (this.mapType !== 'Mollweide' || !this.connectionGroup) {
+      this.updateConnections(stars, connectionObjs, this.connectionOpacity);
+      requestRenderIfAvailable();
+      return;
+    }
+
+    const safeConnections = Array.isArray(connectionObjs) ? connectionObjs : [];
+    const nextPairKeys = safeConnections.map(getConnectionPairKey);
+    const nextParamSignature = this.getConnectionParamSignature();
+    const nextVisualSignature = buildConnectionVisualSignature(safeConnections);
+
+    const canUpdateInPlace =
+      safeConnections.length > 0 &&
+      haveSameKeys(this.connectionPairKeys, nextPairKeys) &&
+      this.connectionParamSignature === nextParamSignature &&
+      this.connectionVisualSignature === nextVisualSignature;
+
+    if (!canUpdateInPlace || !this.updateMollweideConnectionPositionsInPlace(safeConnections)) {
+      this.updateConnections(stars, safeConnections, this.connectionOpacity);
+      requestRenderIfAvailable();
+      return;
+    }
+
+    const editManager = this.getEditManager();
+    if (editManager) editManager.applyStoredLineEdits(this.connectionGroup);
+    this.applyConnectionOpacity(this.connectionOpacity);
     requestRenderIfAvailable();
   }
 
@@ -349,15 +628,8 @@ export class MapManager {
   }
 
   setConnectionOpacity(opacity) {
-    this.connectionOpacity = opacity;
-    if (this.connectionGroup) {
-      this.connectionGroup.traverse(obj => {
-        if (obj.material) {
-          obj.material.opacity = opacity;
-          obj.material.needsUpdate = true;
-        }
-      });
-    }
+    this.applyConnectionOpacity(opacity);
+    requestRenderIfAvailable();
   }
 
   setLabelOpacity(opacity) {

@@ -56,6 +56,43 @@ function clamp01(value) {
   return THREE.MathUtils.clamp(value, 0, 1);
 }
 
+function hashString(value) {
+  const str = String(value ?? '');
+  let hash = 2166136261;
+  for (let index = 0; index < str.length; index++) {
+    hash ^= str.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function mixHash(hash, value) {
+  return Math.imul(hash ^ value, 16777619) >>> 0;
+}
+
+function hashNumber(value, precision = 1000) {
+  return Number.isFinite(value) ? Math.round(value * precision) : 0;
+}
+
+function getStarRenderKey(star) {
+  return star?.starId || star?.Source_id || star?.HIP_number || `${star?.Common_name_of_the_star || 'star'}|${star?.RA_in_degrees}|${star?.DEC_in_degrees}`;
+}
+
+function getConnectionRenderKey(connection) {
+  return connection?.pairKey || `${getStarRenderKey(connection?.starA)}|${getStarRenderKey(connection?.starB)}`;
+}
+
+function createLayerCanvas() {
+  const canvas = document.createElement('canvas');
+  canvas.width = ATLAS_WIDTH;
+  canvas.height = ATLAS_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('2D canvas context unavailable');
+  }
+  return { canvas, ctx };
+}
+
 async function loadConstellationBoundaries() {
   const response = await fetch('./constellation_boundaries.json');
   if (!response.ok) throw new Error('Failed to load constellation boundary data');
@@ -95,6 +132,17 @@ export class UVMapManager {
     this.atlasTexture.magFilter = THREE.LinearFilter;
     this.atlasTexture.generateMipmaps = true;
     this.atlasTexture.needsUpdate = true;
+    this.baseLayer = createLayerCanvas();
+    this.featureLayer = createLayerCanvas();
+    this.starLayer = createLayerCanvas();
+    this.labelLayer = createLayerCanvas();
+    this.layerSignatures = {
+      features: '',
+      stars: '',
+      labels: '',
+      interaction: ''
+    };
+    this.redrawBaseLayer();
 
     if (mapType === 'Equirectangular') {
       const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
@@ -193,6 +241,128 @@ export class UVMapManager {
     this.redrawLastState();
   }
 
+  redrawBaseLayer() {
+    const ctx = this.baseLayer.ctx;
+    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    this.drawGraticule(ctx);
+  }
+
+  redrawFeatureLayer(connections) {
+    const ctx = this.featureLayer.ctx;
+    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    this.drawConstellationOverlay(ctx);
+    this.drawDensityOverlay(ctx);
+    this.drawIsolationOverlay(ctx);
+    this.drawCloudDensityOverlay(ctx);
+    this.drawCloudsOverlay(ctx);
+    this.drawPlanes(ctx);
+    if (this.state.showConstellationBoundariesFlag && Array.isArray(this.boundaryData)) {
+      this.drawConstellationBoundaries(ctx, this.boundaryData);
+    }
+    this.drawConnections(ctx, connections || []);
+  }
+
+  redrawStarLayer(stars) {
+    const ctx = this.starLayer.ctx;
+    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    this.drawStars(ctx, stars || []);
+  }
+
+  redrawLabelLayer(stars) {
+    const ctx = this.labelLayer.ctx;
+    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    this.drawConstellationNames(ctx);
+    this.drawStarLabels(ctx, stars || []);
+  }
+
+  composeAtlas() {
+    const ctx = this.atlasCtx;
+    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    ctx.drawImage(this.baseLayer.canvas, 0, 0);
+    ctx.drawImage(this.featureLayer.canvas, 0, 0);
+    ctx.drawImage(this.starLayer.canvas, 0, 0);
+    ctx.drawImage(this.labelLayer.canvas, 0, 0);
+    this.atlasTexture.needsUpdate = true;
+  }
+
+  getSelectedFormValues(name) {
+    const form = document.getElementById('filters-form');
+    if (!form) return '';
+    return new FormData(form).getAll(name).join('|');
+  }
+
+  buildStarTopologySignature(stars) {
+    let hash = 2166136261;
+    (stars || []).forEach(star => {
+      hash = mixHash(hash, hashString(getStarRenderKey(star)));
+    });
+    return `${stars?.length || 0}:${hash}`;
+  }
+
+  buildStarLayerSignature(stars) {
+    let hash = mixHash(2166136261, hashNumber(this.starOpacity));
+    (stars || []).forEach(star => {
+      hash = mixHash(hash, hashString(getStarRenderKey(star)));
+      hash = mixHash(hash, hashString(star.displayColor || '#ffffff'));
+      hash = mixHash(hash, hashNumber(star.displaySize ?? 1, 100));
+    });
+    return `${stars?.length || 0}:${hash}`;
+  }
+
+  buildLabelLayerSignature(stars) {
+    let hash = mixHash(2166136261, hashNumber(this.labelOpacity));
+    hash = mixHash(hash, this.state.showConstellationNamesFlag ? 1 : 0);
+    hash = mixHash(hash, hashNumber(readNumberInput('constellation-name-opacity-slider', 80), 10));
+    (stars || []).forEach(star => {
+      hash = mixHash(hash, hashString(getStarRenderKey(star)));
+      hash = mixHash(hash, hashString(star.displayName || ''));
+      hash = mixHash(hash, hashNumber(star.displayLabelSize ?? star.displaySize ?? 1, 100));
+    });
+    return `${stars?.length || 0}:${hash}`;
+  }
+
+  buildFeatureLayerSignature(connections) {
+    let hash = 2166136261;
+    hash = mixHash(hash, this.state.showConstellationOverlayFlag ? 1 : 0);
+    hash = mixHash(hash, this.state.showConstellationBoundariesFlag ? 1 : 0);
+    hash = mixHash(hash, this.state.enableDensityFilterFlag ? 1 : 0);
+    hash = mixHash(hash, this.state.enableIsolationFilterFlag ? 1 : 0);
+    hash = mixHash(hash, this.state.showCloudsFlag ? 1 : 0);
+    hash = mixHash(hash, this.state.showCloudDensityFlag ? 1 : 0);
+    hash = mixHash(hash, this.state.showGalacticPlaneFlag ? 1 : 0);
+    hash = mixHash(hash, this.state.showEclipticPlaneFlag ? 1 : 0);
+    hash = mixHash(hash, this.state.showCelestialEquatorFlag ? 1 : 0);
+    hash = mixHash(hash, hashNumber(this.connectionOpacity));
+    hash = mixHash(hash, hashNumber(readNumberInput('connection-width-slider', 5), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('connection-label-size-slider', 1), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('min-distance-slider', 0), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('max-distance-slider', 20), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('density-slider', 10), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('density-tolerance-slider', 0), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('density-bottom-slider', 10), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('density-top-slider', 10), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('isolation-slider', 5), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('isolation-tolerance-slider', 0), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('plane-opacity-slider', 50), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('constellation-line-opacity-slider', 40), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('constellation-line-width-slider', 1), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('cloud-opacity-slider', 100), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('cloud-density-radius-slider', 5), 10));
+    hash = mixHash(hash, hashNumber(readNumberInput('cloud-density-opacity-slider', 100), 10));
+    hash = mixHash(hash, hashNumber(this.state.densityOverlay?.revision ?? 0, 1));
+    hash = mixHash(hash, hashNumber(this.state.isolationOverlay?.revision ?? 0, 1));
+    hash = mixHash(hash, hashString(this.getSelectedFormValues('dust-clouds')));
+    hash = mixHash(hash, hashString(this.getSelectedFormValues('dust-density-clouds')));
+    (connections || []).forEach(connection => {
+      hash = mixHash(hash, hashString(getConnectionRenderKey(connection)));
+      hash = mixHash(hash, hashString(connection.starA?.displayColor || ''));
+      hash = mixHash(hash, hashString(connection.starB?.displayColor || ''));
+    });
+    return `${connections?.length || 0}:${hash}`;
+  }
+
   redrawLastState() {
     if (this.lastStars && this.lastConnections) {
       this.updateMap(this.lastStars, this.lastConnections);
@@ -203,32 +373,55 @@ export class UVMapManager {
     this.lastStars = stars;
     this.lastConnections = connectionObjs;
     await Promise.all([this.ensureBoundaryData(), this.ensureConstellationMeta()]);
-    this.drawAtlas(stars, connectionObjs);
-    this.updateInteractionGeometry(stars);
+    const safeStars = stars || [];
+    const safeConnections = connectionObjs || [];
+    const featureSignature = this.buildFeatureLayerSignature(safeConnections);
+    const starSignature = this.buildStarLayerSignature(safeStars);
+    const labelSignature = this.buildLabelLayerSignature(safeStars);
+    const interactionSignature = this.buildStarTopologySignature(safeStars);
+
+    let atlasDirty = false;
+    if (this.layerSignatures.features !== featureSignature) {
+      this.redrawFeatureLayer(safeConnections);
+      this.layerSignatures.features = featureSignature;
+      atlasDirty = true;
+    }
+    if (this.layerSignatures.stars !== starSignature) {
+      this.redrawStarLayer(safeStars);
+      this.layerSignatures.stars = starSignature;
+      atlasDirty = true;
+    }
+    if (this.layerSignatures.labels !== labelSignature) {
+      this.redrawLabelLayer(safeStars);
+      this.layerSignatures.labels = labelSignature;
+      atlasDirty = true;
+    }
+    if (atlasDirty) {
+      this.composeAtlas();
+    }
+
+    if (this.layerSignatures.interaction !== interactionSignature) {
+      this.updateInteractionGeometry(safeStars);
+      this.layerSignatures.interaction = interactionSignature;
+    }
     requestRenderIfAvailable();
   }
 
   drawAtlas(stars, connectionObjs) {
-    const ctx = this.atlasCtx;
-    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
-
-    this.drawGraticule(ctx);
-    this.drawConstellationOverlay(ctx);
-    this.drawDensityOverlay(ctx);
-    this.drawIsolationOverlay(ctx);
-    this.drawCloudDensityOverlay(ctx);
-    this.drawCloudsOverlay(ctx);
-    this.drawPlanes(ctx);
-    if (this.state.showConstellationBoundariesFlag && Array.isArray(this.boundaryData)) {
-      this.drawConstellationBoundaries(ctx, this.boundaryData);
-    }
-    this.drawConnections(ctx, connectionObjs || []);
-    this.drawStars(ctx, stars || []);
-    this.drawConstellationNames(ctx);
-    this.drawStarLabels(ctx, stars || []);
-    this.atlasTexture.needsUpdate = true;
+    const safeStars = stars || [];
+    const safeConnections = connectionObjs || [];
+    this.lastStars = safeStars;
+    this.lastConnections = safeConnections;
+    this.redrawBaseLayer();
+    this.redrawFeatureLayer(safeConnections);
+    this.redrawStarLayer(safeStars);
+    this.redrawLabelLayer(safeStars);
+    this.composeAtlas();
+    this.updateInteractionGeometry(safeStars);
+    this.layerSignatures.features = this.buildFeatureLayerSignature(safeConnections);
+    this.layerSignatures.stars = this.buildStarLayerSignature(safeStars);
+    this.layerSignatures.labels = this.buildLabelLayerSignature(safeStars);
+    this.layerSignatures.interaction = this.buildStarTopologySignature(safeStars);
   }
 
   drawGraticule(ctx) {

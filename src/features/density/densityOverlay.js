@@ -11,6 +11,7 @@ import {
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { lightenColor } from './densityColorScale.js';
 import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../../render/engine/renderUtils.js';
+import { populateCellDistanceCaches, sumWeightedDistancesWithinRadius } from '../../shared/cellDistanceCache.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
 
 class DensityGridOverlay {
@@ -24,6 +25,7 @@ class DensityGridOverlay {
     this.mollLineWidth = 30; // width of connection lines on the Mollweide map
     this.opacityFactor = 1.0;
     this.fadePower = 1.0;
+    this.revision = 0;
 
     // Off-screen canvas for smooth Mollweide heatmap
     this.canvasWidth = HEATMAP_CANVAS_WIDTH;
@@ -141,22 +143,18 @@ class DensityGridOverlay {
     }
 
     this.computeAdjacentLines();
+    populateCellDistanceCaches(this.cubesData, this.getExtendedStars(stars));
   }
 
-  computeCellDensity(cell, stars, radius = 10, tolerance = 0) {
-    const dArr = stars.map(star => {
-      const starPos = star.truePosition ? star.truePosition : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
-      return cell.tcPos.distanceTo(starPos);
+  getExtendedStars(stars) {
+    return stars.filter(star => {
+      const distance = star.distance;
+      return distance >= Math.max(0, this.minDistance - 10) && distance <= this.maxDistance + 10;
     });
-    dArr.sort((a, b) => a - b);
-    let sum = 0;
-    for (let i = tolerance; i < dArr.length; i++) {
-      const d = dArr[i];
-      if (d > radius) continue;
-      const weight = 1 - d / radius;
-      sum += weight;
-    }
-    cell.density = sum;
+  }
+
+  computeCellDensity(cell, radius = 10, tolerance = 0) {
+    cell.density = sumWeightedDistancesWithinRadius(cell, radius, tolerance);
   }
 
   computeAdjacentLines() {
@@ -275,13 +273,8 @@ class DensityGridOverlay {
       this.refreshMollweide();
     }
 
-    const extendedStars = stars.filter(star => {
-      const d = star.distance;
-      return d >= Math.max(0, this.minDistance - 10) && d <= this.maxDistance + 10;
-    });
-
     this.cubesData.forEach(cell => {
-      this.computeCellDensity(cell, extendedStars, radius, tolerance);
+      this.computeCellDensity(cell, radius, tolerance);
     });
 
     const densities = this.cubesData.map(c => c.density);
@@ -345,18 +338,8 @@ class DensityGridOverlay {
         lineM.material.needsUpdate = true;
       }
     });
-    if (sceneTC) {
-      this.cubesData.forEach(c => { sceneTC.add(c.tcMesh); });
-    }
-    if (sceneGlobe) {
-      this.adjacentLines.forEach(o => { sceneGlobe.add(o.line); });
-    }
-    if (sceneMoll) {
-      if (!sceneMoll.children.includes(this.textureMesh)) {
-        sceneMoll.add(this.textureMesh);
-      }
-    }
     this.drawHeatmap(getMollweideLambda0());
+    this.revision += 1;
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
@@ -386,6 +369,7 @@ class DensityGridOverlay {
       }
     });
     this.drawHeatmap(lambda0);
+    this.revision += 1;
   }
 }
 

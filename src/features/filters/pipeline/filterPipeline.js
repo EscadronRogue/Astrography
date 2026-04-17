@@ -154,7 +154,7 @@ export async function buildAndApplyFilters(ctx) {
   });
   const scContainer = document.getElementById('stellar-class-container');
   const previousStellarClassState = scContainer ? captureFormState(scContainer) : null;
-  generateStellarClassFilters(filters.filteredStars);
+  generateStellarClassFilters(filters.stellarClassCandidates || filters.filteredStars);
   if (previousStellarClassState && scContainer) {
     restoreFormState(scContainer, previousStellarClassState, { dispatchEvents: false });
   }

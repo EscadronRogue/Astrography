@@ -1,6 +1,14 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { buildWideLineGeometry } from '../../render/engine/renderUtils.js';
 
+function getJsPdfConstructor() {
+  const constructor = window.jspdf?.jsPDF;
+  if (!constructor) {
+    throw new Error('jsPDF is not available in the current page context.');
+  }
+  return constructor;
+}
+
 export class ExportManager {
   constructor(mollweideMap) {
     this.mollweideMap = mollweideMap;
@@ -148,8 +156,8 @@ export class ExportManager {
     exportRenderer.dispose();
     if (format === 'pdf') {
       const imgData = finalCanvas.toDataURL('image/png');
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({
+      const JsPDF = getJsPdfConstructor();
+      const pdf = new JsPDF({
         orientation: exportCropW >= exportCropH ? 'landscape' : 'portrait',
         unit: 'px',
         format: [exportCropW, exportCropH]
@@ -233,11 +241,21 @@ export class ExportManager {
     if (!btn || !this.exportOverlay || !this.exportRectElem || !this.exportPngBtn || !this.exportPdfBtn) return;
 
     this.exportPngBtn.addEventListener('click', () => {
-      if (this.exportCurrentRect) this.exportMollweideMap('png', this.exportCurrentRect);
+      try {
+        if (this.exportCurrentRect) this.exportMollweideMap('png', this.exportCurrentRect);
+      } catch (error) {
+        console.error('PNG export failed:', error);
+        alert(`PNG export failed: ${error.message}`);
+      }
       this.exitExportSelection();
     });
     this.exportPdfBtn.addEventListener('click', () => {
-      if (this.exportCurrentRect) this.exportMollweideMap('pdf', this.exportCurrentRect);
+      try {
+        if (this.exportCurrentRect) this.exportMollweideMap('pdf', this.exportCurrentRect);
+      } catch (error) {
+        console.error('PDF export failed:', error);
+        alert(`PDF export failed: ${error.message}`);
+      }
       this.exitExportSelection();
     });
 

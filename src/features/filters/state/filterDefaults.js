@@ -1,6 +1,7 @@
 export function createDefaultFilterResult(allStars) {
   return {
     filteredStars: allStars,
+    stellarClassCandidates: allStars,
     connections: [],
     globeFilteredStars: allStars,
     globeConnections: [],

@@ -34,6 +34,7 @@ export function applyFilters(allStars, context = {}) {
 
   let filteredStars = applyDistanceFilter(allStars, filters);
   filteredStars = applyStarsShownFilter(filteredStars, filters);
+  const stellarClassCandidates = filteredStars.slice();
   filteredStars = applyStellarClassLogic(filteredStars, form);
   filteredStars = applySizeFilter(filteredStars, filters);
   filteredStars = applyColorFilter(filteredStars, filters);
@@ -61,6 +62,7 @@ export function applyFilters(allStars, context = {}) {
   return {
     ...filters,
     filteredStars,
+    stellarClassCandidates,
     connections,
     globeFilteredStars: nonSolStars,
     globeConnections,

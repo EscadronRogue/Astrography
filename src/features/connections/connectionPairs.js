@@ -3,7 +3,7 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../../shared/geometryUtils.js';
 import { createWideLineMaterial, buildWideLineGeometry } from '../../render/engine/renderUtils.js';
-import { getStarTruePosition } from '../../shared/starUtils.js';
+import { getStarId, getStarTruePosition } from '../../shared/starUtils.js';
 import { GLOBE_RADIUS, DEFAULT_STAR_COLOR } from '../../shared/constants.js';
 import { getConnectionLineParams } from './connectionSettings.js';
 
@@ -25,6 +25,12 @@ function getGridKey(position, cellSize) {
     Math.floor(position.y / cellSize),
     Math.floor(position.z / cellSize)
   ].join(',');
+}
+
+function createPairKey(starA, starB) {
+  const idA = getStarId(starA);
+  const idB = getStarId(starB);
+  return idA < idB ? `${idA}|${idB}` : `${idB}|${idA}`;
 }
 
 /**
@@ -79,13 +85,19 @@ export function computeConnectionPairs(stars, maxDistance) {
           const starB = neighborBucket[j];
           const distance = starA.position.distanceTo(starB.position);
           if (distance > 0 && distance <= maxDistance) {
-            pairs.push({ starA: starA.star, starB: starB.star, distance });
+            pairs.push({
+              starA: starA.star,
+              starB: starB.star,
+              distance,
+              pairKey: createPairKey(starA.star, starB.star)
+            });
           }
         }
       }
     }
   }
 
+  pairs.sort((left, right) => left.pairKey.localeCompare(right.pairKey));
   return pairs;
 }
 
@@ -135,7 +147,9 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
     linewidth: 1
   });
 
-  return new THREE.LineSegments(geometry, material);
+  const lineSegments = new THREE.LineSegments(geometry, material);
+  lineSegments.userData.connectionOpacityScale = 1;
+  return lineSegments;
 }
 
 export function createMollweideConnectionSegments(pairs, opacity = 0.5) {
@@ -227,6 +241,7 @@ function createDistanceLabelSprite(distance, color, opacity, scaleFactor = 1) {
   const sprite = new THREE.Sprite(spriteMat);
   sprite.renderOrder = 5;
   sprite.scale.set(canvas.width / 100 * scaleFactor, canvas.height / 100 * scaleFactor, 1);
+  sprite.userData.isConnectionLabel = true;
   return sprite;
 }
 
@@ -257,6 +272,10 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         starB.mollweidePosition
       );
       const group = new THREE.Group();
+      group.userData = {
+        pairKey: pair.pairKey,
+        isMollweideConnectionGroup: true
+      };
       segments.forEach(([s1, s2]) => {
         const pts = [s1, s2];
         const geom = buildWideLineGeometry(pts, width);
@@ -265,7 +284,12 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         mat.uniforms.fadePower.value = getConnectionLineParams().connectionFadePower;
         const mesh = new THREE.Mesh(geom, mat);
         mesh.renderOrder = 3;
-        mesh.userData = { baseWidth: width, points: pts };
+        mesh.userData = {
+          baseWidth: width,
+          points: pts,
+          isMollweideConnectionSegment: true,
+          connectionOpacityScale: THREE.MathUtils.lerp(1.0, 0.3, normDist)
+        };
         group.add(mesh);
       });
 
@@ -299,6 +323,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       if (sprite) {
         sprite.position.copy(mid);
         sprite.material.rotation = rot;
+        sprite.userData.connectionOpacityScale = THREE.MathUtils.lerp(1.0, 0.3, normDist);
         group.add(sprite);
       }
 
@@ -312,7 +337,8 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     const gradientColor = c1.clone().lerp(c2, 0.5);
     const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
     const lineThickness = THREE.MathUtils.lerp(getConnectionLineParams().connectionMaxWidth, 1, normDist);
-    const lineOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
+    const lineOpacityScale = THREE.MathUtils.lerp(1.0, 0.3, normDist);
+    const lineOpacity = lineOpacityScale * opacityFactor;
 
     let points;
     if (mapType === 'Globe') {
@@ -323,6 +349,10 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     }
 
     const group = new THREE.Group();
+    group.userData = {
+      pairKey: pair.pairKey,
+      isConnectionGroup: true
+    };
     const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
     const materialLine = new THREE.LineBasicMaterial({
       color: gradientColor,
@@ -331,7 +361,10 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       linewidth: lineThickness
     });
     const line = new THREE.Line(geometryLine, materialLine);
-    line.userData = { baseLineWidth: lineThickness };
+    line.userData = {
+      baseLineWidth: lineThickness,
+      connectionOpacityScale: lineOpacityScale
+    };
     if (mapType === 'Globe') {
       line.renderOrder = 1;
     }
@@ -350,6 +383,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
         const outward = midPos.clone().normalize().multiplyScalar(2);
         sprite.position.add(outward);
       }
+      sprite.userData.connectionOpacityScale = lineOpacityScale;
       group.add(sprite);
     }
 
