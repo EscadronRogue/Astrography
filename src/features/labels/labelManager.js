@@ -46,9 +46,9 @@ function getTrueCoordinateLabelMetrics(labelSize) {
     1
   );
   return {
-    fontSize: Math.round(THREE.MathUtils.lerp(20, 34, normalized)),
-    worldScale: THREE.MathUtils.lerp(0.34, 0.72, normalized),
-    offsetDistance: THREE.MathUtils.lerp(1.2, 2.05, normalized)
+    fontSize: Math.round(THREE.MathUtils.lerp(40, 68, normalized)),
+    worldScale: THREE.MathUtils.lerp(0.68, 1.44, normalized),
+    offsetDistance: THREE.MathUtils.lerp(1.45, 2.45, normalized)
   };
 }
 
