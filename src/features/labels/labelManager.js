@@ -131,6 +131,35 @@ export class LabelManager {
     this.systemAngles = new Map();
     this.systemSlots = new Map();
     this.systemSurfaceRadii = new Map();
+    this.interactionObjects = [];
+    this.trueCoordinateLayoutDirty = true;
+    this.hasLastTrueCameraState = false;
+    this.lastTrueCameraPosition = new THREE.Vector3();
+    this.lastTrueCameraQuaternion = new THREE.Quaternion();
+    this.tempCameraRight = new THREE.Vector3();
+    this.tempCameraUp = new THREE.Vector3();
+    this.tempStarPosition = new THREE.Vector3();
+    this.tempOffset = new THREE.Vector3();
+  }
+
+  addInteractionObject(obj) {
+    if (!obj || this.interactionObjects.includes(obj)) return;
+    this.interactionObjects.push(obj);
+  }
+
+  removeInteractionObject(obj) {
+    const index = this.interactionObjects.indexOf(obj);
+    if (index >= 0) this.interactionObjects.splice(index, 1);
+  }
+
+  getInteractiveObjects() {
+    return this.interactionObjects;
+  }
+
+  markTrueCoordinateLayoutDirty() {
+    if (this.mapType === 'TrueCoordinates') {
+      this.trueCoordinateLayoutDirty = true;
+    }
   }
 
   createOrUpdateLabel(star) {
@@ -145,7 +174,7 @@ export class LabelManager {
     let lineObj = this.lines.get(star);
 
     if (needsRebuild) {
-      if (labelObj) { this.scene.remove(labelObj); disposeObject3D(labelObj); }
+      if (labelObj) { this.removeInteractionObject(labelObj); this.scene.remove(labelObj); disposeObject3D(labelObj); }
       if (lineObj) { this.scene.remove(lineObj); disposeObject3D(lineObj); }
 
       const isGlobeLike = this.mapType === 'Globe' || this.mapType === 'UVGlobe';
@@ -198,6 +227,7 @@ export class LabelManager {
         labelObj.scale.set((canvas.width / 100) * worldScale, (canvas.height / 100) * worldScale, 1);
       }
       labelObj.renderOrder = this.mapType === 'TrueCoordinates' ? 6 : (this.mapType === 'Mollweide' ? 5 : 1);
+      labelObj.userData.starRef = star;
       lineObj = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({
         color: new THREE.Color(starColor),
         transparent: true,
@@ -206,9 +236,11 @@ export class LabelManager {
         linewidth: 2
       }));
       lineObj.renderOrder = this.mapType === 'TrueCoordinates' ? 5 : (this.mapType === 'Mollweide' ? 5 : 1);
+      lineObj.userData.starRef = star;
       this.sprites.set(star, labelObj);
       this.lines.set(star, lineObj);
       this.labelCache.set(cacheKey, { lastText: displayName, lastColor: starColor, lastSize: labelSize });
+      this.addInteractionObject(labelObj);
     }
 
     if (!this.scene.children.includes(labelObj)) this.scene.add(labelObj);
@@ -245,6 +277,7 @@ export class LabelManager {
 
     this.updateLineGeometry(star, starPos, labelPos, offset, labelObj, lineObj);
     lineObj.material.color.set(star.displayColor || '#888888');
+    this.markTrueCoordinateLayoutDirty();
   }
 
   computeLabelOffset(star, starPos) {
@@ -275,18 +308,17 @@ export class LabelManager {
     return tangent.multiplyScalar(Math.cos(angle)).add(bitangent.multiplyScalar(Math.sin(angle))).multiplyScalar(2 * THREE.MathUtils.clamp(labelSize / 2, 0.1, 5));
   }
 
-  getTrueCoordinateCameraOffset(star, starPos, camera) {
+  getTrueCoordinateCameraOffset(star, cameraRight, cameraUp, target) {
     const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
     const metrics = getTrueCoordinateLabelMetrics(labelSize);
     const system = getStarSystemName(star);
     const slot = getOrAssignSystemSlot(this.systemSlots, system, getStarCacheKey(star));
     const screenDirection = getTrueCoordinateSlotDirection(slot);
-    const cameraRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
-    const cameraUp = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
     const systemSurfaceRadius = this.systemSurfaceRadii.get(system) ?? getTrueCoordinateStarRadius(star);
-    return cameraRight
+    return target
+      .copy(cameraRight)
       .multiplyScalar(screenDirection.x)
-      .add(cameraUp.multiplyScalar(screenDirection.y))
+      .addScaledVector(cameraUp, screenDirection.y)
       .normalize()
       .multiplyScalar(systemSurfaceRadius + metrics.offsetDistance);
   }
@@ -304,21 +336,31 @@ export class LabelManager {
   }
 
   render(camera) {
-    if (this.mapType !== 'TrueCoordinates' || !camera) return;
+    if (this.mapType !== 'TrueCoordinates' || !camera || this.sprites.size === 0) return;
+    const cameraUnchanged =
+      this.hasLastTrueCameraState &&
+      camera.position.distanceToSquared(this.lastTrueCameraPosition) < 1e-8 &&
+      (1 - Math.abs(camera.quaternion.dot(this.lastTrueCameraQuaternion))) < 1e-8;
+    if (!this.trueCoordinateLayoutDirty && cameraUnchanged) return;
+
+    this.tempCameraRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+    this.tempCameraUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
     this.sprites.forEach((labelObj, star) => {
       const lineObj = this.lines.get(star);
       if (!labelObj || !lineObj || !star?.displayVisible || !star?.displayName) return;
-      const starPos = star.truePosition
-        ? new THREE.Vector3(star.truePosition.x, star.truePosition.y, star.truePosition.z)
-        : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
-      const offset = this.getTrueCoordinateCameraOffset(star, starPos, camera);
-      const labelPos = starPos.clone().add(offset);
-      labelObj.position.copy(labelPos);
-      this.updateLineGeometry(star, starPos, labelPos, offset, labelObj, lineObj);
+      const starPos = star.truePosition || this.tempStarPosition.set(star.x_coordinate, star.y_coordinate, star.z_coordinate);
+      const offset = this.getTrueCoordinateCameraOffset(star, this.tempCameraRight, this.tempCameraUp, this.tempOffset);
+      labelObj.position.copy(starPos).add(offset);
+      this.updateLineGeometry(star, starPos, labelObj.position, offset, labelObj, lineObj);
     });
+    this.lastTrueCameraPosition.copy(camera.position);
+    this.lastTrueCameraQuaternion.copy(camera.quaternion);
+    this.hasLastTrueCameraState = true;
+    this.trueCoordinateLayoutDirty = false;
   }
 
   refreshLabels(stars) {
+    this.markTrueCoordinateLayoutDirty();
     this.systemSurfaceRadii.clear();
     stars.forEach(star => {
       if (!star?.displayVisible) return;
@@ -331,6 +373,7 @@ export class LabelManager {
     stars.forEach(star => { if (star.displayVisible && star.displayName) this.createOrUpdateLabel(star); });
     this.sprites.forEach((labelObj, star) => {
       if (!inNewSet.has(star) || !star.displayVisible || !star.displayName) {
+        this.removeInteractionObject(labelObj);
         this.scene.remove(labelObj); disposeObject3D(labelObj); this.sprites.delete(star);
         const line = this.lines.get(star);
         if (line) { this.scene.remove(line); disposeObject3D(line); this.lines.delete(star); }
@@ -341,7 +384,9 @@ export class LabelManager {
   removeAllLabels() {
     this.sprites.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
     this.lines.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
-    this.sprites.clear(); this.lines.clear(); this.labelCache.clear(); this.systemSlots.clear(); this.systemSurfaceRadii.clear();
+    this.sprites.clear(); this.lines.clear(); this.labelCache.clear(); this.systemSlots.clear(); this.systemSurfaceRadii.clear(); this.interactionObjects = [];
+    this.trueCoordinateLayoutDirty = true;
+    this.hasLastTrueCameraState = false;
   }
 
   setLabelOpacity(opacity) {

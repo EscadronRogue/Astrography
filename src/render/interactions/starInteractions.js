@@ -30,6 +30,9 @@ function getRaycastThreshold(map) {
 function resolveIntersectedStar(map, intersects) {
   if (!intersects?.length) return null;
   const intersect = intersects[0];
+  if (intersect.object?.userData?.starRef) {
+    return intersect.object.userData.starRef;
+  }
   let index;
   if (intersect.object instanceof THREE.Points) {
     index = intersect.index;
@@ -42,6 +45,17 @@ function resolveIntersectedStar(map, intersects) {
   return map.starObjects[index] || null;
 }
 
+function resolveHoveredOrClickedStar(map, raycaster) {
+  const starIntersects = raycaster.intersectObjects(map.starGroup.children, true);
+  const directStar = resolveIntersectedStar(map, starIntersects);
+  if (directStar) return directStar;
+
+  const labelTargets = map.labelManager?.getInteractiveObjects?.() || [];
+  if (!labelTargets.length) return null;
+  const labelIntersects = raycaster.intersectObjects(labelTargets, true);
+  return resolveIntersectedStar(map, labelIntersects);
+}
+
 export function initStarInteractions(ctx, map) {
   const raycaster = new THREE.Raycaster();
   raycaster.params.Points = { threshold: getRaycastThreshold(map) };
@@ -52,8 +66,7 @@ export function initStarInteractions(ctx, map) {
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, map.camera);
-    const intersects = raycaster.intersectObjects(map.starGroup.children, true);
-    const hoveredStar = resolveIntersectedStar(map, intersects);
+    const hoveredStar = resolveHoveredOrClickedStar(map, raycaster);
 
     if (hoveredStar) {
       showTooltip(event.clientX, event.clientY, hoveredStar);
@@ -80,8 +93,7 @@ export function initStarInteractions(ctx, map) {
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, map.camera);
-    const intersects = raycaster.intersectObjects(map.starGroup.children, true);
-    const clickedStar = resolveIntersectedStar(map, intersects);
+    const clickedStar = resolveHoveredOrClickedStar(map, raycaster);
 
     ctx.state.selectedStarData = clickedStar;
     updateSelectedStarHighlight(ctx);
