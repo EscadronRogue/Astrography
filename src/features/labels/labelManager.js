@@ -8,6 +8,15 @@ function getStarCacheKey(star) {
   return star.starId || star.Source_id || star.HIP_number || `${star.Common_name_of_the_star || 'star'}|${star.RA_in_degrees}|${star.DEC_in_degrees}`;
 }
 
+function getStarSystemName(star) {
+  return star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
+}
+
+function getTrueCoordinateStarRadius(star) {
+  const displaySize = Number.isFinite(star?.displaySize) ? star.displaySize : 1;
+  return Math.max(displaySize * 0.2, 0.12);
+}
+
 function getOrAssignSystemAngle(systemAngles, system, starKey) {
   let starMap = systemAngles.get(system);
   if (!starMap) {
@@ -121,6 +130,7 @@ export class LabelManager {
     this.labelCache = new Map();
     this.systemAngles = new Map();
     this.systemSlots = new Map();
+    this.systemSurfaceRadii = new Map();
   }
 
   createOrUpdateLabel(star) {
@@ -233,7 +243,7 @@ export class LabelManager {
       labelObj.setRotationFromMatrix(new THREE.Matrix4().makeBasis(desiredRight, desiredUp, normal));
     }
 
-    this.updateLineGeometry(starPos, labelPos, offset, labelObj, lineObj);
+    this.updateLineGeometry(star, starPos, labelPos, offset, labelObj, lineObj);
     lineObj.material.color.set(star.displayColor || '#888888');
   }
 
@@ -245,14 +255,14 @@ export class LabelManager {
       if (Math.abs(normal.dot(tangent)) > 0.9) tangent = new THREE.Vector3(1, 0, 0);
       tangent.cross(normal).normalize();
       const bitangent = normal.clone().cross(tangent).normalize();
-      const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
+      const system = getStarSystemName(star);
       const angle = getOrAssignSystemAngle(this.systemAngles, system, getStarCacheKey(star));
       return tangent.multiplyScalar(Math.cos(angle)).add(bitangent.multiplyScalar(Math.sin(angle))).multiplyScalar(getTrueCoordinateLabelMetrics(labelSize).offsetDistance);
     }
     if (this.mapType === 'Mollweide' || this.mapType === 'Equirectangular') {
       const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
       const dist = 2 * scaleFactor;
-      const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
+      const system = getStarSystemName(star);
       const angle = getOrAssignSystemAngle(this.systemAngles, system, getStarCacheKey(star));
       return new THREE.Vector3(Math.cos(angle), Math.sin(angle), 0).multiplyScalar(dist);
     }
@@ -268,21 +278,29 @@ export class LabelManager {
   getTrueCoordinateCameraOffset(star, starPos, camera) {
     const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
     const metrics = getTrueCoordinateLabelMetrics(labelSize);
-    const system = star.Common_name_of_the_star_system || star.Common_name_of_the_star || 'unknown';
+    const system = getStarSystemName(star);
     const slot = getOrAssignSystemSlot(this.systemSlots, system, getStarCacheKey(star));
     const screenDirection = getTrueCoordinateSlotDirection(slot);
     const cameraRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
     const cameraUp = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
-    return cameraRight.multiplyScalar(screenDirection.x).add(cameraUp.multiplyScalar(screenDirection.y)).normalize().multiplyScalar(metrics.offsetDistance);
+    const systemSurfaceRadius = this.systemSurfaceRadii.get(system) ?? getTrueCoordinateStarRadius(star);
+    return cameraRight
+      .multiplyScalar(screenDirection.x)
+      .add(cameraUp.multiplyScalar(screenDirection.y))
+      .normalize()
+      .multiplyScalar(systemSurfaceRadius + metrics.offsetDistance);
   }
 
-  updateLineGeometry(starPos, labelPos, offset, labelObj, lineObj) {
+  updateLineGeometry(star, starPos, labelPos, offset, labelObj, lineObj) {
+    let lineStart = starPos;
     let lineEnd = labelPos;
     if (this.mapType === 'TrueCoordinates' && offset.lengthSq() > 1e-8) {
+      const direction = offset.clone().normalize();
+      lineStart = starPos.clone().add(direction.clone().multiplyScalar(getTrueCoordinateStarRadius(star) * 0.98));
       const pullback = Math.max(labelObj.scale.x, labelObj.scale.y) * 0.44;
-      lineEnd = labelPos.clone().add(offset.clone().normalize().multiplyScalar(-pullback));
+      lineEnd = labelPos.clone().add(direction.multiplyScalar(-pullback));
     }
-    lineObj.geometry.setFromPoints([starPos, lineEnd]);
+    lineObj.geometry.setFromPoints([lineStart, lineEnd]);
   }
 
   render(camera) {
@@ -296,11 +314,19 @@ export class LabelManager {
       const offset = this.getTrueCoordinateCameraOffset(star, starPos, camera);
       const labelPos = starPos.clone().add(offset);
       labelObj.position.copy(labelPos);
-      this.updateLineGeometry(starPos, labelPos, offset, labelObj, lineObj);
+      this.updateLineGeometry(star, starPos, labelPos, offset, labelObj, lineObj);
     });
   }
 
   refreshLabels(stars) {
+    this.systemSurfaceRadii.clear();
+    stars.forEach(star => {
+      if (!star?.displayVisible) return;
+      const system = getStarSystemName(star);
+      const radius = getTrueCoordinateStarRadius(star);
+      this.systemSurfaceRadii.set(system, Math.max(this.systemSurfaceRadii.get(system) ?? 0, radius));
+    });
+
     const inNewSet = new Set(stars);
     stars.forEach(star => { if (star.displayVisible && star.displayName) this.createOrUpdateLabel(star); });
     this.sprites.forEach((labelObj, star) => {
@@ -315,7 +341,7 @@ export class LabelManager {
   removeAllLabels() {
     this.sprites.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
     this.lines.forEach(obj => { this.scene.remove(obj); disposeObject3D(obj); });
-    this.sprites.clear(); this.lines.clear(); this.labelCache.clear(); this.systemSlots.clear();
+    this.sprites.clear(); this.lines.clear(); this.labelCache.clear(); this.systemSlots.clear(); this.systemSurfaceRadii.clear();
   }
 
   setLabelOpacity(opacity) {
