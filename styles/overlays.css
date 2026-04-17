@@ -13,12 +13,6 @@
   box-shadow: 0 0 3px rgba(0,0,0,0.5);
 }
 
-.true-coordinate-label-overlay {
-  position: absolute;
-  pointer-events: none;
-  z-index: 6;
-}
-
 /* Fullscreen CSS so that the element in fullscreen fills the viewport */
 :fullscreen {
   width: 100vw;
@@ -27,19 +21,5 @@
 :-webkit-full-screen {
   width: 100vw;
   height: 100vh;
-}
-
-.map-container:fullscreen,
-.map-container:-webkit-full-screen {
-  max-width: none;
-  margin: 0;
-  padding: 12px;
-  border-radius: 0;
-  box-sizing: border-box;
-}
-
-.map-container:fullscreen canvas,
-.map-container:-webkit-full-screen canvas {
-  height: calc(100vh - 120px);
 }
 
