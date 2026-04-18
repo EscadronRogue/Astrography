@@ -1,0 +1,846 @@
+/* =========================================================================
+   Astrography — Aesthetic overhaul
+   Layered on top of the existing CSS. Original files remain untouched.
+   Three themes selectable via [data-theme] on <html>:
+     "observatory" (default)  — ink navy + amber, scientific instrument feel
+     "editorial"              — near-black + warm ivory, refined serif
+     "coral"                  — tamed version of the original coral palette
+   ========================================================================= */
+
+/* ---------- Global token defaults (observatory) ----------------------- */
+:root,
+html[data-theme="observatory"] {
+  --bg:            #070a12;
+  --bg-elev-1:     #0b1020;
+  --bg-elev-2:     #0f1530;
+  --surface:       rgba(14, 20, 40, 0.72);
+  --surface-solid: #0f1530;
+  --hairline:      rgba(160, 180, 220, 0.10);
+  --hairline-strong: rgba(160, 180, 220, 0.18);
+
+  --fg:            #e7ecf5;
+  --fg-muted:      #96a0b8;
+  --fg-dim:        #6b7590;
+
+  --accent:        #f0b64b;   /* amber */
+  --accent-soft:   rgba(240, 182, 75, 0.14);
+  --accent-strong: #ffcf7a;
+  --accent-ink:    #1b1305;
+
+  --danger:        #f47174;
+
+  --shadow-1: 0 1px 0 rgba(255,255,255,0.02) inset, 0 8px 24px rgba(0,0,0,0.35);
+  --radius-sm: 4px;
+  --radius:    6px;
+  --radius-lg: 10px;
+
+  --font-ui:      "Inter", "Oswald", system-ui, -apple-system, sans-serif;
+  --font-display: "Oswald", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --header-height: 56px;
+}
+
+/* ---------- Base reset-ish -------------------------------------------- */
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv11";
+}
+
+body {
+  /* override inline overflow:hidden allowance */
+  background:
+    radial-gradient(1200px 600px at 80% -10%, color-mix(in oklab, var(--accent) 6%, transparent), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, color-mix(in oklab, var(--accent) 4%, transparent), transparent 60%),
+    var(--bg);
+}
+
+/* Numeric inputs and value readouts use mono. */
+input[type="number"],
+#star-opacity-value, #star-name-opacity-value,
+#connection-opacity-value, #connection-value,
+#density-value, #density-top-value, #density-bottom-value, #density-opacity-value,
+#isolation-value, #isolation-tolerance-value, #density-tolerance-value,
+#tooltip-distance, #tooltip-apparentMag, #tooltip-absoluteMag, #tooltip-mass {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Loader ---------------------------------------------------- */
+#loader {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+#loader::before {
+  content: "";
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--hairline-strong);
+  border-top-color: var(--accent);
+  animation: ag-spin 0.9s linear infinite;
+  margin-right: 14px;
+}
+@keyframes ag-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Header ---------------------------------------------------- */
+header {
+  height: var(--header-height);
+  background: linear-gradient(to bottom,
+    color-mix(in oklab, var(--bg-elev-2) 95%, transparent),
+    color-mix(in oklab, var(--bg-elev-1) 95%, transparent));
+  border-bottom: 1px solid var(--hairline);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  justify-content: flex-start;
+  padding: 0 14px 0 8px;
+}
+
+#menu-toggle {
+  position: static;
+  transform: none;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--fg-muted);
+  border-radius: var(--radius-sm);
+  transition: background 120ms ease, color 120ms ease;
+}
+#menu-toggle:hover { background: var(--hairline); color: var(--fg); }
+
+header h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 16px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--fg);
+  text-shadow: none;
+  margin-left: 10px;
+}
+
+/* Wordmark lockup: add a subtle dot before the title */
+header h1::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 12px;
+  vertical-align: middle;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Header right-side toolbar (added by enhance.js) */
+.ag-header-spacer { flex: 1; }
+.ag-header-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- Main container -------------------------------------------- */
+.main-container {
+  margin-top: var(--header-height);
+  height: calc(100vh - var(--header-height));
+}
+
+/* ---------- Maps section & cards -------------------------------------- */
+.maps-section {
+  background: transparent;
+  padding: 28px 28px 60px;
+}
+
+.map-container {
+  max-width: 1280px;
+  margin: 0 auto 28px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+  padding: 22px 22px 18px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  position: relative;
+  overflow: hidden;
+}
+.map-container::before {
+  /* subtle top hairline highlight */
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--hairline-strong), transparent);
+  pointer-events: none;
+}
+
+.map-container h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--fg);
+  text-shadow: none;
+  margin: 0 0 4px;
+}
+.map-container h2::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 1px;
+  background: var(--accent);
+  margin-right: 4px;
+  transform: translateY(-4px);
+}
+
+.map-subtitle {
+  margin: 0 0 16px;
+  color: var(--fg-muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.map-container canvas {
+  background: var(--bg-elev-1);
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+}
+
+/* Legacy ribbon restyle */
+.legacy-map-container {
+  opacity: 0.96;
+}
+.legacy-map-container h2::after {
+  content: "Legacy";
+  margin-left: 8px;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  border: 1px solid var(--hairline-strong);
+  padding: 2px 7px;
+  border-radius: 999px;
+  vertical-align: middle;
+  background: transparent;
+}
+
+/* ---------- Fullscreen button ----------------------------------------- */
+.fullscreen-btn {
+  top: 18px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 14px;
+  color: var(--fg-muted);
+  background: var(--bg-elev-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+.fullscreen-btn:hover {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 40%, var(--hairline));
+  background: var(--bg-elev-2);
+}
+
+/* ---------- Export controls ------------------------------------------- */
+.export-controls {
+  bottom: 18px;
+  right: 18px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 6px;
+  gap: 4px;
+}
+.export-controls button,
+.export-controls select {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  cursor: pointer;
+}
+.export-controls button:hover {
+  color: var(--fg);
+  background: var(--hairline);
+}
+.export-controls button.active,
+.export-btn.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+
+/* ---------- Sidebar --------------------------------------------------- */
+.sidebar {
+  top: var(--header-height);
+  width: 328px;
+  padding: 0;
+  background: color-mix(in oklab, var(--bg-elev-1) 92%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-right: 1px solid var(--hairline);
+  box-shadow: 12px 0 30px rgba(0,0,0,0.35);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  border: 0;
+  padding: 20px 22px 12px;
+  margin: 0;
+}
+
+/* Sidebar search (injected by enhance.js) */
+.ag-filter-search {
+  position: relative;
+  padding: 0 18px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+.ag-filter-search input {
+  width: 100%;
+  background: var(--bg-elev-2);
+  color: var(--fg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 9px 12px 9px 32px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.ag-filter-search input::placeholder { color: var(--fg-dim); }
+.ag-filter-search input:focus {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--hairline));
+  background: var(--bg-elev-1);
+}
+.ag-filter-search::before {
+  content: "";
+  position: absolute;
+  left: 28px;
+  top: 50%;
+  transform: translateY(-60%);
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--fg-dim);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.ag-filter-search::after {
+  content: "";
+  position: absolute;
+  left: 38px;
+  top: 50%;
+  width: 6px;
+  height: 1.5px;
+  background: var(--fg-dim);
+  transform: translateY(0) rotate(45deg);
+  transform-origin: left center;
+  pointer-events: none;
+}
+.ag-filter-search kbd {
+  position: absolute;
+  right: 26px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-dim);
+  background: var(--bg-elev-1);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  padding: 2px 5px;
+  pointer-events: none;
+}
+
+/* Form scrolls */
+#filters-form {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 14px 30px;
+  flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) transparent;
+}
+#filters-form::-webkit-scrollbar { width: 8px; }
+#filters-form::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: 4px;
+}
+
+/* Fieldsets -> clean rows */
+.sidebar fieldset {
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+}
+.sidebar fieldset:first-of-type { border-top: 0; }
+
+.sidebar legend {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 8px 14px 12px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--fg);
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--radius-sm);
+  transition: color 120ms ease, background 120ms ease;
+}
+.sidebar legend:hover {
+  background: var(--hairline);
+  color: var(--fg);
+}
+.sidebar legend::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--fg-muted);
+  border-bottom: 1.5px solid var(--fg-muted);
+  transform: rotate(-45deg);
+  transition: transform 200ms ease;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+.sidebar legend.active::after {
+  transform: rotate(45deg);
+}
+
+.filter-content {
+  /* Collapsed: zero vertical padding so nothing peeks below the legend.
+     Horizontal padding only applies when expanded. */
+  padding: 0;
+  transition: max-height 0.22s ease, padding 0.22s ease;
+}
+.sidebar legend.active + .filter-content {
+  max-height: 2000px;
+  padding: 0 12px 18px;
+}
+
+/* Filter items */
+.filter-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg);
+}
+.filter-item label {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--fg);
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+}
+
+/* Checkbox & radio — clean bordered look */
+.sidebar .filter-item input[type="checkbox"],
+.sidebar .filter-item input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--hairline-strong);
+  background: var(--bg-elev-2);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+  margin: 0;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.sidebar .filter-item input[type="checkbox"] { border-radius: 3px; }
+.sidebar .filter-item input[type="radio"]    { border-radius: 50%; }
+.sidebar .filter-item input[type="checkbox"]:hover,
+.sidebar .filter-item input[type="radio"]:hover {
+  border-color: color-mix(in oklab, var(--accent) 60%, var(--hairline-strong));
+}
+.sidebar .filter-item input[type="checkbox"]:checked,
+.sidebar .filter-item input[type="radio"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.sidebar .filter-item input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 5px;
+  height: 9px;
+  border: solid var(--accent-ink);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.sidebar .filter-item input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--accent-ink);
+}
+.sidebar .filter-item input[type="checkbox"]:focus-visible,
+.sidebar .filter-item input[type="radio"]:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* Range sliders */
+.filter-item input[type="range"] {
+  width: 100%;
+  height: 2px;
+  background: var(--hairline-strong);
+  border-radius: 2px;
+  margin: 8px 0 4px;
+  accent-color: var(--accent);
+}
+.filter-item input[type="range"]:hover { background: var(--hairline-strong); }
+.filter-item input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border: 2px solid var(--bg-elev-1);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--accent);
+  transition: transform 100ms ease;
+}
+.filter-item input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.filter-item input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border: 2px solid var(--bg-elev-1);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.filter-item input[type="range"]:disabled,
+.filter-item input[type="number"]:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Number inputs */
+.filter-item input[type="number"] {
+  background: var(--bg-elev-2);
+  color: var(--fg);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px;
+  width: 62px;
+  font-size: 12px;
+  text-align: right;
+  outline: none;
+}
+.filter-item input[type="number"]:focus {
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--hairline));
+}
+/* Hide spinner arrows */
+.filter-item input[type="number"]::-webkit-outer-spin-button,
+.filter-item input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.filter-item input[type="number"] { -moz-appearance: textfield; }
+
+/* value readouts pill */
+#star-opacity-value, #star-name-opacity-value,
+#connection-opacity-value, #density-opacity-value,
+#density-value, #density-top-value, #density-bottom-value,
+#isolation-value, #isolation-tolerance-value, #density-tolerance-value {
+  color: var(--accent);
+  font-weight: 500;
+  font-size: 11px;
+  margin-left: 2px;
+  letter-spacing: 0.04em;
+}
+
+/* Slider label row should break to its own line */
+.filter-item > label[for$="-slider"],
+.filter-item > label[for$="-number"] {
+  flex-basis: 100%;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-bottom: 2px;
+}
+
+/* Buttons inside filter items */
+.filter-item button,
+#clear-saved-presets,
+#download-edits,
+#upload-edits {
+  background: var(--bg-elev-2);
+  color: var(--fg);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.filter-item button:hover,
+#clear-saved-presets:hover,
+#download-edits:hover,
+#upload-edits:hover {
+  color: var(--accent);
+  border-color: color-mix(in oklab, var(--accent) 55%, var(--hairline-strong));
+}
+
+.filter-toggle-button {
+  width: 100%;
+  padding: 9px 10px !important;
+  text-align: center;
+}
+.filter-toggle-button.is-active {
+  background: var(--accent) !important;
+  color: var(--accent-ink) !important;
+  border-color: var(--accent) !important;
+}
+
+/* Stellar class subcategory */
+.stellar-class-subcategory {
+  border-bottom: 1px solid var(--hairline);
+  padding: 8px 0;
+  margin: 0;
+}
+.stellar-class-subcategory:last-child { border-bottom: 0; }
+.subcategory-header {
+  background: transparent;
+  color: var(--fg);
+  padding: 6px 8px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  margin: 0;
+}
+.subcategory-header:hover {
+  background: var(--hairline);
+  color: var(--accent);
+}
+.subcategory-content {
+  background: transparent;
+  padding: 4px 8px 8px;
+}
+
+/* Filter-search hiding */
+fieldset.ag-hidden,
+.filter-item.ag-hidden,
+.stellar-class-subcategory.ag-hidden {
+  display: none !important;
+}
+
+/* ---------- Tooltip --------------------------------------------------- */
+#tooltip {
+  background: color-mix(in oklab, var(--bg-elev-2) 92%, transparent);
+  color: var(--fg);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  max-width: 240px;
+}
+#tooltip-starName {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+#tooltip-systemName {
+  font-size: 11px;
+  color: var(--fg-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+#tooltip-distance,
+#tooltip-stellarClass,
+#tooltip-mass,
+#tooltip-apparentMag,
+#tooltip-absoluteMag {
+  color: var(--fg);
+  font-size: 11.5px;
+  margin-top: 4px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* ---------- Viewpoint banner ----------------------------------------- */
+#viewpoint-banner {
+  top: var(--header-height) !important;
+  background: color-mix(in oklab, var(--bg-elev-2) 95%, transparent) !important;
+  border: 1px solid var(--hairline-strong) !important;
+  border-top: none !important;
+  color: var(--accent) !important;
+  font-family: var(--font-ui) !important;
+  font-size: 12px !important;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 8px 18px !important;
+}
+#viewpoint-banner-reset {
+  background: var(--accent) !important;
+  color: var(--accent-ink) !important;
+  border-radius: 4px !important;
+  padding: 4px 10px !important;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  font-family: var(--font-ui) !important;
+  font-size: 10px !important;
+  text-transform: uppercase;
+}
+
+/* ---------- Label overlay handle ------------------------------------- */
+#label-edit-overlay .handle {
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  border: 2px solid var(--bg-elev-1);
+  color: var(--accent-ink);
+  font-size: 18px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+/* Labels on map */
+.label-container .label {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--fg);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.7);
+  box-shadow: none;
+  background: transparent;
+}
+
+/* ---------- Export selection rect ------------------------------------ */
+#export-selection-rect {
+  border: 1.5px dashed var(--accent);
+  background: color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+/* ---------- Responsive tightening ------------------------------------ */
+@media (max-width: 800px) {
+  .sidebar { width: 86vw; max-width: 340px; }
+  .maps-section { padding: 16px 14px 40px; }
+  .map-container { padding: 16px 14px 14px; }
+  .ag-header-tools }
+
+/* ---------- Sidebar section labels & subheads ------------------------ */
+.ag-section {
+  padding: 20px 20px 6px;
+  margin-top: 2px;
+}
+.ag-section:first-of-type { padding-top: 10px; }
+.ag-section-label {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--fg-dim);
+  position: relative;
+  display: inline-block;
+  padding-right: 10px;
+}
+.ag-section-label::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  width: 999px;
+  height: 1px;
+  background: var(--hairline);
+  transform: translateY(-0.5px);
+}
+
+/* Sub-headings inside a fieldset (e.g. Size / Color / Opacity) */
+.filter-subhead {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--accent);
+  margin: 14px 0 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--hairline);
+}
+.filter-subhead:first-child {
+  margin-top: 2px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* inline meta (e.g. viewpoint label in legend) */
+.ag-legend-meta {
+  margin-left: 8px;
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* Fieldset rhythm: tighter margin since we now have section headers */
+.sidebar fieldset { border-top: 1px solid var(--hairline); }
+.ag-section + fieldset { border-top: 0; }

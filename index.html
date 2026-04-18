@@ -5,15 +5,21 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Astrography</title>
-  <link href="https://fonts.googleapis.com/css2?family=Oswald&family=Cormorant+Garamond:wght@300;400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   
-  <link rel="stylesheet" href="styles/base.css" />
-  <link rel="stylesheet" href="styles/sidebar.css" />
-  <link rel="stylesheet" href="styles/layout.css" />
-  <link rel="stylesheet" href="styles/panels.css" />
-  <link rel="stylesheet" href="styles/overlays.css" />
-  <link rel="stylesheet" href="styles/responsive.css" />
-  <link rel="stylesheet" href="styles/export.css" />
+  <link rel="stylesheet" href="styles/base.css?v=1776519673389" />
+  <link rel="stylesheet" href="styles/sidebar.css?v=1776519673389" />
+  <link rel="stylesheet" href="styles/layout.css?v=1776519673389" />
+  <link rel="stylesheet" href="styles/panels.css?v=1776519673389" />
+  <link rel="stylesheet" href="styles/overlays.css?v=1776519673389" />
+  <link rel="stylesheet" href="styles/responsive.css?v=1776519673389" />
+  <link rel="stylesheet" href="styles/export.css?v=1776519673389" />
+  <link rel="stylesheet" href="styles/theme.css?v=1776519673389" />
+  <script>
+    (function(){ try { var t = localStorage.getItem("ag-theme") || "observatory";
+      document.documentElement.setAttribute("data-theme", t); } catch(e) {
+      document.documentElement.setAttribute("data-theme", "observatory"); } })();
+  </script>
 </head>
 <body>
   <!-- Loader -->
@@ -30,9 +36,11 @@
     <aside class="sidebar">
       <h2>Filters</h2>
       <form id="filters-form">
-        <!-- Map Projection Filter Fieldset -->
+        <!-- ═══ 1. VIEW ═══════════════════════════════════════════════ -->
+        <div class="ag-section"><span class="ag-section-label">View</span></div>
+
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Map Projections</legend>
+          <legend class="collapsible" aria-expanded="false">Projections</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="map-true" name="map-projection" value="true" checked />
@@ -45,10 +53,6 @@
             <div class="filter-item">
               <input type="checkbox" id="map-globe" name="map-projection" value="globe" checked />
               <label for="map-globe">Globe (UV Projection)</label>
-            </div>
-            <div class="filter-item filter-button-row">
-              <input type="checkbox" id="enable-star-interactions" name="enable-star-interactions" class="visually-hidden" checked />
-              <button type="button" id="toggle-star-interactions" class="filter-toggle-button" aria-pressed="true">Tooltips &amp; Star Selection: On</button>
             </div>
             <div class="filter-item">
               <input type="checkbox" id="show-legacy-projections" name="show-legacy-projections" />
@@ -66,7 +70,51 @@
             </div>
           </div>
         </fieldset>
-        <!-- Stellar Class Filter Fieldset -->
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Interaction</legend>
+          <div class="filter-content">
+            <div class="filter-item filter-button-row">
+              <input type="checkbox" id="enable-star-interactions" name="enable-star-interactions" class="visually-hidden" checked />
+              <button type="button" id="toggle-star-interactions" class="filter-toggle-button" aria-pressed="true">Tooltips &amp; Star Selection: On</button>
+            </div>
+          </div>
+        </fieldset>
+        <div id="ag-slot-view"></div>
+
+        <!-- ═══ 2. STARS ══════════════════════════════════════════════ -->
+        <div class="ag-section"><span class="ag-section-label">Stars</span></div>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Visibility &amp; Distance <span id="distance-viewpoint-label" class="ag-legend-meta"></span></legend>
+          <div class="filter-content">
+            <div class="filter-subhead">Visibility</div>
+            <div class="filter-item">
+              <input type="radio" id="stars-shown-all" name="stars-shown" value="all" checked />
+              <label for="stars-shown-all">All Stars</label>
+            </div>
+            <div class="filter-item">
+              <input type="radio" id="stars-shown-visible" name="stars-shown" value="visible" />
+              <label for="stars-shown-visible">Visible Stars (Magnitude ≤ 6)</label>
+            </div>
+            <div class="filter-subhead">Distance Range (LY)</div>
+            <div class="filter-item">
+              <label for="min-distance-slider">Minimum:</label>
+              <input type="range" id="min-distance-slider" min="0" max="100" value="0" />
+              <input type="number" id="min-distance-number" name="min-distance" min="0" max="100" value="0" />
+            </div>
+            <div class="filter-item">
+              <label for="max-distance-slider">Maximum:</label>
+              <input type="range" id="max-distance-slider" min="0" max="100" value="20" />
+              <input type="number" id="max-distance-number" name="max-distance" min="0" max="100" value="20" />
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="show-distance-in-labels" name="show-distance-in-labels" checked />
+              <label for="show-distance-in-labels">Show Distance In Star Labels</label>
+            </div>
+          </div>
+        </fieldset>
+
         <fieldset>
           <legend class="collapsible" aria-expanded="false">Stellar Class</legend>
           <div class="filter-content">
@@ -74,10 +122,10 @@
           </div>
         </fieldset>
 
-        <!-- Size Filter -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Size</legend>
+          <legend class="collapsible" aria-expanded="false">Appearance</legend>
           <div class="filter-content">
+            <div class="filter-subhead">Size</div>
             <div class="filter-item">
               <input type="radio" id="size-stellar-class" name="size" value="stellar-class" checked />
               <label for="size-stellar-class">Stellar Class-Based</label>
@@ -86,13 +134,7 @@
               <input type="radio" id="size-distance" name="size" value="distance" />
               <label for="size-distance">Distance-Based</label>
             </div>
-          </div>
-        </fieldset>
-
-        <!-- Color Filter -->
-        <fieldset>
-          <legend class="collapsible" aria-expanded="false">Color</legend>
-          <div class="filter-content">
+            <div class="filter-subhead">Color</div>
             <div class="filter-item">
               <input type="radio" id="color-stellar-class" name="color" value="stellar-class" checked />
               <label for="color-stellar-class">Stellar Class-Based</label>
@@ -105,13 +147,7 @@
               <input type="radio" id="color-galactic-plane" name="color" value="galactic-plane" />
               <label for="color-galactic-plane">Galactic Plane</label>
             </div>
-          </div>
-        </fieldset>
-
-        <!-- Opacity Filter -->
-        <fieldset>
-          <legend class="collapsible" aria-expanded="false">Opacity</legend>
-          <div class="filter-content">
+            <div class="filter-subhead">Opacity</div>
             <div class="filter-item">
               <input type="radio" id="opacity-absolute-mag" name="opacity" value="absolute-magnitude" checked />
               <label for="opacity-absolute-mag">Absolute Magnitude-Based</label>
@@ -135,53 +171,27 @@
           </div>
         </fieldset>
 
-        <!-- Stars Shown Filter -->
-        <fieldset>
-          <legend class="collapsible" aria-expanded="false">Stars Shown</legend>
-          <div class="filter-content">
-            <div class="filter-item">
-              <input type="radio" id="stars-shown-all" name="stars-shown" value="all" checked />
-              <label for="stars-shown-all">All Stars</label>
-            </div>
-            <div class="filter-item">
-              <input type="radio" id="stars-shown-visible" name="stars-shown" value="visible" />
-              <label for="stars-shown-visible">Visible Stars (Magnitude ≤ 6)</label>
-            </div>
-          </div>
-        </fieldset>
+        <!-- ═══ 3. OVERLAYS & ANALYSIS ═══════════════════════════════ -->
+                <!-- ═══ 3a. FEATURES ═══════════════════════════════════════ -->
+        <div class="ag-section"><span class="ag-section-label">Features</span></div>
+        <!-- Constellations / Dust Clouds / Dust Cloud Density fieldsets
+             are injected dynamically by buildSidebar.js and relocated here
+             by src/ui/enhance.js. -->
+        <div id="ag-slot-features"></div>
 
-        <!-- Distance Filter Fieldset -->
-        <fieldset>
-          <legend class="collapsible" aria-expanded="false">Distance Filter (LY) <span id="distance-viewpoint-label" style="font-weight:normal;font-size:0.85em;color:#ff6f61;"></span></legend>
-          <div class="filter-content">
-            <div class="filter-item">
-              <label for="min-distance-slider">Minimum Distance:</label>
-              <input type="range" id="min-distance-slider" min="0" max="100" value="0" />
-              <input type="number" id="min-distance-number" name="min-distance" min="0" max="100" value="0" />
-            </div>
-            <div class="filter-item">
-              <label for="max-distance-slider">Maximum Distance:</label>
-              <input type="range" id="max-distance-slider" min="0" max="100" value="20" />
-              <input type="number" id="max-distance-number" name="max-distance" min="0" max="100" value="20" />
-            </div>
-            <div class="filter-item">
-              <input type="checkbox" id="show-distance-in-labels" name="show-distance-in-labels" checked />
-              <label for="show-distance-in-labels">Show Distance In Star Labels</label>
-            </div>
-          </div>
-        </fieldset>
+        <div class="ag-section"><span class="ag-section-label">Analysis</span></div>
 
-        <!-- Connections Filter -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Connections (LY)</legend>
+          <legend class="collapsible" aria-expanded="false">Connections</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-connections" name="enable-connections" />
               <label for="enable-connections">Enable Connections</label>
             </div>
             <div class="filter-item">
+              <label for="connection-slider">Max Distance (LY):</label>
               <input type="range" id="connection-slider" name="connections" min="1" max="50" value="7" disabled />
-              <input type="number" id="connection-number" name="connections" min="1" max="50" value="7" disabled /> Light Years
+              <input type="number" id="connection-number" name="connections" min="1" max="50" value="7" disabled />
             </div>
             <div class="filter-item">
               <label for="connection-opacity-slider">Line Opacity:</label>
@@ -207,9 +217,8 @@
           </div>
         </fieldset>
 
-        <!-- Isolation Filter Fieldset -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Isolation Filter</legend>
+          <legend class="collapsible" aria-expanded="false">Isolation</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-isolation-filter" name="enable-isolation-filter" />
@@ -219,15 +228,15 @@
               <label for="isolation-slider">Isolation Distance (LY):</label>
               <input type="range" id="isolation-slider" name="isolation" min="1" max="20" value="5" disabled />
               <input type="number" id="isolation-number" name="isolation" min="1" max="20" value="5" disabled />
-              <span id="isolation-value">5</span> LY
+              <span id="isolation-value">5</span>
             </div>
             <div class="filter-item">
-              <label>Ignore this many closest stars: <span id="isolation-tolerance-value">0</span></label>
+              <label>Ignore closest stars: <span id="isolation-tolerance-value">0</span></label>
               <input type="range" id="isolation-tolerance-slider" name="isolation-tolerance" min="0" max="10" value="0" disabled />
             </div>
             <div class="filter-item">
               <input type="checkbox" id="enable-isolation-labeling" name="enable-isolation-labeling" />
-              <label for="enable-isolation-labeling">Enable Isolation Cluster Labeling &amp; Segmentation</label>
+              <label for="enable-isolation-labeling">Cluster Labeling &amp; Segmentation</label>
             </div>
             <div class="filter-item">
               <label for="isolation-grid-slider">Grid Subdivision:</label>
@@ -237,22 +246,22 @@
           </div>
         </fieldset>
 
-        <!-- Density Filter Fieldset -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Density Filter</legend>
+          <legend class="collapsible" aria-expanded="false">Density</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-density-filter" name="enable-density-filter" />
               <label for="enable-density-filter">Enable Density Filter</label>
             </div>
+            <div class="filter-subhead">Sampling</div>
             <div class="filter-item">
               <label for="density-slider">Density Radius (LY):</label>
               <input type="range" id="density-slider" name="density" min="1" max="20" value="10" disabled />
               <input type="number" id="density-number" name="density" min="1" max="20" value="10" disabled />
-              <span id="density-value">10</span> LY
+              <span id="density-value">10</span>
             </div>
             <div class="filter-item">
-              <label>Ignore this many closest stars: <span id="density-tolerance-value">0</span></label>
+              <label>Ignore closest stars: <span id="density-tolerance-value">0</span></label>
               <input type="range" id="density-tolerance-slider" name="density-tolerance" min="0" max="10" value="0" disabled />
             </div>
             <div class="filter-item">
@@ -267,15 +276,17 @@
               <input type="number" id="density-top-number" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
               <span id="density-top-value">10</span>%
             </div>
+            <div class="filter-subhead">Clustering</div>
             <div class="filter-item">
               <input type="checkbox" id="enable-density-labeling" name="enable-density-labeling" />
-              <label for="enable-density-labeling">Enable Density Cluster Labeling &amp; Segmentation</label>
+              <label for="enable-density-labeling">Cluster Labeling &amp; Segmentation</label>
             </div>
             <div class="filter-item">
               <label for="density-grid-slider">Grid Subdivision:</label>
               <input type="range" id="density-grid-slider" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
               <input type="number" id="density-grid-number" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
             </div>
+            <div class="filter-subhead">Rendering</div>
             <div class="filter-item">
               <label for="density-opacity-slider">Overlay Opacity:</label>
               <input type="range" id="density-opacity-slider" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
@@ -294,17 +305,21 @@
             </div>
           </div>
         </fieldset>
-        <!-- Save Presets Fieldset -->
+
+        <!-- ═══ 4. SESSION ═══════════════════════════════════════════ -->
+        <div class="ag-section"><span class="ag-section-label">Session</span></div>
+
         <fieldset id="save-presets-fieldset">
-          <legend class="collapsible" aria-expanded="false">Save Presets</legend>
+          <legend class="collapsible" aria-expanded="false">Presets &amp; Edits</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-save-presets" name="enable-save-presets" />
               <label for="enable-save-presets">Remember Filters &amp; Edits</label>
             </div>
-            <div class="filter-item">
+            <div class="filter-item filter-button-row">
               <button type="button" id="clear-saved-presets">Clear Saved Presets</button>
             </div>
+            <div class="filter-subhead">Export / Import</div>
             <div class="filter-item">
               <button type="button" id="download-edits">Download Edits</button>
               <button type="button" id="upload-edits">Upload Edits</button>
@@ -383,5 +398,6 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script type="module" src="src/main.js"></script>
+  <script src="src/ui/enhance.js" defer></script>
 </body>
 </html>
