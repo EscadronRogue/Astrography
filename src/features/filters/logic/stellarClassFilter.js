@@ -18,8 +18,9 @@ function formatLabelDistance(distance) {
 function buildDisplayName(star, showDistanceInLabels) {
   const baseName = star.Common_name_of_the_star || star.Common_name_of_the_star_system || '';
   if (!baseName) return '';
-  if (!showDistanceInLabels || !Number.isFinite(star.distance)) return baseName;
-  return `${baseName} (${formatLabelDistance(star.distance)})`;
+  const dist = star.viewpointDistance ?? star.distance;
+  if (!showDistanceInLabels || !Number.isFinite(dist)) return baseName;
+  return `${baseName} (${formatLabelDistance(dist)})`;
 }
 
 /**
