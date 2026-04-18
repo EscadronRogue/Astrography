@@ -619,17 +619,14 @@ export class UVMapManager {
     boundaries.forEach(boundary => {
       const points = Array.isArray(boundary?.raDecPolygon) ? boundary.raDecPolygon : [];
       if (points.length < 2) return;
-      const closedPoints = points.map(point => ({
-        ra: THREE.MathUtils.degToRad(point.ra),
-        dec: THREE.MathUtils.degToRad(point.dec)
-      }));
+      const closedPoints = points.map(point => raDecToUV(
+        normalizeRightAscension(THREE.MathUtils.degToRad(point.ra)),
+        THREE.MathUtils.degToRad(point.dec)
+      ));
       for (let i = 0; i < closedPoints.length; i++) {
         const current = closedPoints[i];
         const next = closedPoints[(i + 1) % closedPoints.length];
-        const uvPoints = sampleGreatCircleUvFromRaDec(current.ra, current.dec, next.ra, next.dec, 100, 12);
-        for (let j = 0; j < uvPoints.length - 1; j++) {
-          splitWrappedUvSegment(uvPoints[j], uvPoints[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
-        }
+        splitWrappedUvSegment(current, next).forEach(([start, end]) => strokeUvSegment(ctx, start, end));
       }
     });
     ctx.restore();

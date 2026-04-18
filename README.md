@@ -137,6 +137,7 @@ The repository includes constellation and stellar classification reference files
 
 At present, the runtime uses a mix of JSON and text-backed sources depending on the feature.
 That is functional, but it is important to know that the data layer is not fully standardized yet.
+The checked-in constellation boundary and center files are intended to be J2000-aligned display data; they can be regenerated from the authoritative J2000-derived Delporte data via `scripts/generateConstellationJ2000Data.mjs`.
 
 ---
 

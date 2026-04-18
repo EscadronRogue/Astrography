@@ -1,7 +1,7 @@
 // Constellation boundary and label rendering migrated from the legacy constellation filter module.
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, greatCircleToMollweide } from '../../shared/geometryUtils.js';
+import { radToSphere, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, greatCircleToMollweide } from '../../shared/geometryUtils.js';
 import { buildWideLineGeometry, createWideLineMaterial } from '../../render/engine/renderUtils.js';
 import { getDoubleSidedLabelMaterial } from '../density/densityColorScale.js';
 import {
@@ -19,32 +19,38 @@ import { CONSTELLATION_LINE_COLOR, createConstellationLabelCanvas, makeConstella
  * Creates constellation boundary line meshes for the Globe.
  */
 export function createConstellationBoundariesForGlobe(opacity = 0.4, lineWidth = 1) {
-  const lines = [];
   const R = 100;
   const lineColor = makeConstellationLineColor();
-  getConstellationBoundaries().forEach(b => {
-    const p1 = radToSphere(b.ra1, b.dec1, R);
-    const p2 = radToSphere(b.ra2, b.dec2, R);
-    // Create a smooth curved line using a CatmullRom curve
-    const curve = new THREE.CatmullRomCurve3(
-      getGreatCirclePoints(p1, p2, R, 32)
-    );
-    const points = curve.getPoints(32);
-    const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({
-      color: lineColor,
-      linewidth: lineWidth,
-      transparent: true,
-      opacity
-    });
-    const line = new THREE.Line(geometry, material);
-    line.userData = {
-      baseLineWidth: lineWidth,
-      baseOpacity: opacity
-    };
-    lines.push(line);
+  const segments = getConstellationBoundaries();
+  if (!segments.length) return [];
+
+  const positions = new Float32Array(segments.length * 2 * 3);
+  let index = 0;
+  segments.forEach(segment => {
+    const p1 = radToSphere(segment.ra1, segment.dec1, R);
+    const p2 = radToSphere(segment.ra2, segment.dec2, R);
+    positions[index++] = p1.x;
+    positions[index++] = p1.y;
+    positions[index++] = p1.z;
+    positions[index++] = p2.x;
+    positions[index++] = p2.y;
+    positions[index++] = p2.z;
   });
-  return lines;
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const material = new THREE.LineBasicMaterial({
+    color: lineColor,
+    linewidth: lineWidth,
+    transparent: true,
+    opacity
+  });
+  const lineSegments = new THREE.LineSegments(geometry, material);
+  lineSegments.userData = {
+    baseLineWidth: lineWidth,
+    baseOpacity: opacity
+  };
+  return [lineSegments];
 }
 
 function ensureVisibleConstellationMesh(lineSegs) {

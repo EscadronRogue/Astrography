@@ -1,447 +1,625 @@
 [
   {
     "name": "Andromeda",
-    "raDeg": 15.0,
-    "decDeg": 38.0
+    "abbrev": "AND",
+    "raDeg": 10.225377,
+    "decDeg": 39.592858,
+    "epoch": "J2000"
   },
   {
     "name": "Antlia",
-    "raDeg": 154.0,
-    "decDeg": -32.0
+    "abbrev": "ANT",
+    "raDeg": 152.101953,
+    "decDeg": -33.84212,
+    "epoch": "J2000"
   },
   {
     "name": "Apus",
-    "raDeg": 240.0,
-    "decDeg": -75.0
+    "abbrev": "APS",
+    "raDeg": 243.03058499999997,
+    "decDeg": -75.222818,
+    "epoch": "J2000"
   },
   {
     "name": "Aquarius",
-    "raDeg": 334.25,
-    "decDeg": -10.0
+    "abbrev": "AQR",
+    "raDeg": 336.1176615,
+    "decDeg": -10.156064,
+    "epoch": "J2000"
   },
   {
     "name": "Aquila",
-    "raDeg": 286.25,
-    "decDeg": 3.0
+    "abbrev": "AQL",
+    "raDeg": 294.7146885,
+    "decDeg": 2.09636,
+    "epoch": "J2000"
   },
   {
     "name": "Ara",
-    "raDeg": 255.0,
-    "decDeg": -55.0
+    "abbrev": "ARA",
+    "raDeg": 259.9280985,
+    "decDeg": -54.083561,
+    "epoch": "J2000"
   },
   {
     "name": "Aries",
-    "raDeg": 37.5,
-    "decDeg": 22.0
+    "abbrev": "ARI",
+    "raDeg": 39.935616,
+    "decDeg": 19.959053,
+    "epoch": "J2000"
   },
   {
     "name": "Auriga",
-    "raDeg": 82.5,
-    "decDeg": 42.0
+    "abbrev": "AUR",
+    "raDeg": 89.137608,
+    "decDeg": 40.621073,
+    "epoch": "J2000"
   },
   {
-    "name": "Bo\u00f6tes",
-    "raDeg": 217.5,
-    "decDeg": 30.0
+    "name": "Bootes",
+    "abbrev": "BOO",
+    "raDeg": 219.414762,
+    "decDeg": 29.108047,
+    "epoch": "J2000"
   },
   {
     "name": "Caelum",
-    "raDeg": 67.5,
-    "decDeg": -38.0
+    "abbrev": "CAE",
+    "raDeg": 71.17349100000001,
+    "decDeg": -38.014894,
+    "epoch": "J2000"
   },
   {
     "name": "Camelopardalis",
-    "raDeg": 90.0,
-    "decDeg": 70.0
+    "abbrev": "CAM",
+    "raDeg": 96.243336,
+    "decDeg": 68.435318,
+    "epoch": "J2000"
   },
   {
     "name": "Cancer",
-    "raDeg": 126.24999999999999,
-    "decDeg": 20.0
+    "abbrev": "CNC",
+    "raDeg": 130.248288,
+    "decDeg": 19.189402,
+    "epoch": "J2000"
   },
   {
     "name": "Canes Venatici",
-    "raDeg": 195.0,
-    "decDeg": 40.0
+    "abbrev": "CVN",
+    "raDeg": 197.21444400000001,
+    "decDeg": 40.041877,
+    "epoch": "J2000"
   },
   {
     "name": "Canis Major",
-    "raDeg": 102.5,
-    "decDeg": -20.0
+    "abbrev": "CMA",
+    "raDeg": 102.4535805,
+    "decDeg": -21.857106,
+    "epoch": "J2000"
   },
   {
     "name": "Canis Minor",
-    "raDeg": 112.5,
-    "decDeg": 5.0
+    "abbrev": "CMI",
+    "raDeg": 114.440019,
+    "decDeg": 5.897637,
+    "epoch": "J2000"
   },
   {
     "name": "Capricornus",
-    "raDeg": 315.0,
-    "decDeg": -20.0
+    "abbrev": "CAP",
+    "raDeg": 315.338625,
+    "decDeg": -18.550517,
+    "epoch": "J2000"
   },
   {
     "name": "Carina",
-    "raDeg": 135.0,
-    "decDeg": -60.0
+    "abbrev": "CAR",
+    "raDeg": 134.3083785,
+    "decDeg": -61.357069,
+    "epoch": "J2000"
   },
   {
     "name": "Cassiopeia",
-    "raDeg": 15.0,
-    "decDeg": 60.0
+    "abbrev": "CAS",
+    "raDeg": 17.528271,
+    "decDeg": 61.583129,
+    "epoch": "J2000"
   },
   {
     "name": "Centaurus",
-    "raDeg": 195.0,
-    "decDeg": -50.0
+    "abbrev": "CEN",
+    "raDeg": 196.060305,
+    "decDeg": -45.016238,
+    "epoch": "J2000"
   },
   {
     "name": "Cepheus",
-    "raDeg": 330.0,
-    "decDeg": 70.0
+    "abbrev": "CEP",
+    "raDeg": 344.572191,
+    "decDeg": 70.823912,
+    "epoch": "J2000"
   },
   {
     "name": "Cetus",
-    "raDeg": 30.0,
-    "decDeg": -10.0
+    "abbrev": "CET",
+    "raDeg": 24.2967165,
+    "decDeg": -8.727667,
+    "epoch": "J2000"
   },
   {
     "name": "Chamaeleon",
-    "raDeg": 165.0,
-    "decDeg": -78.0
+    "abbrev": "CHA",
+    "raDeg": 160.425198,
+    "decDeg": -78.993614,
+    "epoch": "J2000"
   },
   {
     "name": "Circinus",
-    "raDeg": 219.375,
-    "decDeg": -60.0
+    "abbrev": "CIR",
+    "raDeg": 221.562546,
+    "decDeg": -63.076879,
+    "epoch": "J2000"
   },
   {
     "name": "Columba",
-    "raDeg": 86.25,
-    "decDeg": -35.0
+    "abbrev": "COL",
+    "raDeg": 86.9024055,
+    "decDeg": -35.4414,
+    "epoch": "J2000"
   },
   {
     "name": "Coma Berenices",
-    "raDeg": 192.5,
-    "decDeg": 25.0
+    "abbrev": "COM",
+    "raDeg": 191.294487,
+    "decDeg": 22.223305,
+    "epoch": "J2000"
   },
   {
     "name": "Corona Australis",
-    "raDeg": 277.5,
-    "decDeg": -40.5
+    "abbrev": "CRA",
+    "raDeg": 279.7014825,
+    "decDeg": -41.05371,
+    "epoch": "J2000"
   },
   {
     "name": "Corona Borealis",
-    "raDeg": 236.25,
-    "decDeg": 35.0
+    "abbrev": "CRB",
+    "raDeg": 238.30847999999997,
+    "decDeg": 32.093072,
+    "epoch": "J2000"
   },
   {
     "name": "Corvus",
-    "raDeg": 187.5,
-    "decDeg": -20.0
+    "abbrev": "CRV",
+    "raDeg": 186.35888699999998,
+    "decDeg": -18.096379,
+    "epoch": "J2000"
   },
   {
     "name": "Crater",
-    "raDeg": 172.5,
-    "decDeg": -15.0
+    "abbrev": "CRT",
+    "raDeg": 171.1134525,
+    "decDeg": -15.650659,
+    "epoch": "J2000"
   },
   {
     "name": "Crux",
-    "raDeg": 187.5,
-    "decDeg": -60.0
+    "abbrev": "CRU",
+    "raDeg": 186.7223175,
+    "decDeg": -59.992374,
+    "epoch": "J2000"
   },
   {
     "name": "Cygnus",
-    "raDeg": 307.5,
-    "decDeg": 40.0
+    "abbrev": "CYG",
+    "raDeg": 309.150963,
+    "decDeg": 42.536327,
+    "epoch": "J2000"
   },
   {
     "name": "Delphinus",
-    "raDeg": 310.0,
-    "decDeg": 12.0
+    "abbrev": "DEL",
+    "raDeg": 310.203612,
+    "decDeg": 12.155585,
+    "epoch": "J2000"
   },
   {
     "name": "Dorado",
-    "raDeg": 75.0,
-    "decDeg": -65.0
+    "abbrev": "DOR",
+    "raDeg": 76.79486100000001,
+    "decDeg": -60.977305,
+    "epoch": "J2000"
   },
   {
     "name": "Draco",
-    "raDeg": 255.0,
-    "decDeg": 65.0
+    "abbrev": "DRA",
+    "raDeg": 249.86844000000002,
+    "decDeg": 64.184601,
+    "epoch": "J2000"
   },
   {
     "name": "Equuleus",
-    "raDeg": 317.5,
-    "decDeg": 7.0
+    "abbrev": "EQU",
+    "raDeg": 318.02673599999997,
+    "decDeg": 7.465545,
+    "epoch": "J2000"
   },
   {
     "name": "Eridanus",
-    "raDeg": 56.25,
-    "decDeg": -20.0
+    "abbrev": "ERI",
+    "raDeg": 56.137572,
+    "decDeg": -20.767627,
+    "epoch": "J2000"
   },
   {
     "name": "Fornax",
-    "raDeg": 37.5,
-    "decDeg": -30.0
+    "abbrev": "FOR",
+    "raDeg": 41.489409,
+    "decDeg": -31.21532,
+    "epoch": "J2000"
   },
   {
     "name": "Gemini",
-    "raDeg": 105.0,
-    "decDeg": 22.0
+    "abbrev": "GEM",
+    "raDeg": 107.337756,
+    "decDeg": 23.253119,
+    "epoch": "J2000"
   },
   {
     "name": "Grus",
-    "raDeg": 337.5,
-    "decDeg": -45.0
+    "abbrev": "GRU",
+    "raDeg": 338.012943,
+    "decDeg": -44.933537,
+    "epoch": "J2000"
   },
   {
     "name": "Hercules",
-    "raDeg": 255.0,
-    "decDeg": 30.0
+    "abbrev": "HER",
+    "raDeg": 259.3138335,
+    "decDeg": 28.118352,
+    "epoch": "J2000"
   },
   {
     "name": "Horologium",
-    "raDeg": 48.75,
-    "decDeg": -50.0
+    "abbrev": "HOR",
+    "raDeg": 48.490007999999996,
+    "decDeg": -52.974629,
+    "epoch": "J2000"
   },
   {
     "name": "Hydra",
-    "raDeg": 157.5,
-    "decDeg": -20.0
+    "abbrev": "HYA",
+    "raDeg": 158.51623949999998,
+    "decDeg": -17.137458,
+    "epoch": "J2000"
   },
   {
     "name": "Hydrus",
-    "raDeg": 37.5,
-    "decDeg": -70.0
+    "abbrev": "HYI",
+    "raDeg": 35.5186275,
+    "decDeg": -70.98557,
+    "epoch": "J2000"
   },
   {
     "name": "Indus",
-    "raDeg": 318.75,
-    "decDeg": -55.0
+    "abbrev": "IND",
+    "raDeg": 324.157434,
+    "decDeg": -58.121953,
+    "epoch": "J2000"
   },
   {
     "name": "Lacerta",
-    "raDeg": 337.5,
-    "decDeg": 45.0
+    "abbrev": "LAC",
+    "raDeg": 337.46083649999997,
+    "decDeg": 45.040691,
+    "epoch": "J2000"
   },
   {
     "name": "Leo",
-    "raDeg": 168.75,
-    "decDeg": 15.0
+    "abbrev": "LEO",
+    "raDeg": 160.399506,
+    "decDeg": 14.780165,
+    "epoch": "J2000"
   },
   {
     "name": "Leo Minor",
-    "raDeg": 157.5,
-    "decDeg": 35.0
+    "abbrev": "LMI",
+    "raDeg": 155.235624,
+    "decDeg": 33.320787,
+    "epoch": "J2000"
   },
   {
     "name": "Lepus",
-    "raDeg": 82.5,
-    "decDeg": -20.0
+    "abbrev": "LEP",
+    "raDeg": 83.619792,
+    "decDeg": -18.997856,
+    "epoch": "J2000"
   },
   {
     "name": "Libra",
-    "raDeg": 225.0,
-    "decDeg": -15.0
+    "abbrev": "LIB",
+    "raDeg": 228.3670995,
+    "decDeg": -15.158926,
+    "epoch": "J2000"
   },
   {
     "name": "Lupus",
-    "raDeg": 228.75,
-    "decDeg": -45.0
+    "abbrev": "LUP",
+    "raDeg": 229.222185,
+    "decDeg": -42.201449,
+    "epoch": "J2000"
   },
   {
     "name": "Lynx",
-    "raDeg": 112.5,
-    "decDeg": 50.0
+    "abbrev": "LYN",
+    "raDeg": 120.21594150000001,
+    "decDeg": 46.232331,
+    "epoch": "J2000"
   },
   {
     "name": "Lyra",
-    "raDeg": 281.25,
-    "decDeg": 35.0
+    "abbrev": "LYR",
+    "raDeg": 282.650694,
+    "decDeg": 36.524693,
+    "epoch": "J2000"
   },
   {
     "name": "Mensa",
-    "raDeg": 75.0,
-    "decDeg": -75.0
+    "abbrev": "MEN",
+    "raDeg": 82.324503,
+    "decDeg": -77.09548,
+    "epoch": "J2000"
   },
   {
     "name": "Microscopium",
-    "raDeg": 311.25,
-    "decDeg": -35.0
+    "abbrev": "MIC",
+    "raDeg": 314.4702795,
+    "decDeg": -35.937835,
+    "epoch": "J2000"
   },
   {
     "name": "Monoceros",
-    "raDeg": 105.0,
-    "decDeg": -5.0
+    "abbrev": "MON",
+    "raDeg": 105.285909,
+    "decDeg": -2.667058,
+    "epoch": "J2000"
   },
   {
     "name": "Musca",
-    "raDeg": 180.0,
-    "decDeg": -70.0
+    "abbrev": "MUS",
+    "raDeg": 188.59188600000002,
+    "decDeg": -69.75414,
+    "epoch": "J2000"
   },
   {
     "name": "Norma",
-    "raDeg": 240.0,
-    "decDeg": -51.0
+    "abbrev": "NOR",
+    "raDeg": 241.0824825,
+    "decDeg": -51.528726,
+    "epoch": "J2000"
   },
   {
     "name": "Octans",
-    "raDeg": 330.0,
-    "decDeg": -85.0
+    "abbrev": "OCT",
+    "raDeg": 301.913433,
+    "decDeg": -82.631196,
+    "epoch": "J2000"
   },
   {
     "name": "Ophiuchus",
-    "raDeg": 255.0,
-    "decDeg": -5.0
+    "abbrev": "OPH",
+    "raDeg": 259.533717,
+    "decDeg": -5.21711,
+    "epoch": "J2000"
   },
   {
     "name": "Orion",
-    "raDeg": 82.5,
-    "decDeg": 0.0
+    "abbrev": "ORI",
+    "raDeg": 83.9233275,
+    "decDeg": 5.138143,
+    "epoch": "J2000"
   },
   {
     "name": "Pavo",
-    "raDeg": 307.5,
-    "decDeg": -65.0
+    "abbrev": "PAV",
+    "raDeg": 294.09711599999997,
+    "decDeg": -64.784051,
+    "epoch": "J2000"
   },
   {
     "name": "Pegasus",
-    "raDeg": 330.0,
-    "decDeg": 20.0
+    "abbrev": "PEG",
+    "raDeg": 340.52350199999995,
+    "decDeg": 19.117211,
+    "epoch": "J2000"
   },
   {
     "name": "Perseus",
-    "raDeg": 52.5,
-    "decDeg": 45.0
+    "abbrev": "PER",
+    "raDeg": 52.4748045,
+    "decDeg": 43.884509,
+    "epoch": "J2000"
   },
   {
     "name": "Phoenix",
-    "raDeg": 15.0,
-    "decDeg": -50.0
+    "abbrev": "PHE",
+    "raDeg": 11.4824385,
+    "decDeg": -47.18675,
+    "epoch": "J2000"
   },
   {
     "name": "Pictor",
-    "raDeg": 91.875,
-    "decDeg": -57.5
+    "abbrev": "PIC",
+    "raDeg": 84.2734755,
+    "decDeg": -52.239238,
+    "epoch": "J2000"
   },
   {
     "name": "Pisces",
-    "raDeg": 12.5,
-    "decDeg": 10.0
+    "abbrev": "PSC",
+    "raDeg": 9.723903,
+    "decDeg": 10.770362,
+    "epoch": "J2000"
   },
   {
     "name": "Piscis Austrinus",
-    "raDeg": 337.5,
-    "decDeg": -30.0
+    "abbrev": "PSA",
+    "raDeg": 334.2869445,
+    "decDeg": -30.510818,
+    "epoch": "J2000"
   },
   {
     "name": "Puppis",
-    "raDeg": 116.25,
-    "decDeg": -35.0
+    "abbrev": "PUP",
+    "raDeg": 114.2874315,
+    "decDeg": -32.961463,
+    "epoch": "J2000"
   },
   {
     "name": "Pyxis",
-    "raDeg": 133.75,
-    "decDeg": -30.0
+    "abbrev": "PYX",
+    "raDeg": 133.683084,
+    "decDeg": -28.387602,
+    "epoch": "J2000"
   },
   {
     "name": "Reticulum",
-    "raDeg": 60.0,
-    "decDeg": -60.0
+    "abbrev": "RET",
+    "raDeg": 58.4466975,
+    "decDeg": -60.708283,
+    "epoch": "J2000"
   },
   {
     "name": "Sagitta",
-    "raDeg": 297.5,
-    "decDeg": 18.0
+    "abbrev": "SGE",
+    "raDeg": 295.65199800000005,
+    "decDeg": 18.628717,
+    "epoch": "J2000"
   },
   {
     "name": "Sagittarius",
-    "raDeg": 285.0,
-    "decDeg": -25.0
+    "abbrev": "SGR",
+    "raDeg": 287.7737295,
+    "decDeg": -27.091776,
+    "epoch": "J2000"
   },
   {
     "name": "Scorpius",
-    "raDeg": 247.5,
-    "decDeg": -30.0
+    "abbrev": "SCO",
+    "raDeg": 251.853885,
+    "decDeg": -31.81767,
+    "epoch": "J2000"
   },
   {
     "name": "Sculptor",
-    "raDeg": 7.5,
-    "decDeg": -30.0
+    "abbrev": "SCL",
+    "raDeg": 6.9864375,
+    "decDeg": -31.714312,
+    "epoch": "J2000"
   },
   {
     "name": "Scutum",
-    "raDeg": 280.0,
-    "decDeg": -10.0
+    "abbrev": "SCT",
+    "raDeg": 280.09593900000004,
+    "decDeg": -9.851326,
+    "epoch": "J2000"
   },
   {
     "name": "Serpens Caput",
-    "raDeg": 233.75,
-    "decDeg": 15.0
+    "abbrev": "SER1",
+    "raDeg": 235.410321,
+    "decDeg": 9.878836,
+    "epoch": "J2000"
   },
   {
     "name": "Serpens Cauda",
-    "raDeg": 270.0,
-    "decDeg": -3.0
+    "abbrev": "SER2",
+    "raDeg": 272.39101350000004,
+    "decDeg": -6.318851,
+    "epoch": "J2000"
   },
   {
     "name": "Sextans",
-    "raDeg": 153.75,
-    "decDeg": -5.0
+    "abbrev": "SEX",
+    "raDeg": 154.0884015,
+    "decDeg": -2.605358,
+    "epoch": "J2000"
   },
   {
     "name": "Taurus",
-    "raDeg": 70.0,
-    "decDeg": 22.5
+    "abbrev": "TAU",
+    "raDeg": 66.331965,
+    "decDeg": 16.83941,
+    "epoch": "J2000"
   },
   {
     "name": "Telescopium",
-    "raDeg": 288.75,
-    "decDeg": -50.0
+    "abbrev": "TEL",
+    "raDeg": 289.912212,
+    "decDeg": -50.786922,
+    "epoch": "J2000"
   },
   {
     "name": "Triangulum",
-    "raDeg": 30.0,
-    "decDeg": 32.0
+    "abbrev": "TRI",
+    "raDeg": 32.091052499999996,
+    "decDeg": 32.057844,
+    "epoch": "J2000"
   },
   {
     "name": "Triangulum Australe",
-    "raDeg": 240.0,
-    "decDeg": -65.0
+    "abbrev": "TRA",
+    "raDeg": 240.94603049999998,
+    "decDeg": -65.641693,
+    "epoch": "J2000"
   },
   {
     "name": "Tucana",
-    "raDeg": 345.0,
-    "decDeg": -65.0
+    "abbrev": "TUC",
+    "raDeg": 358.452657,
+    "decDeg": -63.916632,
+    "epoch": "J2000"
   },
   {
     "name": "Ursa Major",
-    "raDeg": 165.0,
-    "decDeg": 55.0
+    "abbrev": "UMA",
+    "raDeg": 164.7379725,
+    "decDeg": 52.529003,
+    "epoch": "J2000"
   },
   {
     "name": "Ursa Minor",
-    "raDeg": 225.0,
-    "decDeg": 75.0
+    "abbrev": "UMI",
+    "raDeg": 228.854505,
+    "decDeg": 76.105337,
+    "epoch": "J2000"
   },
   {
     "name": "Vela",
-    "raDeg": 135.0,
-    "decDeg": -45.0
+    "abbrev": "VEL",
+    "raDeg": 144.35343600000002,
+    "decDeg": -47.409512,
+    "epoch": "J2000"
   },
   {
     "name": "Virgo",
-    "raDeg": 195.0,
-    "decDeg": 0.0
+    "abbrev": "VIR",
+    "raDeg": 199.348308,
+    "decDeg": -2.63866,
+    "epoch": "J2000"
   },
   {
     "name": "Volans",
-    "raDeg": 116.25,
-    "decDeg": -70.0
+    "abbrev": "VOL",
+    "raDeg": 117.0957675,
+    "decDeg": -69.34626,
+    "epoch": "J2000"
   },
   {
     "name": "Vulpecula",
-    "raDeg": 300.0,
-    "decDeg": 25.0
+    "abbrev": "VUL",
+    "raDeg": 304.292475,
+    "decDeg": 24.523796,
+    "epoch": "J2000"
   }
 ]

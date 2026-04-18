@@ -4,6 +4,22 @@ let boundaryData = [];
 let centerData = [];
 let fullNameData = null;
 
+function parseBoundaryRA(value) {
+  if (typeof value === 'string' && value.includes(':')) {
+    return parseRA(value);
+  }
+  const hours = Number.parseFloat(value);
+  return Number.isFinite(hours) ? degToRad(hours * 15) : NaN;
+}
+
+function parseBoundaryDec(value) {
+  if (typeof value === 'string' && value.includes(':')) {
+    return parseDec(value);
+  }
+  const degrees = Number.parseFloat(value);
+  return Number.isFinite(degrees) ? degToRad(degrees) : NaN;
+}
+
 export async function loadConstellationBoundaries() {
   try {
     const resp = await fetch('constellation_boundaries.txt');
@@ -14,10 +30,11 @@ export async function loadConstellationBoundaries() {
     for (const line of lines) {
       const parts = line.split(/\s+/);
       if (parts.length < 8) continue;
-      const ra1 = parseRA(parts[2]);
-      const dec1 = parseDec(parts[3]);
-      const ra2 = parseRA(parts[4]);
-      const dec2 = parseDec(parts[5]);
+      const ra1 = parseBoundaryRA(parts[2]);
+      const dec1 = parseBoundaryDec(parts[3]);
+      const ra2 = parseBoundaryRA(parts[4]);
+      const dec2 = parseBoundaryDec(parts[5]);
+      if (![ra1, dec1, ra2, dec2].every(Number.isFinite)) continue;
       boundaryData.push({ ra1, dec1, ra2, dec2, const1: parts[6], const2: parts[7] });
     }
   } catch (err) {
@@ -31,7 +48,13 @@ export async function loadConstellationCenters() {
     const resp = await fetch('constellation_center.json');
     if (!resp.ok) throw new Error(`Failed to load constellation_center.json: ${resp.status}`);
     const raw = await resp.json();
-    centerData = raw.map(entry => ({ ra: degToRad(entry.raDeg), dec: degToRad(entry.decDeg), name: entry.name }));
+    centerData = raw.map(entry => ({
+      ra: degToRad(entry.raDeg),
+      dec: degToRad(entry.decDeg),
+      name: entry.name,
+      abbrev: entry.abbrev || null,
+      epoch: entry.epoch || null
+    }));
   } catch (err) {
     console.error('Error loading constellation centers:', err);
     centerData = [];
@@ -42,7 +65,7 @@ export async function loadConstellationFullNames() {
   if (fullNameData) return fullNameData;
   try {
     const resp = await fetch('constellation_full_names.json');
-    if (!resp.ok) throw new Error(`Failed to load constellation_full_names.json: ${resp.status}`);
+    if (!resp.ok) throw new Error(`Failed to load constellation full names: ${resp.status}`);
     fullNameData = await resp.json();
   } catch (err) {
     console.error('Error loading constellation full names:', err);
