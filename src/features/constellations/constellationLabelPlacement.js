@@ -9,6 +9,7 @@ import {
   getConstellationCenters,
   getConstellationFullNames
 } from './constellationDataService.js';
+import { measureConstellationLabelWorldSize } from './constellationStyle.js';
 
 const R = 100;
 
@@ -155,7 +156,40 @@ function signedDistance(point, polygon) {
   return pointInPolygon(point, polygon) ? dist : -dist;
 }
 
-function polylabel(polygon, precision = 0.25) {
+function sampleLabelBox(point, halfWidth, halfHeight) {
+  const xOffsets = [-halfWidth, 0, halfWidth];
+  const yOffsets = [-halfHeight, 0, halfHeight];
+  const samples = [];
+
+  xOffsets.forEach(x => {
+    samples.push(new THREE.Vector2(point.x + x, point.y - halfHeight));
+    samples.push(new THREE.Vector2(point.x + x, point.y + halfHeight));
+  });
+  yOffsets.forEach(y => {
+    samples.push(new THREE.Vector2(point.x - halfWidth, point.y + y));
+    samples.push(new THREE.Vector2(point.x + halfWidth, point.y + y));
+  });
+  samples.push(new THREE.Vector2(point.x, point.y));
+
+  const unique = new Map();
+  samples.forEach(sample => {
+    unique.set(`${sample.x.toFixed(6)}|${sample.y.toFixed(6)}`, sample);
+  });
+  return Array.from(unique.values());
+}
+
+function labelBoxSignedDistance(point, polygon, width, height) {
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  const samples = sampleLabelBox(point, halfWidth, halfHeight);
+  let minDistance = Infinity;
+  samples.forEach(sample => {
+    minDistance = Math.min(minDistance, signedDistance(sample, polygon));
+  });
+  return minDistance;
+}
+
+function polylabel(polygon, precision = 0.25, evaluator = signedDistance) {
   if (!Array.isArray(polygon) || polygon.length < 3) return null;
 
   let minX = Infinity;
@@ -174,7 +208,8 @@ function polylabel(polygon, precision = 0.25) {
   if (width <= 1e-6 && height <= 1e-6) return polygon[0].clone();
 
   const makeCell = (x, y, h) => {
-    const d = signedDistance(new THREE.Vector2(x, y), polygon);
+    const point = new THREE.Vector2(x, y);
+    const d = evaluator(point, polygon);
     return { x, y, h, d, max: d + h * Math.SQRT2 };
   };
 
@@ -233,6 +268,7 @@ export function getConstellationLabelAnchors() {
   const anchors = [];
 
   Object.entries(groups).forEach(([abbrev, segs]) => {
+    const displayName = fullNames[abbrev] || abbrev;
     const ordered3D = orderConstellationVertices(segs);
     if (ordered3D.length < 3) {
       const fallback = fallbackAnchor(abbrev);
@@ -248,11 +284,21 @@ export function getConstellationLabelAnchors() {
     }
 
     const polygon2D = ordered3D.map(p => projectToLocal2D(p, basis));
-    let best2D = polylabel(polygon2D, 0.15);
+    const labelSize = measureConstellationLabelWorldSize(displayName);
+    const boxEvaluator = (point, polygon) => labelBoxSignedDistance(point, polygon, labelSize.width, labelSize.height);
+    let best2D = polylabel(polygon2D, 0.15, boxEvaluator);
+
+    if (!best2D || boxEvaluator(best2D, polygon2D) <= 0) {
+      best2D = polylabel(polygon2D, 0.15);
+    }
 
     if (!best2D || signedDistance(best2D, polygon2D) <= 0) {
       const centroid2D = polygon2D.reduce((sum, p) => sum.add(p.clone()), new THREE.Vector2()).multiplyScalar(1 / polygon2D.length);
-      best2D = pointInPolygon(centroid2D, polygon2D) ? centroid2D : polylabel(polygon2D, 0.5);
+      if (pointInPolygon(centroid2D, polygon2D) && boxEvaluator(centroid2D, polygon2D) >= 0) {
+        best2D = centroid2D;
+      } else {
+        best2D = pointInPolygon(centroid2D, polygon2D) ? centroid2D : polylabel(polygon2D, 0.5);
+      }
     }
 
     if (!best2D) {
@@ -266,7 +312,7 @@ export function getConstellationLabelAnchors() {
     anchors.push({
       ra,
       dec,
-      name: fullNames[abbrev] || abbrev,
+      name: displayName,
       abbrev
     });
   });

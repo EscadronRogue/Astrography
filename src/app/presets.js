@@ -2,6 +2,7 @@ import { captureFormState, restoreFormState } from '../shared/formUtils.js';
 
 export const PRESET_KEY = 'astrography-presets';
 export const PRESET_SCHEMA_VERSION = 3;
+export const CONSTELLATION_LABEL_LAYOUT_VERSION = 2;
 
 function serializeMap(map) {
   return Array.from(map.entries());
@@ -45,6 +46,7 @@ export function savePresets({
       starOffsets: serializeMap(starLabelOffsets),
       starRotations: serializeMap(starLabelRotations),
       starScales: serializeMap(starLabelScales),
+      constellationLayoutVersion: CONSTELLATION_LABEL_LAYOUT_VERSION,
       constellationOffsets: serializeMap(constellationLabelOffsets),
       galacticOffsets: serializeMap(galacticLabelOffsets)
     },
@@ -105,7 +107,11 @@ export function loadPresets({
     deserializeMap(payload.edits.starOffsets, starLabelOffsets);
     deserializeMap(payload.edits.starRotations, starLabelRotations);
     deserializeMap(payload.edits.starScales, starLabelScales);
-    deserializeMap(payload.edits.constellationOffsets, constellationLabelOffsets);
+    if (payload.edits.constellationLayoutVersion === CONSTELLATION_LABEL_LAYOUT_VERSION) {
+      deserializeMap(payload.edits.constellationOffsets, constellationLabelOffsets);
+    } else {
+      constellationLabelOffsets.clear();
+    }
     deserializeMap(payload.edits.galacticOffsets, galacticLabelOffsets);
   }
 
