@@ -35,16 +35,7 @@ export async function loadConstellationBoundaries() {
       const ra2 = parseBoundaryRA(parts[4]);
       const dec2 = parseBoundaryDec(parts[5]);
       if (![ra1, dec1, ra2, dec2].every(Number.isFinite)) continue;
-      boundaryData.push({
-        ra1,
-        dec1,
-        ra2,
-        dec2,
-        const1: parts[6],
-        const2: parts[7],
-        key1: `${parts[2]}|${parts[3]}`,
-        key2: `${parts[4]}|${parts[5]}`
-      });
+      boundaryData.push({ ra1, dec1, ra2, dec2, const1: parts[6], const2: parts[7] });
     }
   } catch (err) {
     console.error('Error loading constellation boundaries:', err);

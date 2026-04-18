@@ -33,6 +33,42 @@ function undirectedEdgeKey(a, b) {
   return first < second ? `${first}||${second}` : `${second}||${first}`;
 }
 
+function toSexagesimalHours(hours) {
+  const normalized = normalizeHours(hours);
+  const totalSeconds = Math.round(normalized * 3600);
+  let hh = Math.floor(totalSeconds / 3600);
+  let mm = Math.floor((totalSeconds % 3600) / 60);
+  let ss = totalSeconds % 60;
+  if (ss === 60) {
+    ss = 0;
+    mm += 1;
+  }
+  if (mm === 60) {
+    mm = 0;
+    hh += 1;
+  }
+  hh %= 24;
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
+function toSexagesimalDegrees(degrees) {
+  const sign = degrees < 0 ? '-' : '+';
+  const abs = Math.abs(degrees);
+  const totalSeconds = Math.round(abs * 3600);
+  let dd = Math.floor(totalSeconds / 3600);
+  let mm = Math.floor((totalSeconds % 3600) / 60);
+  let ss = totalSeconds % 60;
+  if (ss === 60) {
+    ss = 0;
+    mm += 1;
+  }
+  if (mm === 60) {
+    mm = 0;
+    dd += 1;
+  }
+  return `${sign}${String(dd).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+}
+
 async function fetchText(url) {
   const response = await fetch(url);
   if (!response.ok) {
@@ -63,6 +99,16 @@ function parseBoundaryPolygons(text) {
   return order.map(constellation => ({
     constellation,
     points: polygons.get(constellation)
+  }));
+}
+
+function buildBoundaryJson(polygons) {
+  return polygons.map(({ constellation, points }) => ({
+    constellation,
+    raDecPolygon: points.map(point => ({
+      ra: normalizeHours(point.raHours) * 15,
+      dec: point.decDeg
+    }))
   }));
 }
 
@@ -157,6 +203,13 @@ function parseCenters(text, fullNamesByAbbrev) {
   return centers;
 }
 
+function buildCenterText(centers) {
+  return centers.map((center, index) => {
+    const id = String(index + 1).padStart(3, '0');
+    return `${id} J2 ${toSexagesimalHours(center.raDeg / 15)} ${toSexagesimalDegrees(center.decDeg)} "${center.name}"`;
+  }).join('\n') + '\n';
+}
+
 async function main() {
   const fullNamesPath = path.join(projectRoot, 'constellation_full_names.json');
   const fullNamesByAbbrev = JSON.parse(await fs.readFile(fullNamesPath, 'utf8'));
@@ -167,16 +220,21 @@ async function main() {
   ]);
 
   const polygons = parseBoundaryPolygons(boundarySource);
+  const boundaryJson = buildBoundaryJson(polygons);
   const boundaryEdges = buildSharedBoundarySegments(polygons);
   const centers = parseCenters(centerSource, fullNamesByAbbrev);
 
+  const boundaryJsonPath = path.join(projectRoot, 'constellation_boundaries.json');
   const boundaryTextPath = path.join(projectRoot, 'constellation_boundaries.txt');
   const centerJsonPath = path.join(projectRoot, 'constellation_center.json');
+  const centerTextPath = path.join(projectRoot, 'constellation_center.txt');
 
+  await fs.writeFile(boundaryJsonPath, `${JSON.stringify(boundaryJson, null, 2)}\n`, 'utf8');
   await fs.writeFile(boundaryTextPath, buildBoundaryText(boundaryEdges), 'utf8');
   await fs.writeFile(centerJsonPath, `${JSON.stringify(centers, null, 2)}\n`, 'utf8');
+  await fs.writeFile(centerTextPath, buildCenterText(centers), 'utf8');
 
-  console.log(`Generated ${polygons.length} J2000 constellation polygons.`);
+  console.log(`Generated ${boundaryJson.length} J2000 constellation polygons.`);
   console.log(`Generated ${boundaryEdges.length} shared J2000 boundary segments.`);
   console.log(`Generated ${centers.length} J2000 constellation centers.`);
 }

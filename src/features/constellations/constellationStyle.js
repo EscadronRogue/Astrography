@@ -5,7 +5,6 @@ export const CONSTELLATION_LINE_RGBA = { r: 94, g: 152, b: 255 };
 export const CONSTELLATION_LABEL_FILL = '#a9c4ee';
 export const CONSTELLATION_LABEL_STROKE = '#0b1930';
 export const CONSTELLATION_LABEL_SHADOW = 'rgba(94, 152, 255, 0.18)';
-const labelMeasurementCache = new Map();
 
 export function makeConstellationLineColor() {
   return new THREE.Color(CONSTELLATION_LINE_COLOR);
@@ -35,12 +34,16 @@ export function createConstellationLabelCanvas(text, opacity = 1, fontSize = 300
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2D canvas context unavailable');
 
-  const { canvasWidth, canvasHeight, font } = measureConstellationLabelCanvasBox(text, fontSize);
-  canvas.width = canvasWidth;
-  canvas.height = canvasHeight;
+  ctx.font = `300 ${fontSize}px "Cormorant Garamond", "Times New Roman", serif`;
+  const metrics = ctx.measureText(text);
+  const paddingX = Math.ceil(fontSize * 0.16);
+  const paddingY = Math.ceil(fontSize * 0.12);
+  const textWidth = Math.ceil(metrics.width);
+  canvas.width = textWidth + paddingX * 2;
+  canvas.height = Math.ceil(fontSize * 1.2) + paddingY * 2;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.font = font;
+  ctx.font = `300 ${fontSize}px "Cormorant Garamond", "Times New Roman", serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
@@ -56,36 +59,6 @@ export function createConstellationLabelCanvas(text, opacity = 1, fontSize = 300
   ctx.strokeText(text, x, y);
   ctx.fillText(text, x, y);
   return canvas;
-}
-
-export function measureConstellationLabelWorldSize(text, fontSize = 300) {
-  const { canvasWidth, canvasHeight } = measureConstellationLabelCanvasBox(text, fontSize);
-  return {
-    width: canvasWidth / 100,
-    height: canvasHeight / 100
-  };
-}
-
-function measureConstellationLabelCanvasBox(text, fontSize) {
-  const cacheKey = `${fontSize}|${text}`;
-  if (labelMeasurementCache.has(cacheKey)) {
-    return labelMeasurementCache.get(cacheKey);
-  }
-
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas context unavailable');
-
-  const font = `300 ${fontSize}px "Cormorant Garamond", "Times New Roman", serif`;
-  ctx.font = font;
-  const metrics = ctx.measureText(text);
-  const paddingX = Math.ceil(fontSize * 0.16);
-  const paddingY = Math.ceil(fontSize * 0.12);
-  const canvasWidth = Math.ceil(metrics.width) + paddingX * 2;
-  const canvasHeight = Math.ceil(fontSize * 1.2) + paddingY * 2;
-  const box = { canvasWidth, canvasHeight, font };
-  labelMeasurementCache.set(cacheKey, box);
-  return box;
 }
 
 function withAlpha(hexColor, opacity) {

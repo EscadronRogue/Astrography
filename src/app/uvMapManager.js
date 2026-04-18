@@ -14,13 +14,7 @@ import {
   sampleGreatCircleUvFromVectors,
   sampleGreatCircleUvFromRaDec
 } from '../shared/uvUtils.js';
-import {
-  loadConstellationBoundaries,
-  getConstellationBoundaries,
-  loadConstellationCenters,
-  loadConstellationFullNames,
-  getConstellationFullNames
-} from '../features/constellations/constellationDataService.js';
+import { loadConstellationCenters, loadConstellationFullNames, getConstellationFullNames } from '../features/constellations/constellationDataService.js';
 import { getConstellationLabelAnchors } from '../features/constellations/constellationLabelPlacement.js';
 import { applyCanvasConstellationLabelStyle, constellationLineCss } from '../features/constellations/constellationStyle.js';
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
@@ -88,6 +82,12 @@ function createLayerCanvas() {
     throw new Error('2D canvas context unavailable');
   }
   return { canvas, ctx };
+}
+
+async function loadConstellationBoundaries() {
+  const response = await fetch('./constellation_boundaries.json');
+  if (!response.ok) throw new Error('Failed to load constellation boundary data');
+  return response.json();
 }
 
 export class UVMapManager {
@@ -203,9 +203,9 @@ export class UVMapManager {
     if (this.boundaryData) return Promise.resolve(this.boundaryData);
     if (!this.boundariesPromise) {
       this.boundariesPromise = loadConstellationBoundaries()
-        .then(() => {
-          this.boundaryData = getConstellationBoundaries();
-          return this.boundaryData;
+        .then(data => {
+          this.boundaryData = data;
+          return data;
         })
         .catch(err => {
           console.warn('UV boundary loading failed:', err);
@@ -617,12 +617,17 @@ export class UVMapManager {
     ctx.strokeStyle = constellationLineCss(opacity);
     ctx.lineWidth = lineWidth;
     boundaries.forEach(boundary => {
-      if (!boundary) return;
-      const start = raDecToUV(normalizeRightAscension(boundary.ra1), boundary.dec1);
-      const end = raDecToUV(normalizeRightAscension(boundary.ra2), boundary.dec2);
-      splitWrappedUvSegment(start, end).forEach(([segmentStart, segmentEnd]) => {
-        strokeUvSegment(ctx, segmentStart, segmentEnd);
-      });
+      const points = Array.isArray(boundary?.raDecPolygon) ? boundary.raDecPolygon : [];
+      if (points.length < 2) return;
+      const closedPoints = points.map(point => raDecToUV(
+        normalizeRightAscension(THREE.MathUtils.degToRad(point.ra)),
+        THREE.MathUtils.degToRad(point.dec)
+      ));
+      for (let i = 0; i < closedPoints.length; i++) {
+        const current = closedPoints[i];
+        const next = closedPoints[(i + 1) % closedPoints.length];
+        splitWrappedUvSegment(current, next).forEach(([start, end]) => strokeUvSegment(ctx, start, end));
+      }
     });
     ctx.restore();
   }
