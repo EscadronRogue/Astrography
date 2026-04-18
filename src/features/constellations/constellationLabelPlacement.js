@@ -11,7 +11,6 @@ import {
 } from './constellationDataService.js';
 
 const R = 100;
-const TOLERANCE = 0.1;
 
 function buildConstellationGroups() {
   const groups = {};
@@ -34,44 +33,58 @@ function orderConstellationVertices(segs) {
   if (!Array.isArray(segs) || segs.length === 0) return [];
   const ordered = [];
   const used = new Array(segs.length).fill(false);
-  const convert = (seg, endpoint) => cachedRadToSphere(
+  const adjacency = new Map();
+  const getPoint = (seg, endpoint) => cachedRadToSphere(
     endpoint === 0 ? seg.ra1 : seg.ra2,
     endpoint === 0 ? seg.dec1 : seg.dec2,
     R
   );
+  const getKey = (seg, endpoint) => {
+    if (endpoint === 0) return seg.key1 || `${seg.ra1}|${seg.dec1}`;
+    return seg.key2 || `${seg.ra2}|${seg.dec2}`;
+  };
 
-  let currentPoint = convert(segs[0], 0);
-  ordered.push(currentPoint.clone());
+  segs.forEach((seg, index) => {
+    const key1 = getKey(seg, 0);
+    const key2 = getKey(seg, 1);
+    if (!adjacency.has(key1)) adjacency.set(key1, []);
+    if (!adjacency.has(key2)) adjacency.set(key2, []);
+    adjacency.get(key1).push(index);
+    adjacency.get(key2).push(index);
+  });
+
+  const startSeg = segs[0];
+  const startKey = getKey(startSeg, 0);
+  let currentKey = getKey(startSeg, 1);
+  ordered.push(getPoint(startSeg, 0).clone());
+  ordered.push(getPoint(startSeg, 1).clone());
   used[0] = true;
-  let currentEnd = convert(segs[0], 1);
-  ordered.push(currentEnd.clone());
 
-  let changed = true;
-  let iteration = 0;
-  while (changed && iteration < segs.length) {
-    changed = false;
-    for (let i = 0; i < segs.length; i++) {
-      if (used[i]) continue;
-      const seg = segs[i];
-      const p0 = convert(seg, 0);
-      const p1 = convert(seg, 1);
-      if (p0.distanceTo(currentEnd) < TOLERANCE) {
-        ordered.push(p1.clone());
-        currentEnd = p1;
-        used[i] = true;
-        changed = true;
-      } else if (p1.distanceTo(currentEnd) < TOLERANCE) {
-        ordered.push(p0.clone());
-        currentEnd = p0;
-        used[i] = true;
-        changed = true;
-      }
+  let iteration = 1;
+  while (iteration < segs.length) {
+    const candidates = (adjacency.get(currentKey) || []).filter(index => !used[index]);
+    if (candidates.length === 0) break;
+
+    const nextSeg = segs[candidates[0]];
+    const key1 = getKey(nextSeg, 0);
+    const key2 = getKey(nextSeg, 1);
+    used[candidates[0]] = true;
+
+    if (key1 === currentKey) {
+      ordered.push(getPoint(nextSeg, 1).clone());
+      currentKey = key2;
+    } else if (key2 === currentKey) {
+      ordered.push(getPoint(nextSeg, 0).clone());
+      currentKey = key1;
+    } else {
+      return [];
     }
+
     iteration++;
   }
 
-  if (ordered.length < 4) return [];
-  if (ordered[0].distanceTo(ordered[ordered.length - 1]) > TOLERANCE) return [];
+  if (ordered.length !== segs.length + 1) return [];
+  if (currentKey !== startKey) return [];
   ordered.pop();
   return ordered;
 }

@@ -14,7 +14,11 @@ import {
 } from '../../shared/uiFactory.js';
 import { loadStellarClassData } from '../../features/filters/logic/stellarClassData.js';
 import { generateStellarClassFilters as scGenerate } from '../../features/filters/logic/stellarClassFilter.js';
-import { loadConstellationBoundaries, loadConstellationCenters } from '../../features/constellations/constellationRenderer.js';
+import {
+  loadConstellationBoundaries,
+  loadConstellationCenters,
+  loadConstellationFullNames
+} from '../../features/constellations/constellationRenderer.js';
 import { DUST_CLOUDS } from '../../shared/constants.js';
 
 // ---------------------------------------------------------------------------
@@ -69,7 +73,8 @@ export async function setupFilterUI(allStars) {
 
     await Promise.all([
       loadConstellationBoundaries(),
-      loadConstellationCenters()
+      loadConstellationCenters(),
+      loadConstellationFullNames()
     ]);
   } catch (error) {
     console.error('[setupFilterUI] Failed to initialize filter UI:', error);
