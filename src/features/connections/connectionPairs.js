@@ -19,6 +19,19 @@ function getPosition(star) {
   return position;
 }
 
+/**
+ * Clear the per-star connection position cache.
+ * Must be called after viewpoint changes so that connection lines
+ * use the updated truePosition values.
+ * @param {Array} stars - Array of star records.
+ */
+export function clearConnectionPositionCache(stars) {
+  if (!Array.isArray(stars)) return;
+  for (let i = 0; i < stars.length; i++) {
+    delete stars[i][STAR_POSITION_CACHE_KEY];
+  }
+}
+
 function getGridKey(position, cellSize) {
   return [
     Math.floor(position.x / cellSize),

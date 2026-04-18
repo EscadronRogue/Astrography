@@ -13,6 +13,13 @@ export function getStarId(star) {
 }
 
 export function getStarCoordinates(star) {
+  // When viewing from a non-Sol viewpoint, reprojectAllStars() stores the
+  // apparent RA/DEC as seen from the viewpoint star.  Prefer these so that
+  // all downstream projections (UV map, equirect, etc.) use the viewpoint
+  // frame rather than the original heliocentric coordinates.
+  if (star._apparentRA !== undefined && star._apparentDec !== undefined) {
+    return { ra: star._apparentRA, dec: star._apparentDec };
+  }
   if (star.RA_in_radian !== undefined && star.DEC_in_radian !== undefined) {
     return { ra: star.RA_in_radian, dec: star.DEC_in_radian };
   }

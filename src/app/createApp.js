@@ -23,6 +23,7 @@ import { EditManager } from '../features/editing/editManager.js';
 import { applyGlobeSurface } from './globeSurface.js';
 import { updateMollweidePosition, createMollweideScheduler } from './mollweideUpdater.js';
 import { preprocessStarData, reprojectAllStars } from './starPreprocessor.js';
+import { clearConnectionPositionCache } from '../features/connections/connectionPairs.js';
 import { setViewpointStar, isDefaultViewpoint } from '../shared/viewpoint.js';
 import { clearRadToSphereCache, clearRadToMollweideCache } from '../shared/geometryUtils.js';
 
@@ -73,6 +74,7 @@ const appContext = {
     // Reproject every star relative to the new viewpoint
     const stars = getCachedStars();
     if (stars) {
+      clearConnectionPositionCache(stars);
       reprojectAllStars(stars);
     }
 

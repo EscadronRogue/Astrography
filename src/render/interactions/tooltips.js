@@ -67,9 +67,9 @@ function populateTooltip(tooltip, star) {
   clearTooltip(tooltip);
   appendRow(tooltip, 'tooltip-starName', 'Name', star.Common_name_of_the_star || 'Unknown Star');
   appendRow(tooltip, 'tooltip-systemName', 'System', star.Common_name_of_the_star_system || 'Unknown System');
-  // Show distance from viewpoint when not at Sol, with original distance in parentheses
+  // Show original distance from Sol, plus distance from viewpoint star in parentheses
   if (!isDefaultViewpoint() && star.viewpointDistance !== undefined && star.viewpointDistance !== star.distance) {
-    appendRow(tooltip, 'tooltip-distance', 'Distance', `${formatNumber(star.viewpointDistance, 2, ' LY')} (${formatNumber(star.distance, 2, ' LY')} from Sol)`);
+    appendRow(tooltip, 'tooltip-distance', 'Distance', `${formatNumber(star.distance, 2, ' LY')} (${formatNumber(star.viewpointDistance, 2, ' LY')} from viewpoint)`);
   } else {
     appendRow(tooltip, 'tooltip-distance', 'Distance', formatNumber(star.distance, 2, ' LY'));
   }

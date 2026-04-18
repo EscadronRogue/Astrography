@@ -75,8 +75,14 @@ export function reprojectAllStars(stars) {
       star.truePosition = star.helioPosition.clone();
       star.viewpointDistance = star.distance;
 
+      // Clear apparent RA/DEC so getStarCoordinates() falls back to
+      // the original heliocentric values.
+      delete star._apparentRA;
+      delete star._apparentDec;
+
       // Restore original RA/DEC for angular projections
       star.spherePosition = cachedRadToSphere(star.helioRA, star.helioDec, GLOBE_RADIUS);
+      star.equirectPosition = undefined; // force recompute from helio RA/DEC
       star.equirectPosition = getStarEquirectangularPosition(star);
       precalcMollweideData(star);
       updateMollweidePosition(star);

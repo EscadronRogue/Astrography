@@ -20,6 +20,7 @@ import { applyCanvasConstellationLabelStyle, constellationLineCss } from '../fea
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
 import { galacticToEquatorial, eclipticToEquatorial } from '../features/planes/planeDefinitions.js';
 import { hashString, mixHash } from '../shared/hashUtils.js';
+import { getViewpointStarId } from '../shared/viewpoint.js';
 import { GLOBE_RADIUS, ATLAS_WIDTH, ATLAS_HEIGHT } from '../shared/constants.js';
 import {
   drawWrappedCircle,
@@ -285,6 +286,7 @@ export class UVMapManager {
 
   buildStarTopologySignature(stars) {
     let hash = 2166136261;
+    hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
     (stars || []).forEach(star => {
       hash = mixHash(hash, hashString(getStarRenderKey(star)));
     });
@@ -293,6 +295,7 @@ export class UVMapManager {
 
   buildStarLayerSignature(stars) {
     let hash = mixHash(2166136261, hashNumber(this.starOpacity));
+    hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
     (stars || []).forEach(star => {
       hash = mixHash(hash, hashString(getStarRenderKey(star)));
       hash = mixHash(hash, hashString(star.displayColor || '#ffffff'));
@@ -303,6 +306,7 @@ export class UVMapManager {
 
   buildLabelLayerSignature(stars) {
     let hash = mixHash(2166136261, hashNumber(this.labelOpacity));
+    hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
     hash = mixHash(hash, this.state.showConstellationNamesFlag ? 1 : 0);
     hash = mixHash(hash, hashNumber(readNumberInput('constellation-name-opacity-slider', 80), 10));
     (stars || []).forEach(star => {
@@ -315,6 +319,7 @@ export class UVMapManager {
 
   buildFeatureLayerSignature(connections) {
     let hash = 2166136261;
+    hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
     hash = mixHash(hash, this.state.showConstellationOverlayFlag ? 1 : 0);
     hash = mixHash(hash, this.state.showConstellationBoundariesFlag ? 1 : 0);
     hash = mixHash(hash, this.state.enableDensityFilterFlag ? 1 : 0);

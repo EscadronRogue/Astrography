@@ -9,6 +9,7 @@ import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { createMollweideBackground, createMollweideBorder, createMollweideMask, debounce } from './mapDecorations.js';
 import { hashString, mixHash } from '../shared/hashUtils.js';
 import { STAR_TEXTURE_SIZE, CONNECTION_LABEL_BASE_FONT } from '../shared/constants.js';
+import { getViewpointStarId } from '../shared/viewpoint.js';
 
 function getConnectionPairKey(pair) {
   return pair?.pairKey || `${pair?.starA?.starId || 'a'}|${pair?.starB?.starId || 'b'}`;
@@ -24,6 +25,8 @@ function haveSameKeys(left, right) {
 
 function buildConnectionVisualSignature(connectionObjs) {
   let hash = 2166136261;
+  // Include viewpoint in signature so connections rebuild on viewpoint change
+  hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
   connectionObjs.forEach(pair => {
     hash = mixHash(hash, hashString(getConnectionPairKey(pair)));
     hash = mixHash(hash, hashString(pair.starA?.displayColor || ''));
