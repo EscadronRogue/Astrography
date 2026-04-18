@@ -15,13 +15,16 @@ import { maybeSavePresets, savePresets, loadPresets, clearSavedPresets } from '.
 import { getStarId } from '../shared/starUtils.js';
 import { getStarTruePosition as getSharedStarTruePosition, getStarGlobePosition, getStarMollweidePosition, precalcMollweideData as precalcSharedMollweideData } from '../shared/starUtils.js';
 import { buildAndApplyFilters as runFilterPipeline, updateMollweideView as refreshMollweideMap } from '../features/filters/pipeline/filterPipeline.js';
-import { initStarInteractions } from '../render/interactions/starInteractions.js';
+import { initStarInteractions, updateSelectedStarHighlight } from '../render/interactions/starInteractions.js';
+import { setTooltipContext, invalidateTooltipCache } from '../render/interactions/tooltips.js';
 import { setRenderRequester, requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { ExportManager } from '../features/export/exportManager.js';
 import { EditManager } from '../features/editing/editManager.js';
 import { applyGlobeSurface } from './globeSurface.js';
 import { updateMollweidePosition, createMollweideScheduler } from './mollweideUpdater.js';
-import { preprocessStarData } from './starPreprocessor.js';
+import { preprocessStarData, reprojectAllStars } from './starPreprocessor.js';
+import { setViewpointStar, isDefaultViewpoint } from '../shared/viewpoint.js';
+import { clearRadToSphereCache, clearRadToMollweideCache } from '../shared/geometryUtils.js';
 
 // ---------------------------------------------------------------------------
 // Map managers and render coordination
@@ -51,7 +54,42 @@ const appContext = {
   updateMollweidePosition,
   applyGlobeSurface: (isOpaque) => applyGlobeSurface(isOpaque, globeMap.scene),
   requestRender: () => requestRender(),
-  get editManager() { return editManager; }
+  get editManager() { return editManager; },
+
+  /**
+   * Switch the viewpoint to a different star, or null to return to Sol.
+   * Reprojects all star positions, clears caches, and re-runs the full
+   * filter + render pipeline.
+   * @param {Object|null} star - Star record, or null for Sol.
+   */
+  changeViewpoint(star) {
+    setViewpointStar(star);
+    state.viewpointStar = star;
+
+    // Clear projection caches — all RA/DEC values change with viewpoint
+    clearRadToSphereCache();
+    clearRadToMollweideCache();
+
+    // Reproject every star relative to the new viewpoint
+    const stars = getCachedStars();
+    if (stars) {
+      reprojectAllStars(stars);
+    }
+
+    // Update viewpoint indicator banner and clear tooltip cache
+    updateViewpointBanner(star);
+    invalidateTooltipCache();
+
+    // Grey out / restore constellation & plane checkboxes
+    updateViewpointDisabledControls(!isDefaultViewpoint());
+
+    // Clear star selection (position may have moved or star may be excluded)
+    state.selectedStarData = null;
+    updateSelectedStarHighlight(appContext);
+
+    // Re-run full filter + render pipeline
+    buildAndApplyFilters();
+  }
 };
 
 async function buildAndApplyFilters() {
@@ -84,6 +122,46 @@ function persistPresets() {
 
 function maybePersistPresets() {
   maybeSavePresets(persistPresets);
+}
+
+// ---------------------------------------------------------------------------
+// Viewpoint UI helpers
+// ---------------------------------------------------------------------------
+function updateViewpointBanner(star) {
+  const banner = document.getElementById('viewpoint-banner');
+  const text = document.getElementById('viewpoint-banner-text');
+  const distLabel = document.getElementById('distance-viewpoint-label');
+  if (!banner || !text) return;
+  if (!star) {
+    banner.setAttribute('hidden', '');
+    if (distLabel) distLabel.textContent = '';
+  } else {
+    const name = star.Common_name_of_the_star || star.Common_name_of_the_star_system || 'Unknown Star';
+    text.textContent = `Viewing from: ${name}`;
+    banner.removeAttribute('hidden');
+    if (distLabel) distLabel.textContent = `from ${name}`;
+  }
+}
+
+/**
+ * Grey out constellation and Sun/Earth-specific plane controls when not at Sol.
+ * @param {boolean} disabled - true to disable, false to restore.
+ */
+function updateViewpointDisabledControls(disabled) {
+  const ids = [
+    'show-constellation-boundaries',
+    'show-constellation-names',
+    'show-constellation-overlay',
+    'show-ecliptic-plane',
+    'show-celestial-equator'
+  ];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = disabled;
+    const label = el.parentElement;
+    if (label) label.style.opacity = disabled ? '0.4' : '1';
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -179,11 +257,20 @@ export async function bootstrapApp() {
     buildAndApplyFilters();
 
     // Star interactions on all maps
+    setTooltipContext(appContext);
     initStarInteractions(appContext, trueCoordinatesMap);
     initStarInteractions(appContext, uvGlobeMap);
     initStarInteractions(appContext, uvMap);
     initStarInteractions(appContext, globeMap);
     initStarInteractions(appContext, mollweideMap);
+
+    // Viewpoint banner "Return to Sol" button
+    const vpResetBtn = document.getElementById('viewpoint-banner-reset');
+    if (vpResetBtn) {
+      vpResetBtn.addEventListener('click', () => {
+        appContext.changeViewpoint(null);
+      });
+    }
 
     // Export and edit managers
     exportManager = new ExportManager(mollweideMap);

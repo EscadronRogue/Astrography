@@ -176,6 +176,7 @@ export function vectorToRaDecRad(vector, R = 100) {
  * Returns a THREE.Vector3 corresponding to the inputs.
  */
 const radToSphereCache = new Map();
+export function clearRadToSphereCache() { radToSphereCache.clear(); }
 export function cachedRadToSphere(ra, dec, R) {
   const key = `${ra}_${dec}_${R}`;
   if (radToSphereCache.has(key)) {
@@ -211,6 +212,7 @@ export function radToMollweide(ra, dec, R = 100, lambda0 = _mollweideState.lambd
 }
 
 const radToMollweideCache = new Map();
+export function clearRadToMollweideCache() { radToMollweideCache.clear(); }
 export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = _mollweideState.lambda0) {
   const key = `${ra}_${dec}_${R}_${lambda0}`;
   if (radToMollweideCache.has(key)) {

@@ -1,4 +1,5 @@
 import { disposeObject3D } from '../../render/engine/renderUtils.js';
+import { isDefaultViewpoint } from '../../shared/viewpoint.js';
 import {
   createGalacticPlaneMesh,
   createEclipticPlaneMesh,
@@ -149,13 +150,18 @@ function clearPlane(ctx, type) {
 }
 
 export function applyPlanes(ctx, flags, opacity = 0.5) {
+  // Galactic plane is meaningful from any viewpoint (all nearby stars
+  // are in the same part of the galaxy).
   if (flags.showGalacticPlane) ensurePlane(ctx, 'galactic', opacity);
   else clearPlane(ctx, 'galactic');
 
-  if (flags.showEclipticPlane) ensurePlane(ctx, 'ecliptic', opacity);
+  // Ecliptic and celestial equator are Sun/Earth-specific — disable
+  // when viewing from a different star.
+  const atSol = isDefaultViewpoint();
+  if (atSol && flags.showEclipticPlane) ensurePlane(ctx, 'ecliptic', opacity);
   else clearPlane(ctx, 'ecliptic');
 
-  if (flags.showCelestialEquator) ensurePlane(ctx, 'equator', opacity);
+  if (atSol && flags.showCelestialEquator) ensurePlane(ctx, 'equator', opacity);
   else clearPlane(ctx, 'equator');
 }
 

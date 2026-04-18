@@ -13,6 +13,8 @@ import { computeAdaptiveGridSize, readFilterState } from '../state/filterStateRe
 import { setupFilterUI, generateStellarClassFilters } from '../../../ui/sidebar/buildSidebar.js';
 import { updateDerivedOverlays } from '../state/filterOverlayState.js';
 import { SOL_STAR_NAME } from '../../../shared/constants.js';
+import { isDefaultViewpoint, getViewpointStarId } from '../../../shared/viewpoint.js';
+import { getStarId } from '../../../shared/starUtils.js';
 
 let filterForm = null;
 
@@ -41,7 +43,14 @@ export function applyFilters(allStars, context = {}) {
   filteredStars = applyColorFilter(filteredStars, filters);
   filteredStars = applyOpacityFilter(filteredStars, filters);
 
-  const nonSolStars = filteredStars.filter(star => star.Common_name_of_the_star !== SOL_STAR_NAME);
+  // Exclude the viewpoint star from angular projections (Globe/Mollweide/Equirect).
+  // When viewing from Sol (default), exclude Sol. When viewing from another star,
+  // exclude that star and let Sol appear as a regular star.
+  const viewpointId = getViewpointStarId();
+  const nonViewpointStars = filteredStars.filter(star => {
+    if (viewpointId) return getStarId(star) !== viewpointId;
+    return star.Common_name_of_the_star !== SOL_STAR_NAME;
+  });
 
   let connections = [];
   let globeConnections = [];
@@ -49,7 +58,7 @@ export function applyFilters(allStars, context = {}) {
 
   if (filters.enableConnections) {
     connections = computeConnectionPairs(filteredStars, filters.connections);
-    globeConnections = computeConnectionPairs(nonSolStars, filters.connections);
+    globeConnections = computeConnectionPairs(nonViewpointStars, filters.connections);
     mollweideConnections = globeConnections;
   }
 
@@ -65,9 +74,9 @@ export function applyFilters(allStars, context = {}) {
     currentFilteredStars: filteredStars,
     stellarClassCandidates,
     currentConnections: connections,
-    currentGlobeFilteredStars: nonSolStars,
+    currentGlobeFilteredStars: nonViewpointStars,
     currentGlobeConnections: globeConnections,
-    currentMollweideFilteredStars: nonSolStars,
+    currentMollweideFilteredStars: nonViewpointStars,
     currentMollweideConnections: mollweideConnections,
     showConstellationBoundariesFlag: filters.showConstellationBoundaries,
     showConstellationNamesFlag: filters.showConstellationNames,

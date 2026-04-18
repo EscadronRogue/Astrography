@@ -148,7 +148,7 @@
 
         <!-- Distance Filter Fieldset -->
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Distance Filter (LY)</legend>
+          <legend class="collapsible" aria-expanded="false">Distance Filter (LY) <span id="distance-viewpoint-label" style="font-weight:normal;font-size:0.85em;color:#ff6f61;"></span></legend>
           <div class="filter-content">
             <div class="filter-item">
               <label for="min-distance-slider">Minimum Distance:</label>
@@ -360,6 +360,22 @@
 
   <!-- Tooltip -->
   <div id="tooltip" class="tooltip" hidden></div>
+
+  <!-- Viewpoint indicator banner (hidden by default, shown when not at Sol) -->
+  <div id="viewpoint-banner" hidden
+       style="position:fixed;top:48px;left:50%;transform:translateX(-50%);
+              background:rgba(20,20,20,0.92);color:#ff6f61;
+              padding:6px 18px;border-radius:0 0 6px 6px;z-index:1100;
+              font-family:'Oswald',sans-serif;font-size:14px;
+              display:flex;align-items:center;gap:10px;
+              border:1px solid rgba(255,111,97,0.3);border-top:none;">
+    <span id="viewpoint-banner-text">Viewing from: —</span>
+    <button id="viewpoint-banner-reset" type="button"
+            style="background:#ff6f61;color:#fff;border:none;border-radius:3px;
+                   padding:3px 10px;cursor:pointer;font-size:12px;font-family:inherit;">
+      Return to Sol
+    </button>
+  </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script type="module" src="src/main.js"></script>

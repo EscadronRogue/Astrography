@@ -1,4 +1,5 @@
 import { applyFilters, generateStellarClassFilters } from './index.js';
+import { isDefaultViewpoint } from '../../../shared/viewpoint.js';
 import { setConnectionLineParams } from '../../connections/connectionSettings.js';
 import { disposeObject3D } from '../../../render/engine/renderUtils.js';
 import {
@@ -18,17 +19,29 @@ function isMapVisible(map) {
 
 function updateProjectedPositions(ctx) {
   const { state } = ctx;
-  state.currentGlobeFilteredStars.forEach(star => {
-    star.spherePosition = ctx.projectStarGlobe(star);
-    star.equirectPosition = getStarEquirectangularPosition(star);
-  });
-  state.currentFilteredStars.forEach(star => {
-    star.truePosition = ctx.getStarTruePosition(star);
-  });
-  state.currentMollweideFilteredStars.forEach(star => {
-    ctx.precalcMollweideData(star);
-    ctx.updateMollweidePosition(star);
-  });
+  const atSol = isDefaultViewpoint();
+
+  if (atSol) {
+    // Heliocentric: recalculate positions from original RA/DEC as before
+    state.currentGlobeFilteredStars.forEach(star => {
+      star.spherePosition = ctx.projectStarGlobe(star);
+      star.equirectPosition = getStarEquirectangularPosition(star);
+    });
+    state.currentFilteredStars.forEach(star => {
+      star.truePosition = ctx.getStarTruePosition(star);
+    });
+    state.currentMollweideFilteredStars.forEach(star => {
+      ctx.precalcMollweideData(star);
+      ctx.updateMollweidePosition(star);
+    });
+  } else {
+    // Non-Sol viewpoint: positions were already computed by reprojectAllStars().
+    // Only update Mollweide positions (they depend on the current lambda0
+    // which can change independently via camera interaction).
+    state.currentMollweideFilteredStars.forEach(star => {
+      ctx.updateMollweidePosition(star);
+    });
+  }
 }
 
 function updateMapDisplays(ctx, options) {
@@ -168,10 +181,12 @@ export async function buildAndApplyFilters(ctx) {
   updateProjectedPositions(ctx);
   updateMapDisplays(ctx, filters);
 
+  // Constellations are only meaningful from the Solar viewpoint.
+  const atSol = isDefaultViewpoint();
   rebuildConstellationVisuals(ctx, {
-    showConstellationBoundaries: filters.showConstellationBoundaries,
-    showConstellationNames: filters.showConstellationNames,
-    showConstellationOverlay: filters.showConstellationOverlay,
+    showConstellationBoundaries: atSol && filters.showConstellationBoundaries,
+    showConstellationNames: atSol && filters.showConstellationNames,
+    showConstellationOverlay: atSol && filters.showConstellationOverlay,
     constellationLineOpacity: filters.constellationLineOpacity,
     constellationLineWidth: sanitizedConstellationLineWidth,
     constellationNameOpacity: filters.constellationNameOpacity

@@ -14,6 +14,7 @@ import { createAppState } from './appState.js';
 // ---------------------------------------------------------------------------
 const _state = {
   cachedStars: null,
+  viewpointStar: null,      // current viewpoint star (null = Sol)
   selectedStarData: null,
   selectedHighlightTrue: null,
   selectedHighlightGlobe: null,

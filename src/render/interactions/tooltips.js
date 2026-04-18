@@ -1,3 +1,26 @@
+import { getStarId } from '../../shared/starUtils.js';
+import { isDefaultViewpoint, getViewpointStarId } from '../../shared/viewpoint.js';
+
+// Stored reference to appContext, set once via setTooltipContext().
+let _ctx = null;
+
+/**
+ * Provide the app context so the tooltip "View from here" button can
+ * trigger a viewpoint change.  Call once during initialisation.
+ */
+export function setTooltipContext(ctx) {
+  _ctx = ctx;
+}
+
+/**
+ * Invalidate the cached tooltip content so the next showTooltip() call
+ * repopulates even for the same star.  Call after viewpoint changes.
+ */
+export function invalidateTooltipCache() {
+  const tooltip = getTooltipElement();
+  if (tooltip) delete tooltip.dataset.starKey;
+}
+
 function clearTooltip(tooltip) {
   while (tooltip.firstChild) tooltip.removeChild(tooltip.firstChild);
 }
@@ -44,7 +67,12 @@ function populateTooltip(tooltip, star) {
   clearTooltip(tooltip);
   appendRow(tooltip, 'tooltip-starName', 'Name', star.Common_name_of_the_star || 'Unknown Star');
   appendRow(tooltip, 'tooltip-systemName', 'System', star.Common_name_of_the_star_system || 'Unknown System');
-  appendRow(tooltip, 'tooltip-distance', 'Distance', formatNumber(star.distance, 2, ' LY'));
+  // Show distance from viewpoint when not at Sol, with original distance in parentheses
+  if (!isDefaultViewpoint() && star.viewpointDistance !== undefined && star.viewpointDistance !== star.distance) {
+    appendRow(tooltip, 'tooltip-distance', 'Distance', `${formatNumber(star.viewpointDistance, 2, ' LY')} (${formatNumber(star.distance, 2, ' LY')} from Sol)`);
+  } else {
+    appendRow(tooltip, 'tooltip-distance', 'Distance', formatNumber(star.distance, 2, ' LY'));
+  }
   appendRow(tooltip, 'tooltip-constellation', 'Constellation', star.Constellation || 'N/A');
   appendRow(tooltip, 'tooltip-stellarClass', 'Stellar Class', star.stellarClass || star.Stellar_class || 'N/A');
   appendRow(tooltip, 'tooltip-mass', 'Mass', Number.isFinite(star.Mass) ? String(star.Mass) : 'N/A');
@@ -71,6 +99,60 @@ function populateTooltip(tooltip, star) {
     catalogRow.appendChild(document.createTextNode('N/A'));
   }
   tooltip.appendChild(catalogRow);
+
+  // --- Viewpoint button ---
+  const vpRow = document.createElement('div');
+  vpRow.id = 'tooltip-viewpoint';
+  vpRow.style.marginTop = '6px';
+  vpRow.style.textAlign = 'center';
+
+  const vpBtn = document.createElement('button');
+  vpBtn.type = 'button';
+  vpBtn.style.cssText = 'background:#ff6f61;color:#fff;border:none;border-radius:3px;padding:4px 10px;cursor:pointer;font-size:12px;font-family:inherit;width:100%;';
+
+  const currentVpId = getViewpointStarId();
+  const thisStarId = getStarId(star);
+  const isThisStar = currentVpId && currentVpId === thisStarId;
+  const isSolAndDefault = !currentVpId && star.Common_name_of_the_star === 'Sol';
+
+  if (isThisStar || isSolAndDefault) {
+    vpBtn.textContent = 'Currently viewing from here';
+    vpBtn.disabled = true;
+    vpBtn.style.opacity = '0.5';
+    vpBtn.style.cursor = 'default';
+  } else {
+    vpBtn.textContent = 'View from here';
+    vpBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (_ctx) {
+        _ctx.changeViewpoint(star);
+        hideTooltip();
+        unpinTooltip();
+        _ctx.state.selectedStarData = null;
+      }
+    });
+  }
+  vpRow.appendChild(vpBtn);
+
+  // "Return to Sol" button when not at default viewpoint
+  if (!isDefaultViewpoint() && !isSolAndDefault) {
+    const solBtn = document.createElement('button');
+    solBtn.type = 'button';
+    solBtn.style.cssText = 'background:#444;color:#ccc;border:1px solid #666;border-radius:3px;padding:3px 8px;cursor:pointer;font-size:11px;font-family:inherit;width:100%;margin-top:4px;';
+    solBtn.textContent = 'Return to Sol';
+    solBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (_ctx) {
+        _ctx.changeViewpoint(null);
+        hideTooltip();
+        unpinTooltip();
+        _ctx.state.selectedStarData = null;
+      }
+    });
+    vpRow.appendChild(solBtn);
+  }
+
+  tooltip.appendChild(vpRow);
 }
 
 export function pinTooltip(x, y) {
