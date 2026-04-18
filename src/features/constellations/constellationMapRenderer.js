@@ -219,7 +219,8 @@ export function createConstellationLabelsForGlobe(opacity = 0.8) {
   getConstellationLabelAnchors().forEach(c => {
     const p = radToSphere(c.ra, c.dec, R);
     const displayName = fullNames[c.name] || c.name;
-    const canvas = createConstellationLabelCanvas(displayName, opacity, 300);
+    const fontSize = c.fontSize || 300;
+    const canvas = createConstellationLabelCanvas(displayName, opacity, fontSize);
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
     const material = getDoubleSidedLabelMaterial(texture, opacity);
@@ -239,7 +240,7 @@ export function createConstellationLabelsForGlobe(opacity = 0.8) {
       label.material.depthWrite = false;
       label.material.depthTest = true;
     }
-    label.userData = { name: c.name, displayName, ra: c.ra, dec: c.dec };
+    label.userData = { name: c.name, displayName, ra: c.ra, dec: c.dec, fontSize };
     labels.push(label);
   });
   return labels;
@@ -253,7 +254,8 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
   getConstellationLabelAnchors().forEach(c => {
     const p = cachedRadToMollweide(c.ra, c.dec, R, lambda0);
     const displayName = fullNames[c.name] || c.name;
-    const canvas = createConstellationLabelCanvas(displayName, opacity, 300);
+    const fontSize = c.fontSize || 300;
+    const canvas = createConstellationLabelCanvas(displayName, opacity, fontSize);
     const texture = new THREE.CanvasTexture(canvas);
     texture.needsUpdate = true;
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
@@ -263,7 +265,7 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
     sprite.material.depthTest = true;
     sprite.scale.set(canvas.width / 100, canvas.height / 100, 1);
     sprite.position.copy(p);
-    sprite.userData = { name: c.name, displayName, ra: c.ra, dec: c.dec };
+    sprite.userData = { name: c.name, displayName, ra: c.ra, dec: c.dec, fontSize };
     labels.push(sprite);
   });
   return labels;

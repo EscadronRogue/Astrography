@@ -128,10 +128,8 @@ These records are not globally normalized up front in the same way as the star b
 
 The repository includes constellation and stellar classification reference files, including:
 
-- `constellation_boundaries.json`
 - `constellation_boundaries.txt`
 - `constellation_center.json`
-- `constellation_center.txt`
 - `constellation_full_names.json`
 - `stellar_class.json`
 
