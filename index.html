@@ -22,8 +22,13 @@
   </script>
 </head>
 <body>
-  <!-- Loader -->
-  <div id="loader" class="active" role="status" aria-live="polite">Loading Stars...</div>
+  <!-- Corner progress bar (non-blocking) -->
+  <div id="progress-bar-container" role="status" aria-live="polite" aria-label="Loading progress">
+    <div id="progress-bar-track">
+      <div id="progress-bar-fill"></div>
+    </div>
+    <span id="progress-bar-label">Initializing…</span>
+  </div>
 
   <!-- Header with Menu Toggle Button -->
   <header>

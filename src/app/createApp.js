@@ -168,16 +168,55 @@ function updateViewpointDisabledControls(disabled) {
 }
 
 // ---------------------------------------------------------------------------
-// Bootstrap
+// Progress bar helpers
+// ---------------------------------------------------------------------------
+const PHASE_WEIGHTS = {
+  starData: 50,    // 0–50%: loading star data files
+  filterUI: 10,    // 50–60%: building filter UI
+  maps: 10,        // 60–70%: creating map managers
+  preprocessing: 5, // 70–75%: preprocessing star data
+  interactions: 5,  // 75–80%: star interactions
+  finalize: 20      // 80–100%: export/edit managers, final render
+};
+
+function updateProgress(percent, label) {
+  const fill = document.getElementById('progress-bar-fill');
+  const labelEl = document.getElementById('progress-bar-label');
+  if (fill) fill.style.width = `${Math.min(100, Math.round(percent))}%`;
+  if (labelEl) labelEl.textContent = label;
+}
+
+function hideProgress() {
+  const container = document.getElementById('progress-bar-container');
+  if (container) container.classList.add('hidden');
+}
+
+/** Yield to the browser so the UI can repaint between heavy phases. */
+function yieldToUI() {
+  return new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+}
+
+// ---------------------------------------------------------------------------
+// Bootstrap — progressive, non-blocking
 // ---------------------------------------------------------------------------
 export async function bootstrapApp() {
-  const loader = document.getElementById('loader');
-  loader.classList.remove('hidden');
   try {
-    const stars = await loadStarData();
+    updateProgress(0, 'Loading star data…');
+
+    // ── Phase 1: Load star data progressively ──────────────────────
+    const stars = await loadStarData({
+      onProgress(loaded, total) {
+        const pct = (loaded / total) * PHASE_WEIGHTS.starData;
+        updateProgress(pct, `Loading stars… ${loaded}/${total} files`);
+      }
+    });
     setCachedStars(stars);
     if (!stars.length) throw new Error('No star data available');
 
+    await yieldToUI();
+
+    // ── Phase 2: Build filter UI ───────────────────────────────────
+    updateProgress(PHASE_WEIGHTS.starData, 'Building filters…');
     await setupFilterUI(stars);
 
     // Move presets fieldset to end of form
@@ -187,7 +226,12 @@ export async function bootstrapApp() {
       if (presetsFs) form.appendChild(presetsFs);
     }
 
-    // Create map managers
+    await yieldToUI();
+
+    // ── Phase 3: Create map managers ───────────────────────────────
+    const mapBase = PHASE_WEIGHTS.starData + PHASE_WEIGHTS.filterUI;
+    updateProgress(mapBase, 'Initializing maps…');
+
     trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates', state, scheduleMollweideUpdate, getEditManager: () => editManager });
     globeMap = new MapManager({ canvasId: 'legacySphereMap', mapType: 'Globe', state, scheduleMollweideUpdate, getEditManager: () => editManager });
     mollweideMap = new MapManager({ canvasId: 'legacyMollweideMap', mapType: 'Mollweide', state, scheduleMollweideUpdate, getEditManager: () => editManager });
@@ -196,6 +240,12 @@ export async function bootstrapApp() {
     uvMap.setLegacySourceScene(globeMap.scene);
     uvGlobeMap.setLegacySourceScene(globeMap.scene);
     mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap);
+
+    await yieldToUI();
+
+    // ── Phase 4: Preprocessing ─────────────────────────────────────
+    const prepBase = mapBase + PHASE_WEIGHTS.maps;
+    updateProgress(prepBase, 'Processing star positions…');
 
     // Initialize EditManager
     editManager = new EditManager(
@@ -256,10 +306,20 @@ export async function bootstrapApp() {
       uvGlobeMap
     });
 
-    // Initial filter pass
-    buildAndApplyFilters();
+    await yieldToUI();
 
-    // Star interactions on all maps
+    // ── Phase 5: First render — maps become visible ────────────────
+    const interBase = prepBase + PHASE_WEIGHTS.preprocessing;
+    updateProgress(interBase, 'Rendering first frame…');
+
+    buildAndApplyFilters();
+    requestRender();
+
+    await yieldToUI();
+
+    // ── Phase 6: Interactions (background) ─────────────────────────
+    updateProgress(interBase, 'Enabling interactions…');
+
     setTooltipContext(appContext);
     initStarInteractions(appContext, trueCoordinatesMap);
     initStarInteractions(appContext, uvGlobeMap);
@@ -276,7 +336,12 @@ export async function bootstrapApp() {
       });
     }
 
-    // Export and edit managers
+    await yieldToUI();
+
+    // ── Phase 7: Finalize — export/edit, hide progress ─────────────
+    const finBase = interBase + PHASE_WEIGHTS.interactions;
+    updateProgress(finBase, 'Finalizing…');
+
     exportManager = new ExportManager(mollweideMap);
     exportManager.setup();
     editManager.setConstellationLinesMoll(getConstellationLinesMoll());
@@ -284,14 +349,18 @@ export async function bootstrapApp() {
     editManager.setupAll();
 
     requestRender();
-    loader.classList.add('hidden');
+
+    updateProgress(100, 'Ready');
+    // Brief pause so the user sees "Ready" before the bar disappears
+    setTimeout(hideProgress, 800);
   } catch (err) {
     const errorDetail = err?.message || String(err);
     console.error('Starmap initialization failed:', err);
-    const loaderEl = document.getElementById('loader');
-    if (loaderEl) {
-      loaderEl.textContent = `Initialization failed: ${errorDetail}`;
-      loaderEl.classList.remove('hidden');
+    updateProgress(0, `Error: ${errorDetail}`);
+    const container = document.getElementById('progress-bar-container');
+    if (container) {
+      container.style.borderColor = 'rgba(255, 80, 60, 0.6)';
+      container.style.pointerEvents = 'auto';
     }
   }
 }

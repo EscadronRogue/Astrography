@@ -70,27 +70,20 @@ input[type="number"],
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Loader ---------------------------------------------------- */
-#loader {
+/* ---------- Corner progress bar ---------------------------------------- */
+#progress-bar-container {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-ui);
-  font-size: 13px;
-  letter-spacing: 0.18em;
+  font-size: 11px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 500;
+  border-color: var(--hairline-strong);
 }
-#loader::before {
-  content: "";
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1.5px solid var(--hairline-strong);
-  border-top-color: var(--accent);
-  animation: ag-spin 0.9s linear infinite;
-  margin-right: 14px;
+#progress-bar-fill {
+  background: var(--accent);
 }
-@keyframes ag-spin { to { transform: rotate(360deg); } }
 
 /* ---------- Header ---------------------------------------------------- */
 header {

@@ -33,25 +33,52 @@ body {
   overflow: hidden;
 }
 
-#loader {
+/* ---- Corner progress bar ---- */
+#progress-bar-container {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: var(--color-bg-overlay);
-  color: var(--color-text);
-  font-size: 24px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  bottom: 16px;
+  right: 16px;
   z-index: var(--z-loader);
-  transition: var(--transition-fade);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--color-surface);
+  border: 1px solid rgba(255, 111, 97, 0.25);
+  border-radius: 6px;
+  padding: 8px 14px;
+  font-family: var(--font-primary);
+  font-size: 12px;
+  color: var(--color-text);
+  pointer-events: none;
+  transition: opacity 0.6s ease, visibility 0.6s ease, transform 0.6s ease;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
 }
 
-#loader.hidden {
+#progress-bar-container.hidden {
   opacity: 0;
   visibility: hidden;
+  transform: translateY(10px);
+}
+
+#progress-bar-track {
+  width: 120px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--color-accent);
+  border-radius: 2px;
+  transition: width 0.35s ease;
+}
+
+#progress-bar-label {
+  white-space: nowrap;
+  opacity: 0.8;
 }
 
 /* Header with Menu Button */

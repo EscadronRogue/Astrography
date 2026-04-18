@@ -51,7 +51,19 @@ function withTimeout(promise, ms) {
   });
 }
 
-export async function loadStarData() {
+/**
+ * Loads star data from all manifest files.
+ *
+ * @param {Object} [options]
+ * @param {function(loaded: number, total: number): void} [options.onProgress]
+ *   Called after each file finishes loading. `loaded` is the number of files
+ *   loaded so far, `total` is the total file count.
+ * @param {function(stars: Array): void} [options.onBatchReady]
+ *   Called after each file is loaded and normalized, with the cumulative star
+ *   array so far. Enables progressive rendering before all data is available.
+ * @returns {Promise<Array>} All loaded and normalized star records.
+ */
+export async function loadStarData({ onProgress, onBatchReady } = {}) {
   const manifestUrl = 'data/manifest.json';
   try {
     const manifestResp = await withTimeout(fetch(manifestUrl), DATA_LOAD_TIMEOUT);
@@ -68,17 +80,30 @@ export async function loadStarData() {
       return [];
     }
 
-    const dataPromises = fileNames.map(async name => {
-      const resp = await withTimeout(fetch(`data/${name}`), DATA_LOAD_TIMEOUT);
-      if (!resp.ok) {
-        console.warn(`Missing star data file: data/${name} (HTTP ${resp.status})`);
-        return [];
-      }
-      return resp.json();
-    });
+    const total = fileNames.length;
+    const allStars = [];
 
-    const filesData = await Promise.all(dataPromises);
-    return filesData.flat().map(normalizeStarRecord);
+    // Load files one by one so the UI can update progressively
+    for (let i = 0; i < total; i++) {
+      const name = fileNames[i];
+      try {
+        const resp = await withTimeout(fetch(`data/${name}`), DATA_LOAD_TIMEOUT);
+        if (!resp.ok) {
+          console.warn(`Missing star data file: data/${name} (HTTP ${resp.status})`);
+        } else {
+          const batch = await resp.json();
+          const normalized = batch.map(normalizeStarRecord);
+          allStars.push(...normalized);
+        }
+      } catch (fileErr) {
+        console.warn(`Error loading data/${name}:`, fileErr);
+      }
+
+      if (onProgress) onProgress(i + 1, total);
+      if (onBatchReady) onBatchReady(allStars);
+    }
+
+    return allStars;
   } catch (error) {
     console.error('Error loading star data:', error);
     return [];
