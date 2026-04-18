@@ -189,7 +189,7 @@ function labelBoxSignedDistance(point, polygon, width, height) {
   return minDistance;
 }
 
-function polylabel(polygon, precision = 0.25, evaluator = signedDistance) {
+function polylabel(polygon, precision = 0.25) {
   if (!Array.isArray(polygon) || polygon.length < 3) return null;
 
   let minX = Infinity;
@@ -208,8 +208,7 @@ function polylabel(polygon, precision = 0.25, evaluator = signedDistance) {
   if (width <= 1e-6 && height <= 1e-6) return polygon[0].clone();
 
   const makeCell = (x, y, h) => {
-    const point = new THREE.Vector2(x, y);
-    const d = evaluator(point, polygon);
+    const d = signedDistance(new THREE.Vector2(x, y), polygon);
     return { x, y, h, d, max: d + h * Math.SQRT2 };
   };
 
@@ -245,15 +244,67 @@ function polylabel(polygon, precision = 0.25, evaluator = signedDistance) {
   return new THREE.Vector2(bestCell.x, bestCell.y);
 }
 
-function fallbackAnchor(abbrev) {
-  const center = getConstellationCenters().find(entry => {
+function getCenterAnchor(abbrev) {
+  return getConstellationCenters().find(entry => {
     const key = (entry.abbrev || entry.key || entry.code || '').toUpperCase();
     if (key && key === abbrev) return true;
     const name = (entry.name || '').toUpperCase();
     return name === abbrev;
   });
+}
+
+function fallbackAnchor(abbrev) {
+  const center = getCenterAnchor(abbrev);
   if (center) return { ra: center.ra, dec: center.dec, name: center.name || abbrev };
   return null;
+}
+
+function lerpPoint2D(start, end, t) {
+  return new THREE.Vector2(
+    start.x + (end.x - start.x) * t,
+    start.y + (end.y - start.y) * t
+  );
+}
+
+function findNearestFittingLabelCenter(start, end, polygon, width, height) {
+  if (labelBoxSignedDistance(start, polygon, width, height) >= 0) {
+    return start.clone();
+  }
+
+  if (labelBoxSignedDistance(end, polygon, width, height) < 0) {
+    return null;
+  }
+
+  let low = 0;
+  let high = 1;
+  const samples = 24;
+  let foundFit = false;
+  for (let i = 1; i <= samples; i++) {
+    const t = i / samples;
+    const point = lerpPoint2D(start, end, t);
+    if (labelBoxSignedDistance(point, polygon, width, height) >= 0) {
+      low = (i - 1) / samples;
+      high = t;
+      foundFit = true;
+      break;
+    }
+  }
+
+  if (!foundFit) {
+    return null;
+  }
+
+  for (let i = 0; i < 18; i++) {
+    const mid = (low + high) / 2;
+    const point = lerpPoint2D(start, end, mid);
+    if (labelBoxSignedDistance(point, polygon, width, height) >= 0) {
+      high = mid;
+    } else {
+      low = mid;
+    }
+  }
+
+  return lerpPoint2D(start, end, high);
 }
 
 let cachedAnchors = null;
@@ -269,6 +320,7 @@ export function getConstellationLabelAnchors() {
 
   Object.entries(groups).forEach(([abbrev, segs]) => {
     const displayName = fullNames[abbrev] || abbrev;
+    const preferredCenter = getCenterAnchor(abbrev);
     const ordered3D = orderConstellationVertices(segs);
     if (ordered3D.length < 3) {
       const fallback = fallbackAnchor(abbrev);
@@ -285,20 +337,37 @@ export function getConstellationLabelAnchors() {
 
     const polygon2D = ordered3D.map(p => projectToLocal2D(p, basis));
     const labelSize = measureConstellationLabelWorldSize(displayName);
-    const boxEvaluator = (point, polygon) => labelBoxSignedDistance(point, polygon, labelSize.width, labelSize.height);
-    let best2D = polylabel(polygon2D, 0.15, boxEvaluator);
+    const polylabel2D = polylabel(polygon2D, 0.15);
+    let best2D = null;
 
-    if (!best2D || boxEvaluator(best2D, polygon2D) <= 0) {
-      best2D = polylabel(polygon2D, 0.15);
+    if (preferredCenter) {
+      const center3D = cachedRadToSphere(preferredCenter.ra, preferredCenter.dec, R);
+      const center2D = projectToLocal2D(center3D, basis);
+      if (signedDistance(center2D, polygon2D) >= 0) {
+        best2D = center2D;
+
+        if (polylabel2D && signedDistance(polylabel2D, polygon2D) >= 0) {
+          const fittedCenter = findNearestFittingLabelCenter(
+            center2D,
+            polylabel2D,
+            polygon2D,
+            labelSize.width,
+            labelSize.height
+          );
+          if (fittedCenter) {
+            best2D = fittedCenter;
+          }
+        }
+      }
+    }
+
+    if (!best2D) {
+      best2D = polylabel2D;
     }
 
     if (!best2D || signedDistance(best2D, polygon2D) <= 0) {
       const centroid2D = polygon2D.reduce((sum, p) => sum.add(p.clone()), new THREE.Vector2()).multiplyScalar(1 / polygon2D.length);
-      if (pointInPolygon(centroid2D, polygon2D) && boxEvaluator(centroid2D, polygon2D) >= 0) {
-        best2D = centroid2D;
-      } else {
-        best2D = pointInPolygon(centroid2D, polygon2D) ? centroid2D : polylabel(polygon2D, 0.5);
-      }
+      best2D = pointInPolygon(centroid2D, polygon2D) ? centroid2D : polylabel(polygon2D, 0.5);
     }
 
     if (!best2D) {
