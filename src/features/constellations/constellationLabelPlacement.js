@@ -12,6 +12,12 @@ import {
 import { measureConstellationLabelWorldSize } from './constellationStyle.js';
 
 const R = 100;
+const BASE_CONSTELLATION_FONT_SIZE = 300;
+const MIN_CONSTELLATION_FONT_SCALE = 0.6;
+const FONT_SCALE_STEP = 0.05;
+const MIN_LABEL_SEARCH_STEP = 0.18;
+const LABEL_PADDING_FLOOR = 0.12;
+const LABEL_SEARCH_EPSILON = 1e-6;
 
 function buildConstellationGroups() {
   const groups = {};
@@ -156,39 +162,6 @@ function signedDistance(point, polygon) {
   return pointInPolygon(point, polygon) ? dist : -dist;
 }
 
-function sampleLabelBox(point, halfWidth, halfHeight) {
-  const xOffsets = [-halfWidth, 0, halfWidth];
-  const yOffsets = [-halfHeight, 0, halfHeight];
-  const samples = [];
-
-  xOffsets.forEach(x => {
-    samples.push(new THREE.Vector2(point.x + x, point.y - halfHeight));
-    samples.push(new THREE.Vector2(point.x + x, point.y + halfHeight));
-  });
-  yOffsets.forEach(y => {
-    samples.push(new THREE.Vector2(point.x - halfWidth, point.y + y));
-    samples.push(new THREE.Vector2(point.x + halfWidth, point.y + y));
-  });
-  samples.push(new THREE.Vector2(point.x, point.y));
-
-  const unique = new Map();
-  samples.forEach(sample => {
-    unique.set(`${sample.x.toFixed(6)}|${sample.y.toFixed(6)}`, sample);
-  });
-  return Array.from(unique.values());
-}
-
-function labelBoxSignedDistance(point, polygon, width, height) {
-  const halfWidth = width / 2;
-  const halfHeight = height / 2;
-  const samples = sampleLabelBox(point, halfWidth, halfHeight);
-  let minDistance = Infinity;
-  samples.forEach(sample => {
-    minDistance = Math.min(minDistance, signedDistance(sample, polygon));
-  });
-  return minDistance;
-}
-
 function polylabel(polygon, precision = 0.25) {
   if (!Array.isArray(polygon) || polygon.length < 3) return null;
 
@@ -259,52 +232,338 @@ function fallbackAnchor(abbrev) {
   return null;
 }
 
-function lerpPoint2D(start, end, t) {
-  return new THREE.Vector2(
-    start.x + (end.x - start.x) * t,
-    start.y + (end.y - start.y) * t
+function computeLabelPadding(width, height) {
+  return Math.max(LABEL_PADDING_FLOOR, Math.min(width, height) * 0.05);
+}
+
+function buildPolygonEdges(polygon) {
+  return polygon.map((point, index) => {
+    const next = polygon[(index + 1) % polygon.length];
+    return {
+      a: point,
+      b: next,
+      minX: Math.min(point.x, next.x),
+      maxX: Math.max(point.x, next.x),
+      minY: Math.min(point.y, next.y),
+      maxY: Math.max(point.y, next.y)
+    };
+  });
+}
+
+function makeLabelRectangle(center, width, height, padding) {
+  const halfWidth = width / 2 + padding;
+  const halfHeight = height / 2 + padding;
+  const corners = [
+    new THREE.Vector2(center.x - halfWidth, center.y - halfHeight),
+    new THREE.Vector2(center.x + halfWidth, center.y - halfHeight),
+    new THREE.Vector2(center.x + halfWidth, center.y + halfHeight),
+    new THREE.Vector2(center.x - halfWidth, center.y + halfHeight)
+  ];
+
+  return {
+    minX: center.x - halfWidth,
+    maxX: center.x + halfWidth,
+    minY: center.y - halfHeight,
+    maxY: center.y + halfHeight,
+    corners,
+    edges: [
+      { a: corners[0], b: corners[1] },
+      { a: corners[1], b: corners[2] },
+      { a: corners[2], b: corners[3] },
+      { a: corners[3], b: corners[0] }
+    ]
+  };
+}
+
+function pointInRectangle(point, rect) {
+  return (
+    point.x >= rect.minX - LABEL_SEARCH_EPSILON &&
+    point.x <= rect.maxX + LABEL_SEARCH_EPSILON &&
+    point.y >= rect.minY - LABEL_SEARCH_EPSILON &&
+    point.y <= rect.maxY + LABEL_SEARCH_EPSILON
   );
 }
 
-function findNearestFittingLabelCenter(start, end, polygon, width, height) {
-  if (labelBoxSignedDistance(start, polygon, width, height) >= 0) {
-    return start.clone();
+function orientation(a, b, c) {
+  const cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  if (Math.abs(cross) <= LABEL_SEARCH_EPSILON) return 0;
+  return cross > 0 ? 1 : -1;
+}
+
+function pointOnSegment(a, b, point) {
+  return (
+    point.x >= Math.min(a.x, b.x) - LABEL_SEARCH_EPSILON &&
+    point.x <= Math.max(a.x, b.x) + LABEL_SEARCH_EPSILON &&
+    point.y >= Math.min(a.y, b.y) - LABEL_SEARCH_EPSILON &&
+    point.y <= Math.max(a.y, b.y) + LABEL_SEARCH_EPSILON
+  );
+}
+
+function segmentsIntersectInclusive(a, b, c, d) {
+  const o1 = orientation(a, b, c);
+  const o2 = orientation(a, b, d);
+  const o3 = orientation(c, d, a);
+  const o4 = orientation(c, d, b);
+
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && pointOnSegment(a, b, c)) return true;
+  if (o2 === 0 && pointOnSegment(a, b, d)) return true;
+  if (o3 === 0 && pointOnSegment(c, d, a)) return true;
+  if (o4 === 0 && pointOnSegment(c, d, b)) return true;
+  return false;
+}
+
+function doesLabelBoxFit(point, polygon, polygonEdges, width, height) {
+  const padding = computeLabelPadding(width, height);
+  const rect = makeLabelRectangle(point, width, height, padding);
+
+  if (!rect.corners.every(corner => signedDistance(corner, polygon) > LABEL_SEARCH_EPSILON)) {
+    return false;
   }
 
-  if (labelBoxSignedDistance(end, polygon, width, height) < 0) {
-    return null;
-  }
+  for (const edge of polygonEdges) {
+    if (
+      edge.maxX < rect.minX - LABEL_SEARCH_EPSILON ||
+      edge.minX > rect.maxX + LABEL_SEARCH_EPSILON ||
+      edge.maxY < rect.minY - LABEL_SEARCH_EPSILON ||
+      edge.minY > rect.maxY + LABEL_SEARCH_EPSILON
+    ) {
+      continue;
+    }
 
-  let low = 0;
-  let high = 1;
-  const samples = 24;
-  let foundFit = false;
-  for (let i = 1; i <= samples; i++) {
-    const t = i / samples;
-    const point = lerpPoint2D(start, end, t);
-    if (labelBoxSignedDistance(point, polygon, width, height) >= 0) {
-      low = (i - 1) / samples;
-      high = t;
-      foundFit = true;
-      break;
+    if (pointInRectangle(edge.a, rect) || pointInRectangle(edge.b, rect)) {
+      return false;
+    }
+
+    for (const rectEdge of rect.edges) {
+      if (segmentsIntersectInclusive(edge.a, edge.b, rectEdge.a, rectEdge.b)) {
+        return false;
+      }
     }
   }
 
-  if (!foundFit) {
+  return true;
+}
+
+function buildSearchBounds(polygon, width, height) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  polygon.forEach(point => {
+    if (point.x < minX) minX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y > maxY) maxY = point.y;
+  });
+
+  const padding = computeLabelPadding(width, height);
+  const insetX = width / 2 + padding;
+  const insetY = height / 2 + padding;
+  const bounds = {
+    minX: minX + insetX,
+    maxX: maxX - insetX,
+    minY: minY + insetY,
+    maxY: maxY - insetY
+  };
+
+  if (bounds.minX > bounds.maxX || bounds.minY > bounds.maxY) {
     return null;
   }
 
-  for (let i = 0; i < 18; i++) {
-    const mid = (low + high) / 2;
-    const point = lerpPoint2D(start, end, mid);
-    if (labelBoxSignedDistance(point, polygon, width, height) >= 0) {
-      high = mid;
-    } else {
-      low = mid;
+  return bounds;
+}
+
+function clampPointToBounds(point, bounds) {
+  return new THREE.Vector2(
+    THREE.MathUtils.clamp(point.x, bounds.minX, bounds.maxX),
+    THREE.MathUtils.clamp(point.y, bounds.minY, bounds.maxY)
+  );
+}
+
+function tryLabelCandidate(best, point, preferred, polygon, polygonEdges, width, height, bounds) {
+  if (
+    point.x < bounds.minX - LABEL_SEARCH_EPSILON ||
+    point.x > bounds.maxX + LABEL_SEARCH_EPSILON ||
+    point.y < bounds.minY - LABEL_SEARCH_EPSILON ||
+    point.y > bounds.maxY + LABEL_SEARCH_EPSILON
+  ) {
+    return best;
+  }
+
+  if (!doesLabelBoxFit(point, polygon, polygonEdges, width, height)) {
+    return best;
+  }
+
+  const dist2 = preferred.distanceToSquared(point);
+  const clearance = signedDistance(point, polygon);
+  const candidate = { point: point.clone(), dist2, clearance };
+
+  if (!best) return candidate;
+  if (candidate.dist2 < best.dist2 - LABEL_SEARCH_EPSILON) return candidate;
+  if (Math.abs(candidate.dist2 - best.dist2) <= LABEL_SEARCH_EPSILON && candidate.clearance > best.clearance + LABEL_SEARCH_EPSILON) {
+    return candidate;
+  }
+  return best;
+}
+
+function searchSpiralForLabelCenter(preferred, polygon, polygonEdges, width, height, bounds, maxRadius = Infinity) {
+  const step = Math.max(MIN_LABEL_SEARCH_STEP, Math.min(width, height) / 8);
+  const diagonal = Math.hypot(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
+  const radiusLimit = Math.min(maxRadius, diagonal);
+  let best = null;
+
+  const centerPoint = clampPointToBounds(preferred, bounds);
+  best = tryLabelCandidate(best, centerPoint, preferred, polygon, polygonEdges, width, height, bounds);
+  if (best && best.dist2 <= LABEL_SEARCH_EPSILON) {
+    return { best, step };
+  }
+
+  for (let radius = step; radius <= radiusLimit + LABEL_SEARCH_EPSILON; radius += step) {
+    const samples = Math.max(16, Math.ceil((2 * Math.PI * radius) / step));
+    let ringBest = null;
+
+    for (let i = 0; i < samples; i++) {
+      const angle = (i / samples) * Math.PI * 2;
+      const point = new THREE.Vector2(
+        preferred.x + Math.cos(angle) * radius,
+        preferred.y + Math.sin(angle) * radius
+      );
+      ringBest = tryLabelCandidate(ringBest, point, preferred, polygon, polygonEdges, width, height, bounds);
+    }
+
+    if (ringBest) {
+      return { best: ringBest, step };
     }
   }
 
-  return lerpPoint2D(start, end, high);
+  return { best: null, step };
+}
+
+function searchGridForLabelCenter(preferred, polygon, polygonEdges, width, height, bounds) {
+  const step = Math.max(MIN_LABEL_SEARCH_STEP, Math.min(width, height) / 8);
+  let best = null;
+
+  for (let y = bounds.minY; y <= bounds.maxY + LABEL_SEARCH_EPSILON; y += step) {
+    for (let x = bounds.minX; x <= bounds.maxX + LABEL_SEARCH_EPSILON; x += step) {
+      best = tryLabelCandidate(
+        best,
+        new THREE.Vector2(x, y),
+        preferred,
+        polygon,
+        polygonEdges,
+        width,
+        height,
+        bounds
+      );
+    }
+  }
+
+  return { best, step };
+}
+
+function refineLabelCenterCandidate(best, preferred, polygon, polygonEdges, width, height, bounds, initialStep) {
+  let refined = best;
+  let step = initialStep;
+
+  for (let pass = 0; pass < 4; pass++) {
+    step /= 2;
+    let localBest = refined;
+
+    for (let iy = -2; iy <= 2; iy++) {
+      for (let ix = -2; ix <= 2; ix++) {
+        if (ix === 0 && iy === 0) continue;
+        const point = new THREE.Vector2(
+          refined.point.x + ix * step,
+          refined.point.y + iy * step
+        );
+        localBest = tryLabelCandidate(
+          localBest,
+          point,
+          preferred,
+          polygon,
+          polygonEdges,
+          width,
+          height,
+          bounds
+        );
+      }
+    }
+
+    refined = localBest;
+  }
+
+  return refined;
+}
+
+function findBestLabelPlacement(polygon, preferred, width, height) {
+  const bounds = buildSearchBounds(polygon, width, height);
+  if (!bounds) return null;
+
+  const polygonEdges = buildPolygonEdges(polygon);
+  const preferredPoint = clampPointToBounds(preferred, bounds);
+  const seedPoints = [
+    preferredPoint,
+    new THREE.Vector2((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2)
+  ];
+
+  let best = null;
+  seedPoints.forEach(point => {
+    best = tryLabelCandidate(best, point, preferredPoint, polygon, polygonEdges, width, height, bounds);
+  });
+
+  if (best && best.dist2 <= LABEL_SEARCH_EPSILON) {
+    return best.point;
+  }
+
+  const maxSeedRadius = best ? Math.sqrt(best.dist2) + Math.max(MIN_LABEL_SEARCH_STEP, Math.min(width, height) / 8) : Infinity;
+  const spiralResult = searchSpiralForLabelCenter(
+    preferredPoint,
+    polygon,
+    polygonEdges,
+    width,
+    height,
+    bounds,
+    maxSeedRadius
+  );
+
+  if (spiralResult.best) {
+    return refineLabelCenterCandidate(
+      spiralResult.best,
+      preferredPoint,
+      polygon,
+      polygonEdges,
+      width,
+      height,
+      bounds,
+      spiralResult.step
+    ).point;
+  }
+
+  const gridResult = searchGridForLabelCenter(
+    preferredPoint,
+    polygon,
+    polygonEdges,
+    width,
+    height,
+    bounds
+  );
+
+  if (!gridResult.best) {
+    return null;
+  }
+
+  return refineLabelCenterCandidate(
+    gridResult.best,
+    preferredPoint,
+    polygon,
+    polygonEdges,
+    width,
+    height,
+    bounds,
+    gridResult.step
+  ).point;
 }
 
 let cachedAnchors = null;
@@ -336,43 +595,45 @@ export function getConstellationLabelAnchors() {
     }
 
     const polygon2D = ordered3D.map(p => projectToLocal2D(p, basis));
-    const labelSize = measureConstellationLabelWorldSize(displayName);
     const polylabel2D = polylabel(polygon2D, 0.15);
-    let best2D = null;
+    const centroid2D = polygon2D
+      .reduce((sum, p) => sum.add(p.clone()), new THREE.Vector2())
+      .multiplyScalar(1 / polygon2D.length);
 
+    let preferred2D = null;
     if (preferredCenter) {
       const center3D = cachedRadToSphere(preferredCenter.ra, preferredCenter.dec, R);
       const center2D = projectToLocal2D(center3D, basis);
-      if (signedDistance(center2D, polygon2D) >= 0) {
-        best2D = center2D;
+      if (signedDistance(center2D, polygon2D) > LABEL_SEARCH_EPSILON) {
+        preferred2D = center2D;
+      }
+    }
 
-        if (polylabel2D && signedDistance(polylabel2D, polygon2D) >= 0) {
-          const fittedCenter = findNearestFittingLabelCenter(
-            center2D,
-            polylabel2D,
-            polygon2D,
-            labelSize.width,
-            labelSize.height
-          );
-          if (fittedCenter) {
-            best2D = fittedCenter;
-          }
-        }
+    if (!preferred2D && polylabel2D && signedDistance(polylabel2D, polygon2D) > LABEL_SEARCH_EPSILON) {
+      preferred2D = polylabel2D;
+    }
+
+    if (!preferred2D) {
+      preferred2D = pointInPolygon(centroid2D, polygon2D) ? centroid2D : polylabel(polygon2D, 0.5);
+    }
+
+    if (!preferred2D) {
+      preferred2D = centroid2D.clone();
+    }
+
+    let best2D = null;
+    let fontSize = BASE_CONSTELLATION_FONT_SIZE;
+    for (let scale = 1; scale >= MIN_CONSTELLATION_FONT_SCALE - LABEL_SEARCH_EPSILON; scale -= FONT_SCALE_STEP) {
+      fontSize = Math.round(BASE_CONSTELLATION_FONT_SIZE * scale);
+      const labelSize = measureConstellationLabelWorldSize(displayName, fontSize);
+      const candidate = findBestLabelPlacement(polygon2D, preferred2D, labelSize.width, labelSize.height);
+      if (candidate) {
+        best2D = candidate;
+        break;
       }
     }
 
     if (!best2D) {
-      best2D = polylabel2D;
-    }
-
-    if (!best2D || signedDistance(best2D, polygon2D) <= 0) {
-      const centroid2D = polygon2D.reduce((sum, p) => sum.add(p.clone()), new THREE.Vector2()).multiplyScalar(1 / polygon2D.length);
-      best2D = pointInPolygon(centroid2D, polygon2D) ? centroid2D : polylabel(polygon2D, 0.5);
-    }
-
-    if (!best2D) {
-      const fallback = fallbackAnchor(abbrev);
-      if (fallback) anchors.push(fallback);
       return;
     }
 
@@ -382,6 +643,7 @@ export function getConstellationLabelAnchors() {
       ra,
       dec,
       name: displayName,
+      fontSize,
       abbrev
     });
   });
