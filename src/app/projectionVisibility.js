@@ -47,8 +47,8 @@ export function setupMapProjectionToggles({ requestRender, maybePersistPresets, 
 
   const refreshers = [
     bindToggle('map-true', containers.trueCoordinates, trueCoordinatesMap),
-    bindToggle('map-globe', containers.uvGlobe, uvGlobeMap),
     bindToggle('map-equirectangular', containers.uvMap, uvMap),
+    bindToggle('map-globe', containers.uvGlobe, uvGlobeMap),
     bindToggle('map-legacy-globe', containers.legacyGlobe, globeMap, true),
     bindToggle('map-legacy-mollweide', containers.legacyMollweide, mollweideMap, true)
   ].filter(Boolean);

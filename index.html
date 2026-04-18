@@ -35,6 +35,10 @@
           <legend class="collapsible" aria-expanded="false">Map Projections</legend>
           <div class="filter-content">
             <div class="filter-item">
+              <input type="checkbox" id="map-true" name="map-projection" value="true" checked />
+              <label for="map-true">True Coordinates</label>
+            </div>
+            <div class="filter-item">
               <input type="checkbox" id="map-equirectangular" name="map-projection" value="equirectangular" checked />
               <label for="map-equirectangular">Map (UV / Equirectangular)</label>
             </div>
@@ -42,9 +46,9 @@
               <input type="checkbox" id="map-globe" name="map-projection" value="globe" checked />
               <label for="map-globe">Globe (UV Projection)</label>
             </div>
-            <div class="filter-item">
-              <input type="checkbox" id="map-true" name="map-projection" value="true" />
-              <label for="map-true">True Coordinates</label>
+            <div class="filter-item filter-button-row">
+              <input type="checkbox" id="enable-star-interactions" name="enable-star-interactions" class="visually-hidden" checked />
+              <button type="button" id="toggle-star-interactions" class="filter-toggle-button" aria-pressed="true">Tooltips &amp; Star Selection: On</button>
             </div>
             <div class="filter-item">
               <input type="checkbox" id="show-legacy-projections" name="show-legacy-projections" />
@@ -314,6 +318,12 @@
     <!-- Maps Section -->
     <section class="maps-section">
       <div class="map-container">
+        <h2>True Coordinates</h2>
+        <p class="map-subtitle">Primary 3D cartesian star layout</p>
+        <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">&#x2922;</button>
+        <canvas id="map3D"></canvas>
+      </div>
+      <div class="map-container">
         <h2>Map</h2>
         <p class="map-subtitle">Primary UV / equirectangular source map</p>
         <button class="fullscreen-btn" aria-label="Fullscreen UV Map">⤢</button>
@@ -324,12 +334,6 @@
         <p class="map-subtitle">Primary globe projected from the UV map</p>
         <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">⤢</button>
         <canvas id="sphereMap"></canvas>
-      </div>
-      <div class="map-container legacy-map-container">
-        <h2>True Coordinates Map</h2>
-        <p class="map-subtitle">Auxiliary 3D cartesian star layout</p>
-        <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">⤢</button>
-        <canvas id="map3D"></canvas>
       </div>
       <div class="map-container legacy-map-container">
         <h2>Legacy Globe</h2>

@@ -1,4 +1,4 @@
-import { getStarId } from '../../shared/starUtils.js';
+import { getStarId, isSolStar } from '../../shared/starUtils.js';
 import { isDefaultViewpoint, getViewpointStarId } from '../../shared/viewpoint.js';
 
 // Stored reference to appContext, set once via setTooltipContext().
@@ -113,7 +113,8 @@ function populateTooltip(tooltip, star) {
   const currentVpId = getViewpointStarId();
   const thisStarId = getStarId(star);
   const isThisStar = currentVpId && currentVpId === thisStarId;
-  const isSolAndDefault = !currentVpId && star.Common_name_of_the_star === 'Sol';
+  const isSolTarget = isSolStar(star);
+  const isSolAndDefault = isDefaultViewpoint() && isSolTarget;
 
   if (isThisStar || isSolAndDefault) {
     vpBtn.textContent = 'Currently viewing from here';
@@ -121,11 +122,11 @@ function populateTooltip(tooltip, star) {
     vpBtn.style.opacity = '0.5';
     vpBtn.style.cursor = 'default';
   } else {
-    vpBtn.textContent = 'View from here';
+    vpBtn.textContent = isSolTarget ? 'View from Sol' : 'View from here';
     vpBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (_ctx) {
-        _ctx.changeViewpoint(star);
+        _ctx.changeViewpoint(isSolTarget ? null : star);
         hideTooltip();
         unpinTooltip();
         _ctx.state.selectedStarData = null;
@@ -135,7 +136,7 @@ function populateTooltip(tooltip, star) {
   vpRow.appendChild(vpBtn);
 
   // "Return to Sol" button when not at default viewpoint
-  if (!isDefaultViewpoint() && !isSolAndDefault) {
+  if (!isDefaultViewpoint() && !isSolTarget) {
     const solBtn = document.createElement('button');
     solBtn.type = 'button';
     solBtn.style.cssText = 'background:#444;color:#ccc;border:1px solid #666;border-radius:3px;padding:3px 8px;cursor:pointer;font-size:11px;font-family:inherit;width:100%;margin-top:4px;';

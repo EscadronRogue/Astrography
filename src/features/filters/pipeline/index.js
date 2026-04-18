@@ -12,9 +12,8 @@ import { createDefaultFilterResult } from '../state/filterDefaults.js';
 import { computeAdaptiveGridSize, readFilterState } from '../state/filterStateReader.js';
 import { setupFilterUI, generateStellarClassFilters } from '../../../ui/sidebar/buildSidebar.js';
 import { updateDerivedOverlays } from '../state/filterOverlayState.js';
-import { SOL_STAR_NAME } from '../../../shared/constants.js';
 import { isDefaultViewpoint, getViewpointStarId } from '../../../shared/viewpoint.js';
-import { getStarId } from '../../../shared/starUtils.js';
+import { getStarId, isSolStar } from '../../../shared/starUtils.js';
 
 let filterForm = null;
 
@@ -49,7 +48,7 @@ export function applyFilters(allStars, context = {}) {
   const viewpointId = getViewpointStarId();
   const nonViewpointStars = filteredStars.filter(star => {
     if (viewpointId) return getStarId(star) !== viewpointId;
-    return star.Common_name_of_the_star !== SOL_STAR_NAME;
+    return !isSolStar(star);
   });
 
   let connections = [];

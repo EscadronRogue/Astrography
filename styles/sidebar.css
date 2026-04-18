@@ -123,6 +123,27 @@
   cursor: pointer;
 }
 
+.filter-item.filter-button-row {
+  display: block;
+  margin-top: 10px;
+}
+
+.filter-toggle-button {
+  width: 100%;
+  text-align: center;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.filter-toggle-button.is-active {
+  background: #ff6f61;
+  color: #101010;
+  border-color: #ff6f61;
+}
+
+.filter-toggle-button.is-inactive {
+  color: #d7d7d7;
+}
+
 .sidebar .filter-item input[type="checkbox"],
 .sidebar .filter-item input[type="radio"] {
   width: 18px;

@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad } from './geometryUtils.js';
-import { GLOBE_RADIUS, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from './constants.js';
+import { GLOBE_RADIUS, MOLLWEIDE_MAX_ITERATIONS, EPSILON, SOL_STAR_NAME } from './constants.js';
 
 export function getStarId(star) {
   return (
@@ -9,6 +9,15 @@ export function getStarId(star) {
     star.Common_name_of_the_star_system ||
     star.HD ||
     `${star.RA_in_degrees}_${star.DEC_in_degrees}`
+  );
+}
+
+export function isSolStar(star) {
+  if (!star) return false;
+  return (
+    star.Common_name_of_the_star === SOL_STAR_NAME ||
+    star.Common_name_of_the_star_system === SOL_STAR_NAME ||
+    getStarId(star) === SOL_STAR_NAME
   );
 }
 

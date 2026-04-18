@@ -2,6 +2,9 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/thr
 import { showTooltip, hideTooltip, pinTooltip, unpinTooltip, getPinnedTooltipPosition } from './tooltips.js';
 import { getStarEquirectangularPosition } from '../../shared/uvUtils.js';
 
+const STAR_INTERACTIONS_INPUT_ID = 'enable-star-interactions';
+const STAR_INTERACTIONS_BUTTON_ID = 'toggle-star-interactions';
+
 function createHighlight(radius, position, { planar = false } = {}) {
   let geometry;
   if (planar) {
@@ -68,12 +71,69 @@ function resolveHoveredOrClickedStar(map, raycaster) {
   return resolveIntersectedStar(map, labelIntersects);
 }
 
+function getStarInteractionsInput() {
+  return document.getElementById(STAR_INTERACTIONS_INPUT_ID);
+}
+
+export function areStarInteractionsEnabled() {
+  return getStarInteractionsInput()?.checked ?? true;
+}
+
+function clearStarInteractionState(ctx) {
+  ctx.state.selectedStarData = null;
+  updateSelectedStarHighlight(ctx);
+  unpinTooltip();
+  hideTooltip();
+}
+
+function syncStarInteractionToggleButton(button, enabled) {
+  button.setAttribute('aria-pressed', String(enabled));
+  button.textContent = enabled ? 'Tooltips & Star Selection: On' : 'Tooltips & Star Selection: Off';
+  button.classList.toggle('is-active', enabled);
+  button.classList.toggle('is-inactive', !enabled);
+}
+
+export function setupStarInteractionToggle(ctx) {
+  const input = getStarInteractionsInput();
+  const button = document.getElementById(STAR_INTERACTIONS_BUTTON_ID);
+  if (!input || !button) return;
+
+  if (!button.dataset.toggleBound) {
+    button.addEventListener('click', () => {
+      input.checked = !input.checked;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    button.dataset.toggleBound = 'true';
+  }
+
+  if (!input.dataset.toggleBound) {
+    input.addEventListener('change', () => {
+      const enabled = input.checked;
+      syncStarInteractionToggleButton(button, enabled);
+      if (!enabled) {
+        clearStarInteractionState(ctx);
+      }
+    });
+    input.dataset.toggleBound = 'true';
+  }
+
+  syncStarInteractionToggleButton(button, input.checked);
+  if (!input.checked) {
+    clearStarInteractionState(ctx);
+  }
+}
+
 export function initStarInteractions(ctx, map) {
   const raycaster = new THREE.Raycaster();
   raycaster.params.Points = { threshold: getRaycastThreshold(map) };
   const mouse = new THREE.Vector2();
 
   map.canvas.addEventListener('mousemove', event => {
+    if (!areStarInteractionsEnabled()) {
+      hideTooltip();
+      return;
+    }
+
     const rect = map.canvas.getBoundingClientRect();
     mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -96,6 +156,11 @@ export function initStarInteractions(ctx, map) {
   });
 
   map.canvas.addEventListener('click', event => {
+    if (!areStarInteractionsEnabled()) {
+      hideTooltip();
+      return;
+    }
+
     const tooltip = document.getElementById('tooltip');
     if (tooltip) {
       const tRect = tooltip.getBoundingClientRect();

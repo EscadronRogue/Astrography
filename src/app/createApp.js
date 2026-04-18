@@ -15,7 +15,7 @@ import { maybeSavePresets, savePresets, loadPresets, clearSavedPresets } from '.
 import { getStarId } from '../shared/starUtils.js';
 import { getStarTruePosition as getSharedStarTruePosition, getStarGlobePosition, getStarMollweidePosition, precalcMollweideData as precalcSharedMollweideData } from '../shared/starUtils.js';
 import { buildAndApplyFilters as runFilterPipeline, updateMollweideView as refreshMollweideMap } from '../features/filters/pipeline/filterPipeline.js';
-import { initStarInteractions, updateSelectedStarHighlight } from '../render/interactions/starInteractions.js';
+import { initStarInteractions, setupStarInteractionToggle, updateSelectedStarHighlight } from '../render/interactions/starInteractions.js';
 import { setTooltipContext, invalidateTooltipCache } from '../render/interactions/tooltips.js';
 import { setRenderRequester, requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { ExportManager } from '../features/export/exportManager.js';
@@ -65,7 +65,8 @@ const appContext = {
    */
   changeViewpoint(star) {
     setViewpointStar(star);
-    state.viewpointStar = star;
+    const normalizedViewpoint = isDefaultViewpoint() ? null : star;
+    state.viewpointStar = normalizedViewpoint;
 
     // Clear projection caches — all RA/DEC values change with viewpoint
     clearRadToSphereCache();
@@ -79,7 +80,7 @@ const appContext = {
     }
 
     // Update viewpoint indicator banner and clear tooltip cache
-    updateViewpointBanner(star);
+    updateViewpointBanner(normalizedViewpoint);
     invalidateTooltipCache();
 
     // Grey out / restore constellation & plane checkboxes
@@ -265,6 +266,7 @@ export async function bootstrapApp() {
     initStarInteractions(appContext, uvMap);
     initStarInteractions(appContext, globeMap);
     initStarInteractions(appContext, mollweideMap);
+    setupStarInteractionToggle(appContext);
 
     // Viewpoint banner "Return to Sol" button
     const vpResetBtn = document.getElementById('viewpoint-banner-reset');

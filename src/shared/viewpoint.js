@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-import { getStarId } from './starUtils.js';
+import { getStarId, isSolStar } from './starUtils.js';
 
 /* ------------------------------------------------------------------ */
 /*  State                                                              */
@@ -25,7 +25,7 @@ let _viewpointHelioPosition = null; // THREE.Vector3 — heliocentric pos of vie
  *                              or null to reset to Sol.
  */
 export function setViewpointStar(star) {
-  if (star === null || star === undefined) {
+  if (star === null || star === undefined || isSolStar(star)) {
     _viewpointStar = null;
     _viewpointHelioPosition = null;
     return;
