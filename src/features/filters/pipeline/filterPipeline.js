@@ -11,6 +11,7 @@ import { captureFormState, restoreFormState } from '../../../shared/formUtils.js
 import { syncFilterResultsToAppState } from '../state/filterStateStore.js';
 import { applyPlanes, refreshMollweidePlanes } from '../../planes/planeManager.js';
 import { rebuildConstellationVisuals, refreshMollweideConstellationVisuals } from '../../constellations/constellationManager.js';
+import { getStarId } from '../../../shared/starUtils.js';
 import { getStarEquirectangularPosition } from '../../../shared/uvUtils.js';
 
 function isMapVisible(map) {
@@ -20,6 +21,46 @@ function isMapVisible(map) {
 function getSelectedDustCloudFiles(form) {
   if (!form) return [];
   return new FormData(form).getAll('dust-clouds');
+}
+
+function buildStellarClassCandidateSignature(stars) {
+  if (!Array.isArray(stars) || stars.length === 0) return '0';
+
+  let hash = 2166136261;
+  stars.forEach(star => {
+    const starId = String(getStarId(star));
+    for (let index = 0; index < starId.length; index += 1) {
+      hash ^= starId.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    hash ^= 124;
+    hash = Math.imul(hash, 16777619);
+  });
+
+  return `${stars.length}:${hash >>> 0}`;
+}
+
+function shouldRebuildStellarClassUi(ctx, stars) {
+  const state = ctx?.state;
+  const nextSignature = buildStellarClassCandidateSignature(stars);
+  const selectionContainer = document.getElementById('stellar-class-selection-container');
+  const preferencesContainer = document.getElementById('stellar-class-preferences-container');
+  const hasRenderedUi = Boolean(
+    selectionContainer?.childElementCount || preferencesContainer?.childElementCount
+  );
+
+  if (!hasRenderedUi) {
+    if (state) state.stellarClassCandidateSignature = nextSignature;
+    return true;
+  }
+
+  const previousSignature = state?.stellarClassCandidateSignature;
+  if (previousSignature === nextSignature) {
+    return false;
+  }
+
+  if (state) state.stellarClassCandidateSignature = nextSignature;
+  return true;
 }
 
 function updateProjectedPositions(ctx) {
@@ -170,21 +211,25 @@ export async function buildAndApplyFilters(ctx) {
       moll: mollweideMap?.scene
     }
   });
-  const stellarSelectionContainer = document.getElementById('stellar-class-selection-container');
-  const stellarPreferencesContainer = document.getElementById('stellar-class-preferences-container');
-  const previousSelectionState = stellarSelectionContainer
-    ? captureFormState(stellarSelectionContainer)
-    : null;
-  const previousPreferencesState = stellarPreferencesContainer
-    ? captureFormState(stellarPreferencesContainer)
-    : null;
+  const stellarClassCandidates = filters.stellarClassCandidates || filters.currentFilteredStars;
 
-  generateStellarClassFilters(filters.stellarClassCandidates || filters.currentFilteredStars);
-  if (previousSelectionState && stellarSelectionContainer) {
-    restoreFormState(stellarSelectionContainer, previousSelectionState, { dispatchEvents: false });
-  }
-  if (previousPreferencesState && stellarPreferencesContainer) {
-    restoreFormState(stellarPreferencesContainer, previousPreferencesState, { dispatchEvents: false });
+  if (shouldRebuildStellarClassUi(ctx, stellarClassCandidates)) {
+    const stellarSelectionContainer = document.getElementById('stellar-class-selection-container');
+    const stellarPreferencesContainer = document.getElementById('stellar-class-preferences-container');
+    const previousSelectionState = stellarSelectionContainer
+      ? captureFormState(stellarSelectionContainer)
+      : null;
+    const previousPreferencesState = stellarPreferencesContainer
+      ? captureFormState(stellarPreferencesContainer)
+      : null;
+
+    generateStellarClassFilters(stellarClassCandidates);
+    if (previousSelectionState && stellarSelectionContainer) {
+      restoreFormState(stellarSelectionContainer, previousSelectionState, { dispatchEvents: false });
+    }
+    if (previousPreferencesState && stellarPreferencesContainer) {
+      restoreFormState(stellarPreferencesContainer, previousPreferencesState, { dispatchEvents: false });
+    }
   }
 
   const sanitizedConstellationLineWidth = Math.max(0.1, filters.constellationLineWidth || 0.1);
