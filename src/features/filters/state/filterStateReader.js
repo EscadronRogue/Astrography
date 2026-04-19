@@ -32,6 +32,8 @@ export function computeAdaptiveGridSize(sliderValue) {
 
 export function readFilterState(filterForm) {
   const formData = new FormData(filterForm);
+  const selectedDustClouds = formData.getAll('dust-clouds');
+  const dustCloudMode = formData.get('dust-cloud-mode') === 'legacy' ? 'legacy' : 'density';
 
   return {
     size: formData.get('size'),
@@ -77,8 +79,9 @@ export function readFilterState(filterForm) {
     planeOpacity: readNumericValue(formData, 'plane-opacity', 50) / 100,
     mollweideBorderWidth: readNumericValue(formData, 'mollweide-border-width', 1),
     mollweideBorderOpacity: readNumericValue(formData, 'mollweide-border-opacity', 100) / 100,
-    showClouds: formData.getAll('dust-clouds').length > 0,
-    showCloudDensity: formData.getAll('dust-density-clouds').length > 0,
+    dustCloudMode,
+    showClouds: dustCloudMode === 'legacy' && selectedDustClouds.length > 0,
+    showCloudDensity: dustCloudMode !== 'legacy' && selectedDustClouds.length > 0,
     showGalacticPlane: readCheckboxValue(formData, 'show-galactic-plane'),
     showEclipticPlane: readCheckboxValue(formData, 'show-ecliptic-plane'),
     showCelestialEquator: readCheckboxValue(formData, 'show-celestial-equator'),

@@ -65,6 +65,9 @@ input[type="number"],
 #connection-opacity-value, #connection-value,
 #density-value, #density-top-value, #density-bottom-value, #density-opacity-value,
 #isolation-value, #isolation-tolerance-value, #density-tolerance-value,
+#constellation-line-opacity-value, #constellation-line-width-value,
+#constellation-name-opacity-value, #mollweide-border-width-value,
+#mollweide-border-opacity-value, #plane-opacity-value,
 #tooltip-distance, #tooltip-apparentMag, #tooltip-absoluteMag, #tooltip-mass {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -588,7 +591,10 @@ header h1::before {
 #star-opacity-value, #star-name-opacity-value,
 #connection-opacity-value, #density-opacity-value,
 #density-value, #density-top-value, #density-bottom-value,
-#isolation-value, #isolation-tolerance-value, #density-tolerance-value {
+#isolation-value, #isolation-tolerance-value, #density-tolerance-value,
+#constellation-line-opacity-value, #constellation-line-width-value,
+#constellation-name-opacity-value, #mollweide-border-width-value,
+#mollweide-border-opacity-value, #plane-opacity-value {
   color: var(--accent);
   font-weight: 500;
   font-size: 11px;
@@ -650,6 +656,37 @@ header h1::before {
   margin: 0;
 }
 .stellar-class-subcategory:last-child { border-bottom: 0; }
+.class-level-checkboxes {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.individual-stars {
+  display: grid;
+  gap: 4px;
+}
+.star-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px dotted var(--hairline);
+}
+.star-container:first-child {
+  border-top: 0;
+}
+.star-name {
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.star-checkboxes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .subcategory-header {
   background: transparent;
   color: var(--fg);

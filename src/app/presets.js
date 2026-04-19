@@ -3,6 +3,56 @@ import { captureFormState, restoreFormState } from '../shared/formUtils.js';
 export const PRESET_KEY = 'astrography-presets';
 export const PRESET_SCHEMA_VERSION = 3;
 
+function migrateLegacyDustCloudSelections(form, savedFormState) {
+  if (!form || !savedFormState) return;
+
+  const densitySelections = Object.entries(savedFormState).filter(([id, value]) =>
+    id.startsWith('dust-density-') && value === true
+  );
+  const legacySelections = Object.entries(savedFormState).filter(([id, value]) =>
+    id.startsWith('dust-cloud-') && value === true
+  );
+
+  densitySelections.forEach(([id]) => {
+    const unifiedId = id.replace(/^dust-density-/, 'dust-cloud-');
+    const checkbox = form.querySelector(`#${CSS.escape(unifiedId)}`);
+    if (checkbox) {
+      checkbox.checked = true;
+    }
+  });
+
+  const densityMode = form.querySelector('#dust-cloud-mode-density');
+  const legacyMode = form.querySelector('#dust-cloud-mode-legacy');
+  if (densitySelections.length > 0 && densityMode) {
+    densityMode.checked = true;
+    if (legacyMode) legacyMode.checked = false;
+  } else if (legacySelections.length > 0 && legacyMode) {
+    legacyMode.checked = true;
+    if (densityMode) densityMode.checked = false;
+  }
+}
+
+function refreshRestoredFilterUi(form) {
+  if (!form) return;
+
+  form.querySelectorAll('input[type="range"]').forEach(input => {
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+
+  [
+    'enable-connections',
+    'enable-density-filter',
+    'enable-isolation-filter',
+    'dust-cloud-mode-density',
+    'dust-cloud-mode-legacy'
+  ].forEach(id => {
+    const control = form.querySelector(`#${CSS.escape(id)}`);
+    if (control) {
+      control.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+}
+
 function serializeMap(map) {
   return Array.from(map.entries());
 }
@@ -99,6 +149,8 @@ export function loadPresets({
   const form = document.getElementById(formId);
   if (form && payload.form) {
     restoreFormState(form, payload.form, { dispatchEvents: false });
+    migrateLegacyDustCloudSelections(form, payload.form);
+    refreshRestoredFilterUi(form);
   }
 
   if (payload.edits) {

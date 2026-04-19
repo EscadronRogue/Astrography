@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Astrography</title>
   <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  
+
   <link rel="stylesheet" href="styles/base.css?v=1776519673389" />
   <link rel="stylesheet" href="styles/sidebar.css?v=1776519673389" />
   <link rel="stylesheet" href="styles/layout.css?v=1776519673389" />
@@ -16,33 +16,34 @@
   <link rel="stylesheet" href="styles/export.css?v=1776519673389" />
   <link rel="stylesheet" href="styles/theme.css?v=1776519673389" />
   <script>
-    (function(){ try { var t = localStorage.getItem("ag-theme") || "observatory";
-      document.documentElement.setAttribute("data-theme", t); } catch(e) {
-      document.documentElement.setAttribute("data-theme", "observatory"); } })();
+    (function () {
+      try {
+        var t = localStorage.getItem("ag-theme") || "observatory";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {
+        document.documentElement.setAttribute("data-theme", "observatory");
+      }
+    })();
   </script>
 </head>
 <body>
-  <!-- Corner progress bar (non-blocking) -->
   <div id="progress-bar-container" role="status" aria-live="polite" aria-label="Loading progress">
     <div id="progress-bar-track">
       <div id="progress-bar-fill"></div>
     </div>
-    <span id="progress-bar-label">Initializing…</span>
+    <span id="progress-bar-label">Initializing...</span>
   </div>
 
-  <!-- Header with Menu Toggle Button -->
   <header>
-    <button id="menu-toggle" aria-label="Toggle Menu">☰</button>
+    <button id="menu-toggle" aria-label="Toggle Menu">&#9776;</button>
     <h1>Astrography</h1>
   </header>
 
-  <!-- Main Container -->
   <div class="main-container">
     <aside class="sidebar">
       <h2>Filters</h2>
       <form id="filters-form">
-        <!-- ═══ 1. VIEW ═══════════════════════════════════════════════ -->
-        <div class="ag-section"><span class="ag-section-label">View</span></div>
+        <div class="ag-section"><span class="ag-section-label">Scope</span></div>
 
         <fieldset>
           <legend class="collapsible" aria-expanded="false">Projections</legend>
@@ -77,60 +78,103 @@
         </fieldset>
 
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Interaction</legend>
+          <legend class="collapsible" aria-expanded="false">Distance Range <span id="distance-viewpoint-label" class="ag-legend-meta"></span></legend>
           <div class="filter-content">
-            <div class="filter-item filter-button-row">
-              <input type="checkbox" id="enable-star-interactions" name="enable-star-interactions" class="visually-hidden" checked />
-              <button type="button" id="toggle-star-interactions" class="filter-toggle-button" aria-pressed="true">Tooltips &amp; Star Selection: On</button>
+            <div class="filter-item">
+              <label for="min-distance-slider">Minimum:</label>
+              <input type="range" id="min-distance-slider" name="min-distance" min="0" max="100" value="0" />
+              <input type="number" id="min-distance-number" name="min-distance" min="0" max="100" value="0" />
+            </div>
+            <div class="filter-item">
+              <label for="max-distance-slider">Maximum:</label>
+              <input type="range" id="max-distance-slider" name="max-distance" min="0" max="100" value="20" />
+              <input type="number" id="max-distance-number" name="max-distance" min="0" max="100" value="20" />
             </div>
           </div>
         </fieldset>
-        <div id="ag-slot-view"></div>
 
-        <!-- ═══ 2. STARS ══════════════════════════════════════════════ -->
         <div class="ag-section"><span class="ag-section-label">Stars</span></div>
 
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Visibility &amp; Distance <span id="distance-viewpoint-label" class="ag-legend-meta"></span></legend>
+          <legend class="collapsible" aria-expanded="false">Stellar Class</legend>
           <div class="filter-content">
-            <div class="filter-subhead">Visibility</div>
+            <div id="stellar-class-selection-container"></div>
+          </div>
+        </fieldset>
+
+        <div class="ag-section"><span class="ag-section-label">Connections</span></div>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Connections</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="enable-connections" name="enable-connections" />
+              <label for="enable-connections">Enable Connections</label>
+            </div>
+            <div class="filter-item">
+              <label for="connection-slider">Max Distance (LY):</label>
+              <input type="range" id="connection-slider" name="connections" min="1" max="50" value="7" disabled />
+              <input type="number" id="connection-number" name="connections" min="1" max="50" value="7" disabled />
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="ag-section"><span class="ag-section-label">Density</span></div>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Density</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="enable-density-filter" name="enable-density-filter" />
+              <label for="enable-density-filter">Enable Density Filter</label>
+            </div>
+            <div class="filter-item">
+              <label for="density-slider">Density Radius (LY):</label>
+              <input type="range" id="density-slider" name="density" min="1" max="20" value="10" disabled />
+              <input type="number" id="density-number" name="density" min="1" max="20" value="10" disabled />
+              <span id="density-value">10</span>
+            </div>
+          </div>
+        </fieldset>
+
+        <div class="ag-section"><span class="ag-section-label">Dust Clouds</span></div>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Dust Clouds</legend>
+          <div class="filter-content">
+            <div class="filter-item filter-button-row">
+              <button type="button" id="toggle-all-dust-clouds">Toggle All Clouds</button>
+            </div>
+            <div id="dust-cloud-selection-container"></div>
+          </div>
+        </fieldset>
+
+        <div class="ag-section"><span class="ag-section-label">Preferences</span></div>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Scope</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="globe-opaque-surface" name="globe-opaque-surface" checked />
+              <label for="globe-opaque-surface">Opaque Globe Surface</label>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Stars</legend>
+          <div class="filter-content">
+            <div class="filter-subhead">Magnitude Filtering</div>
             <div class="filter-item">
               <input type="radio" id="stars-shown-all" name="stars-shown" value="all" checked />
               <label for="stars-shown-all">All Stars</label>
             </div>
             <div class="filter-item">
               <input type="radio" id="stars-shown-visible" name="stars-shown" value="visible" />
-              <label for="stars-shown-visible">Visible Stars (Magnitude ≤ 6)</label>
+              <label for="stars-shown-visible">Visible Stars (Magnitude &le; 6)</label>
             </div>
-            <div class="filter-subhead">Distance Range (LY)</div>
-            <div class="filter-item">
-              <label for="min-distance-slider">Minimum:</label>
-              <input type="range" id="min-distance-slider" min="0" max="100" value="0" />
-              <input type="number" id="min-distance-number" name="min-distance" min="0" max="100" value="0" />
-            </div>
-            <div class="filter-item">
-              <label for="max-distance-slider">Maximum:</label>
-              <input type="range" id="max-distance-slider" min="0" max="100" value="20" />
-              <input type="number" id="max-distance-number" name="max-distance" min="0" max="100" value="20" />
-            </div>
-            <div class="filter-item">
-              <input type="checkbox" id="show-distance-in-labels" name="show-distance-in-labels" checked />
-              <label for="show-distance-in-labels">Show Distance In Star Labels</label>
-            </div>
-          </div>
-        </fieldset>
 
-        <fieldset>
-          <legend class="collapsible" aria-expanded="false">Stellar Class</legend>
-          <div class="filter-content">
-            <div id="stellar-class-container"></div>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend class="collapsible" aria-expanded="false">Appearance</legend>
-          <div class="filter-content">
-            <div class="filter-subhead">Size</div>
+            <div class="filter-subhead">Size Mode</div>
             <div class="filter-item">
               <input type="radio" id="size-stellar-class" name="size" value="stellar-class" checked />
               <label for="size-stellar-class">Stellar Class-Based</label>
@@ -139,7 +183,8 @@
               <input type="radio" id="size-distance" name="size" value="distance" />
               <label for="size-distance">Distance-Based</label>
             </div>
-            <div class="filter-subhead">Color</div>
+
+            <div class="filter-subhead">Color Mode</div>
             <div class="filter-item">
               <input type="radio" id="color-stellar-class" name="color" value="stellar-class" checked />
               <label for="color-stellar-class">Stellar Class-Based</label>
@@ -152,7 +197,8 @@
               <input type="radio" id="color-galactic-plane" name="color" value="galactic-plane" />
               <label for="color-galactic-plane">Galactic Plane</label>
             </div>
-            <div class="filter-subhead">Opacity</div>
+
+            <div class="filter-subhead">Opacity Mode</div>
             <div class="filter-item">
               <input type="radio" id="opacity-absolute-mag" name="opacity" value="absolute-magnitude" checked />
               <label for="opacity-absolute-mag">Absolute Magnitude-Based</label>
@@ -173,31 +219,19 @@
               <input type="number" id="star-name-opacity-number" name="star-name-opacity" min="0" max="100" value="100" step="1" />
               <span id="star-name-opacity-value">100</span>%
             </div>
+            <div class="filter-item">
+              <input type="checkbox" id="show-distance-in-labels" name="show-distance-in-labels" checked />
+              <label for="show-distance-in-labels">Show Distance In Star Labels</label>
+            </div>
+
+            <div class="filter-subhead">Stellar Class Display</div>
+            <div id="stellar-class-preferences-container"></div>
           </div>
         </fieldset>
-
-        <!-- ═══ 3. OVERLAYS & ANALYSIS ═══════════════════════════════ -->
-                <!-- ═══ 3a. FEATURES ═══════════════════════════════════════ -->
-        <div class="ag-section"><span class="ag-section-label">Features</span></div>
-        <!-- Constellations / Dust Clouds / Dust Cloud Density fieldsets
-             are injected dynamically by buildSidebar.js and relocated here
-             by src/ui/enhance.js. -->
-        <div id="ag-slot-features"></div>
-
-        <div class="ag-section"><span class="ag-section-label">Analysis</span></div>
 
         <fieldset>
           <legend class="collapsible" aria-expanded="false">Connections</legend>
           <div class="filter-content">
-            <div class="filter-item">
-              <input type="checkbox" id="enable-connections" name="enable-connections" />
-              <label for="enable-connections">Enable Connections</label>
-            </div>
-            <div class="filter-item">
-              <label for="connection-slider">Max Distance (LY):</label>
-              <input type="range" id="connection-slider" name="connections" min="1" max="50" value="7" disabled />
-              <input type="number" id="connection-number" name="connections" min="1" max="50" value="7" disabled />
-            </div>
             <div class="filter-item">
               <label for="connection-opacity-slider">Line Opacity:</label>
               <input type="range" id="connection-opacity-slider" name="connection-opacity" min="0" max="100" value="50" step="1" disabled />
@@ -207,12 +241,12 @@
             <div class="filter-item">
               <label for="connection-width-slider">Max Thickness:</label>
               <input type="range" id="connection-width-slider" name="connection-width" min="1" max="10" value="5" step="0.5" disabled />
-              <input type="number" id="connection-width-number" name="connection-width" min="1" max="10" step="0.5" value="5" disabled />
+              <input type="number" id="connection-width-number" name="connection-width" min="1" max="10" value="5" step="0.5" disabled />
             </div>
             <div class="filter-item">
               <label for="connection-fade-slider">Edge Hardness:</label>
               <input type="range" id="connection-fade-slider" name="connection-fade" min="0.5" max="5" value="1" step="0.1" disabled />
-              <input type="number" id="connection-fade-number" name="connection-fade" min="0.5" max="5" step="0.1" value="1" disabled />
+              <input type="number" id="connection-fade-number" name="connection-fade" min="0.5" max="5" value="1" step="0.1" disabled />
             </div>
             <div class="filter-item">
               <label for="connection-label-size-slider">Label Size:</label>
@@ -223,8 +257,52 @@
         </fieldset>
 
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Isolation</legend>
+          <legend class="collapsible" aria-expanded="false">Density</legend>
           <div class="filter-content">
+            <div class="filter-subhead">Density</div>
+            <div class="filter-item">
+              <label>Ignore closest stars: <span id="density-tolerance-value">0</span></label>
+              <input type="range" id="density-tolerance-slider" name="density-tolerance" min="0" max="10" value="0" disabled />
+            </div>
+            <div class="filter-item">
+              <label for="density-bottom-slider">Bottom Cells %:</label>
+              <input type="range" id="density-bottom-slider" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
+              <input type="number" id="density-bottom-number" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
+              <span id="density-bottom-value">10</span>%
+            </div>
+            <div class="filter-item">
+              <label for="density-top-slider">Top Cells %:</label>
+              <input type="range" id="density-top-slider" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
+              <input type="number" id="density-top-number" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
+              <span id="density-top-value">10</span>%
+            </div>
+            <div class="filter-item">
+              <label for="density-grid-slider">Grid Subdivision:</label>
+              <input type="range" id="density-grid-slider" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
+              <input type="number" id="density-grid-number" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="enable-density-labeling" name="enable-density-labeling" />
+              <label for="enable-density-labeling">Cluster Labeling &amp; Segmentation</label>
+            </div>
+            <div class="filter-item">
+              <label for="density-opacity-slider">Overlay Opacity:</label>
+              <input type="range" id="density-opacity-slider" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
+              <input type="number" id="density-opacity-number" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
+              <span id="density-opacity-value">100</span>%
+            </div>
+            <div class="filter-item">
+              <label for="density-line-width-slider">Line Thickness:</label>
+              <input type="range" id="density-line-width-slider" name="density-line-width" min="5" max="60" value="30" step="1" disabled />
+              <input type="number" id="density-line-width-number" name="density-line-width" min="5" max="60" value="30" step="1" disabled />
+            </div>
+            <div class="filter-item">
+              <label for="density-fade-slider">Edge Hardness:</label>
+              <input type="range" id="density-fade-slider" name="density-fade" min="0.5" max="5" value="1" step="0.1" disabled />
+              <input type="number" id="density-fade-number" name="density-fade" min="0.5" max="5" value="1" step="0.1" disabled />
+            </div>
+
+            <div class="filter-subhead">Isolation</div>
             <div class="filter-item">
               <input type="checkbox" id="enable-isolation-filter" name="enable-isolation-filter" />
               <label for="enable-isolation-filter">Enable Isolation Filter</label>
@@ -252,70 +330,123 @@
         </fieldset>
 
         <fieldset>
-          <legend class="collapsible" aria-expanded="false">Density</legend>
+          <legend class="collapsible" aria-expanded="false">Dust Clouds</legend>
           <div class="filter-content">
+            <div class="filter-subhead">Mode</div>
             <div class="filter-item">
-              <input type="checkbox" id="enable-density-filter" name="enable-density-filter" />
-              <label for="enable-density-filter">Enable Density Filter</label>
-            </div>
-            <div class="filter-subhead">Sampling</div>
-            <div class="filter-item">
-              <label for="density-slider">Density Radius (LY):</label>
-              <input type="range" id="density-slider" name="density" min="1" max="20" value="10" disabled />
-              <input type="number" id="density-number" name="density" min="1" max="20" value="10" disabled />
-              <span id="density-value">10</span>
+              <input type="radio" id="dust-cloud-mode-density" name="dust-cloud-mode" value="density" checked />
+              <label for="dust-cloud-mode-density">Density Overlay</label>
             </div>
             <div class="filter-item">
-              <label>Ignore closest stars: <span id="density-tolerance-value">0</span></label>
-              <input type="range" id="density-tolerance-slider" name="density-tolerance" min="0" max="10" value="0" disabled />
+              <input type="radio" id="dust-cloud-mode-legacy" name="dust-cloud-mode" value="legacy" />
+              <label for="dust-cloud-mode-legacy">Dust Cloud Legacy</label>
+            </div>
+
+            <div class="filter-subhead">Density Overlay</div>
+            <div class="filter-item">
+              <label for="cloud-density-radius-slider">Radius:</label>
+              <input type="range" id="cloud-density-radius-slider" name="cloud-density-radius" min="1" max="20" value="5" />
+              <input type="number" id="cloud-density-radius-number" name="cloud-density-radius" min="1" max="20" value="5" />
             </div>
             <div class="filter-item">
-              <label for="density-bottom-slider">Bottom Cells %:</label>
-              <input type="range" id="density-bottom-slider" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
-              <input type="number" id="density-bottom-number" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
-              <span id="density-bottom-value">10</span>%
+              <label for="cloud-density-opacity-slider">Overlay Opacity:</label>
+              <input type="range" id="cloud-density-opacity-slider" name="cloud-density-opacity" min="0" max="100" value="100" step="1" />
+              <input type="number" id="cloud-density-opacity-number" name="cloud-density-opacity" min="0" max="100" value="100" step="1" />
             </div>
+
+            <div class="filter-subhead">Dust Cloud Legacy</div>
             <div class="filter-item">
-              <label for="density-top-slider">Top Cells %:</label>
-              <input type="range" id="density-top-slider" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
-              <input type="number" id="density-top-number" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
-              <span id="density-top-value">10</span>%
-            </div>
-            <div class="filter-subhead">Clustering</div>
-            <div class="filter-item">
-              <input type="checkbox" id="enable-density-labeling" name="enable-density-labeling" />
-              <label for="enable-density-labeling">Cluster Labeling &amp; Segmentation</label>
-            </div>
-            <div class="filter-item">
-              <label for="density-grid-slider">Grid Subdivision:</label>
-              <input type="range" id="density-grid-slider" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
-              <input type="number" id="density-grid-number" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
-            </div>
-            <div class="filter-subhead">Rendering</div>
-            <div class="filter-item">
-              <label for="density-opacity-slider">Overlay Opacity:</label>
-              <input type="range" id="density-opacity-slider" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
-              <input type="number" id="density-opacity-number" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
-              <span id="density-opacity-value">100</span>%
-            </div>
-            <div class="filter-item">
-              <label for="density-line-width-slider">Line Thickness:</label>
-              <input type="range" id="density-line-width-slider" name="density-line-width" min="5" max="60" value="30" step="1" disabled />
-              <input type="number" id="density-line-width-number" name="density-line-width" min="5" max="60" value="30" step="1" disabled />
-            </div>
-            <div class="filter-item">
-              <label for="density-fade-slider">Edge Hardness:</label>
-              <input type="range" id="density-fade-slider" name="density-fade" min="0.5" max="5" value="1" step="0.1" disabled />
-              <input type="number" id="density-fade-number" name="density-fade" min="0.5" max="5" value="1" step="0.1" disabled />
+              <label for="cloud-opacity-slider">Overlay Opacity:</label>
+              <input type="range" id="cloud-opacity-slider" name="cloud-opacity" min="0" max="100" value="100" step="1" />
+              <input type="number" id="cloud-opacity-number" name="cloud-opacity" min="0" max="100" value="100" step="1" />
             </div>
           </div>
         </fieldset>
 
-        <!-- ═══ 4. SESSION ═══════════════════════════════════════════ -->
-        <div class="ag-section"><span class="ag-section-label">Session</span></div>
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Constellations</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="show-constellation-boundaries" name="show-constellation-boundaries" checked />
+              <label for="show-constellation-boundaries">Show Constellation Boundaries</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="show-constellation-names" name="show-constellation-names" checked />
+              <label for="show-constellation-names">Show Constellation Names</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="show-constellation-overlay" name="show-constellation-overlay" />
+              <label for="show-constellation-overlay">Show Constellation Overlays</label>
+            </div>
+            <div class="filter-item">
+              <label for="constellation-line-opacity-slider">Line Opacity:</label>
+              <input type="range" id="constellation-line-opacity-slider" name="constellation-line-opacity" min="0" max="100" value="40" />
+              <input type="number" id="constellation-line-opacity-number" name="constellation-line-opacity" min="0" max="100" value="40" />
+              <span id="constellation-line-opacity-value">40</span>%
+            </div>
+            <div class="filter-item">
+              <label for="constellation-line-width-slider">Line Width:</label>
+              <input type="range" id="constellation-line-width-slider" name="constellation-line-width" min="0.1" max="5" value="1.0" step="0.1" />
+              <input type="number" id="constellation-line-width-number" name="constellation-line-width" min="0.1" max="5" value="1.0" step="0.1" />
+              <span id="constellation-line-width-value">1.0</span>px
+            </div>
+            <div class="filter-item">
+              <label for="constellation-name-opacity-slider">Name Opacity:</label>
+              <input type="range" id="constellation-name-opacity-slider" name="constellation-name-opacity" min="0" max="100" value="80" />
+              <input type="number" id="constellation-name-opacity-number" name="constellation-name-opacity" min="0" max="100" value="80" />
+              <span id="constellation-name-opacity-value">80</span>%
+            </div>
+            <div class="filter-item">
+              <label for="mollweide-border-width-slider">Border Width:</label>
+              <input type="range" id="mollweide-border-width-slider" name="mollweide-border-width" min="0.1" max="10" value="1.0" step="0.1" />
+              <input type="number" id="mollweide-border-width-number" name="mollweide-border-width" min="0.1" max="10" value="1.0" step="0.1" />
+              <span id="mollweide-border-width-value">1.0</span>px
+            </div>
+            <div class="filter-item">
+              <label for="mollweide-border-opacity-slider">Border Opacity:</label>
+              <input type="range" id="mollweide-border-opacity-slider" name="mollweide-border-opacity" min="0" max="100" value="100" />
+              <input type="number" id="mollweide-border-opacity-number" name="mollweide-border-opacity" min="0" max="100" value="100" />
+              <span id="mollweide-border-opacity-value">100</span>%
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Reference Planes</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="show-galactic-plane" name="show-galactic-plane" />
+              <label for="show-galactic-plane">Show Galactic Plane</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="show-ecliptic-plane" name="show-ecliptic-plane" />
+              <label for="show-ecliptic-plane">Show Ecliptic Plane</label>
+            </div>
+            <div class="filter-item">
+              <input type="checkbox" id="show-celestial-equator" name="show-celestial-equator" />
+              <label for="show-celestial-equator">Show Celestial Equator</label>
+            </div>
+            <div class="filter-item">
+              <label for="plane-opacity-slider">Plane Opacity:</label>
+              <input type="range" id="plane-opacity-slider" name="plane-opacity" min="0" max="100" value="50" />
+              <input type="number" id="plane-opacity-number" name="plane-opacity" min="0" max="100" value="50" />
+              <span id="plane-opacity-value">50</span>%
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Interaction</legend>
+          <div class="filter-content">
+            <div class="filter-item filter-button-row">
+              <input type="checkbox" id="enable-star-interactions" name="enable-star-interactions" class="visually-hidden" checked />
+              <button type="button" id="toggle-star-interactions" class="filter-toggle-button" aria-pressed="true">Tooltips &amp; Star Selection: On</button>
+            </div>
+          </div>
+        </fieldset>
 
         <fieldset id="save-presets-fieldset">
-          <legend class="collapsible" aria-expanded="false">Presets &amp; Edits</legend>
+          <legend class="collapsible" aria-expanded="false">Session</legend>
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-save-presets" name="enable-save-presets" />
@@ -324,7 +455,6 @@
             <div class="filter-item filter-button-row">
               <button type="button" id="clear-saved-presets">Clear Saved Presets</button>
             </div>
-            <div class="filter-subhead">Export / Import</div>
             <div class="filter-item">
               <button type="button" id="download-edits">Download Edits</button>
               <button type="button" id="upload-edits">Upload Edits</button>
@@ -335,7 +465,6 @@
       </form>
     </aside>
 
-    <!-- Maps Section -->
     <section class="maps-section">
       <div class="map-container">
         <h2>True Coordinates</h2>
@@ -346,25 +475,25 @@
       <div class="map-container">
         <h2>Map</h2>
         <p class="map-subtitle">Primary UV / equirectangular source map</p>
-        <button class="fullscreen-btn" aria-label="Fullscreen UV Map">⤢</button>
+        <button class="fullscreen-btn" aria-label="Fullscreen UV Map">&#x2922;</button>
         <canvas id="uvMap"></canvas>
       </div>
       <div class="map-container">
         <h2>Globe</h2>
         <p class="map-subtitle">Primary globe projected from the UV map</p>
-        <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">⤢</button>
+        <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">&#x2922;</button>
         <canvas id="sphereMap"></canvas>
       </div>
       <div class="map-container legacy-map-container">
         <h2>Legacy Globe</h2>
         <p class="map-subtitle">Legacy scene-based 3D plotting workflow</p>
-        <button class="fullscreen-btn" aria-label="Fullscreen Legacy Globe Map">⤢</button>
+        <button class="fullscreen-btn" aria-label="Fullscreen Legacy Globe Map">&#x2922;</button>
         <canvas id="legacySphereMap"></canvas>
       </div>
       <div class="map-container legacy-map-container">
         <h2>Legacy Mollweide</h2>
         <p class="map-subtitle">Legacy flat-sky projection and editing workflow</p>
-        <button class="fullscreen-btn" aria-label="Fullscreen Legacy Mollweide Map">⤢</button>
+        <button class="fullscreen-btn" aria-label="Fullscreen Legacy Mollweide Map">&#x2922;</button>
         <canvas id="legacyMollweideMap"></canvas>
         <div class="export-controls">
           <button id="export-mollweide" class="export-btn">Export</button>
@@ -382,10 +511,8 @@
     <div id="export-selection-rect"></div>
   </div>
 
-  <!-- Tooltip -->
   <div id="tooltip" class="tooltip" hidden></div>
 
-  <!-- Viewpoint indicator banner (hidden by default, shown when not at Sol) -->
   <div id="viewpoint-banner" hidden
        style="position:fixed;top:48px;left:50%;transform:translateX(-50%);
               background:rgba(20,20,20,0.92);color:#ff6f61;
@@ -393,7 +520,7 @@
               font-family:'Oswald',sans-serif;font-size:14px;
               display:flex;align-items:center;gap:10px;
               border:1px solid rgba(255,111,97,0.3);border-top:none;">
-    <span id="viewpoint-banner-text">Viewing from: —</span>
+    <span id="viewpoint-banner-text">Viewing from: -</span>
     <button id="viewpoint-banner-reset" type="button"
             style="background:#ff6f61;color:#fff;border:none;border-radius:3px;
                    padding:3px 10px;cursor:pointer;font-size:12px;font-family:inherit;">

@@ -348,8 +348,8 @@ export class UVMapManager {
     hash = mixHash(hash, hashNumber(readNumberInput('cloud-density-opacity-slider', 100), 10));
     hash = mixHash(hash, hashNumber(this.state.densityOverlay?.revision ?? 0, 1));
     hash = mixHash(hash, hashNumber(this.state.isolationOverlay?.revision ?? 0, 1));
+    hash = mixHash(hash, hashString(this.getSelectedFormValues('dust-cloud-mode') || 'density'));
     hash = mixHash(hash, hashString(this.getSelectedFormValues('dust-clouds')));
-    hash = mixHash(hash, hashString(this.getSelectedFormValues('dust-density-clouds')));
     (connections || []).forEach(connection => {
       hash = mixHash(hash, hashString(getConnectionRenderKey(connection)));
       hash = mixHash(hash, hashString(connection.starA?.displayColor || ''));

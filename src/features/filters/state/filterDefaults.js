@@ -31,6 +31,7 @@ export function createDefaultFilterResult(allStars) {
     cloudOpacity: 1.0,
     cloudDensityRadius: 5,
     cloudDensityOpacity: 1.0,
+    dustCloudMode: 'density',
     starOpacity: 1.0,
     starNameOpacity: 1.0,
     connectionOpacity: 0.5,

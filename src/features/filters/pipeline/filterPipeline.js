@@ -17,6 +17,11 @@ function isMapVisible(map) {
   return Boolean(map?.canvas?.isConnected);
 }
 
+function getSelectedDustCloudFiles(form) {
+  if (!form) return [];
+  return new FormData(form).getAll('dust-clouds');
+}
+
 function updateProjectedPositions(ctx) {
   const { state } = ctx;
   const atSol = isDefaultViewpoint();
@@ -101,7 +106,7 @@ async function refreshCloudOverlays(ctx, options) {
   const form = document.getElementById('filters-form');
 
   if (options.showClouds) {
-    const cloudDataFiles = new FormData(form).getAll('dust-clouds');
+    const cloudDataFiles = getSelectedDustCloudFiles(form);
     await updateCloudsOverlay(state.cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, options.cloudOpacity);
     await updateCloudsOverlay(state.cachedStars, globeMap.scene, 'Globe', cloudDataFiles, options.cloudOpacity);
     await updateCloudsOverlay(state.cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, options.cloudOpacity);
@@ -138,7 +143,7 @@ async function refreshCloudDensityOverlays(ctx, options) {
   if (!state.showCloudDensityFlag) return;
 
   const form = document.getElementById('filters-form');
-  const files = new FormData(form).getAll('dust-density-clouds');
+  const files = getSelectedDustCloudFiles(form);
   for (const file of files) {
     const overlay = await createCloudDensityOverlay(options.minDistance, options.maxDistance, 2, file, state.cachedStars);
     updateCloudDensityOverlay(
@@ -165,11 +170,21 @@ export async function buildAndApplyFilters(ctx) {
       moll: mollweideMap?.scene
     }
   });
-  const scContainer = document.getElementById('stellar-class-container');
-  const previousStellarClassState = scContainer ? captureFormState(scContainer) : null;
+  const stellarSelectionContainer = document.getElementById('stellar-class-selection-container');
+  const stellarPreferencesContainer = document.getElementById('stellar-class-preferences-container');
+  const previousSelectionState = stellarSelectionContainer
+    ? captureFormState(stellarSelectionContainer)
+    : null;
+  const previousPreferencesState = stellarPreferencesContainer
+    ? captureFormState(stellarPreferencesContainer)
+    : null;
+
   generateStellarClassFilters(filters.stellarClassCandidates || filters.currentFilteredStars);
-  if (previousStellarClassState && scContainer) {
-    restoreFormState(scContainer, previousStellarClassState, { dispatchEvents: false });
+  if (previousSelectionState && stellarSelectionContainer) {
+    restoreFormState(stellarSelectionContainer, previousSelectionState, { dispatchEvents: false });
+  }
+  if (previousPreferencesState && stellarPreferencesContainer) {
+    restoreFormState(stellarPreferencesContainer, previousPreferencesState, { dispatchEvents: false });
   }
 
   const sanitizedConstellationLineWidth = Math.max(0.1, filters.constellationLineWidth || 0.1);
