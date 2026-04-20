@@ -89,24 +89,10 @@ function neighbors(cell, cellMap) {
 }
 
 export function segmentOceanCandidate(cells) {
-  function getNeighborCount(cell, cluster) {
-    let count = 0;
-    for (let i = 0; i < cluster.length; i++) {
-      const other = cluster[i];
-      if (other === cell) continue;
-      if (
-        Math.abs(cell.grid.ix - other.grid.ix) <= 1 &&
-        Math.abs(cell.grid.iy - other.grid.iy) <= 1 &&
-        Math.abs(cell.grid.iz - other.grid.iz) <= 1
-      ) {
-        count++;
-      }
-    }
-    return count;
-  }
+  const cellMap = buildCellMap(cells);
   const candidateCells = [];
   cells.forEach(c => {
-    const nCount = getNeighborCount(c, cells);
+    const nCount = neighbors(c, cellMap).length;
     if (nCount >= 2 && nCount <= 5) {
       candidateCells.push(c);
     }
@@ -116,14 +102,7 @@ export function segmentOceanCandidate(cells) {
   }
   const visited = new Set();
   const lumps = [];
-  function getNeighborsInCandidates(cell) {
-    return candidateCells.filter(cc => {
-      if (cc === cell) return false;
-      return Math.abs(cc.grid.ix - cell.grid.ix) <= 1 &&
-             Math.abs(cc.grid.iy - cell.grid.iy) <= 1 &&
-             Math.abs(cc.grid.iz - cell.grid.iz) <= 1;
-    });
-  }
+  const candidateMap = buildCellMap(candidateCells);
   candidateCells.forEach(cand => {
     if (visited.has(cand.id)) return;
     const stack = [ cand ];
@@ -133,7 +112,7 @@ export function segmentOceanCandidate(cells) {
       if (visited.has(top.id)) continue;
       visited.add(top.id);
       lump.push(top);
-      const localNbrs = getNeighborsInCandidates(top);
+      const localNbrs = neighbors(top, candidateMap);
       localNbrs.forEach(nb => {
         if (!visited.has(nb.id)) {
           stack.push(nb);
@@ -172,20 +151,11 @@ export function computeCentroid(cells) {
 }
 
 export function computeInterconnectedCell(cells) {
+  const cellMap = buildCellMap(cells);
   let bestCell = cells[0];
   let maxCount = 0;
   cells.forEach(cell => {
-    let count = 0;
-    cells.forEach(other => {
-      if (cell === other) return;
-      if (
-        Math.abs(cell.grid.ix - other.grid.ix) <= 1 &&
-        Math.abs(cell.grid.iy - other.grid.iy) <= 1 &&
-        Math.abs(cell.grid.iz - other.grid.iz) <= 1
-      ) {
-        count++;
-      }
-    });
+    const count = neighbors(cell, cellMap).length;
     if (count > maxCount) {
       maxCount = count;
       bestCell = cell;

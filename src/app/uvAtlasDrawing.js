@@ -110,6 +110,11 @@ export function fillWrappedTriangle(ctx, aVec, bVec, cVec) {
  * @param {THREE.Mesh} mesh
  * @param {string} fillStyle — pre-computed CSS color string (e.g. from rgbaFromHex)
  */
+// Pre-allocated vectors to avoid per-triangle allocations in fillProjectedMesh
+const _triA = new THREE.Vector3();
+const _triB = new THREE.Vector3();
+const _triC = new THREE.Vector3();
+
 export function fillProjectedMesh(ctx, mesh, fillStyle) {
   const geometry = mesh?.geometry;
   const positionAttr = geometry?.getAttribute?.('position');
@@ -119,17 +124,17 @@ export function fillProjectedMesh(ctx, mesh, fillStyle) {
   ctx.fillStyle = fillStyle;
   if (index) {
     for (let i = 0; i <= index.count - 3; i += 3) {
-      const a = new THREE.Vector3().fromBufferAttribute(positionAttr, index.getX(i)).applyMatrix4(mesh.matrixWorld);
-      const b = new THREE.Vector3().fromBufferAttribute(positionAttr, index.getX(i + 1)).applyMatrix4(mesh.matrixWorld);
-      const c = new THREE.Vector3().fromBufferAttribute(positionAttr, index.getX(i + 2)).applyMatrix4(mesh.matrixWorld);
-      fillWrappedTriangle(ctx, a, b, c);
+      _triA.fromBufferAttribute(positionAttr, index.getX(i)).applyMatrix4(mesh.matrixWorld);
+      _triB.fromBufferAttribute(positionAttr, index.getX(i + 1)).applyMatrix4(mesh.matrixWorld);
+      _triC.fromBufferAttribute(positionAttr, index.getX(i + 2)).applyMatrix4(mesh.matrixWorld);
+      fillWrappedTriangle(ctx, _triA, _triB, _triC);
     }
   } else {
     for (let i = 0; i <= positionAttr.count - 3; i += 3) {
-      const a = new THREE.Vector3().fromBufferAttribute(positionAttr, i).applyMatrix4(mesh.matrixWorld);
-      const b = new THREE.Vector3().fromBufferAttribute(positionAttr, i + 1).applyMatrix4(mesh.matrixWorld);
-      const c = new THREE.Vector3().fromBufferAttribute(positionAttr, i + 2).applyMatrix4(mesh.matrixWorld);
-      fillWrappedTriangle(ctx, a, b, c);
+      _triA.fromBufferAttribute(positionAttr, i).applyMatrix4(mesh.matrixWorld);
+      _triB.fromBufferAttribute(positionAttr, i + 1).applyMatrix4(mesh.matrixWorld);
+      _triC.fromBufferAttribute(positionAttr, i + 2).applyMatrix4(mesh.matrixWorld);
+      fillWrappedTriangle(ctx, _triA, _triB, _triC);
     }
   }
   ctx.restore();

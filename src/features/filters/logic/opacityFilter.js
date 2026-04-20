@@ -20,11 +20,17 @@ export function applyOpacityFilter(stars, filters) {
   }
 
   if (filters.opacity === 'absolute-magnitude') {
-    const magnitudes = stars.map(s => s.absoluteMagnitude).filter(Number.isFinite);
+    let minMag = Infinity;
+    let maxMag = -Infinity;
+    for (let i = 0; i < stars.length; i++) {
+      const m = stars[i].absoluteMagnitude;
+      if (Number.isFinite(m)) {
+        if (m < minMag) minMag = m;
+        if (m > maxMag) maxMag = m;
+      }
+    }
 
-    if (magnitudes.length > 0) {
-      const minMag = Math.min(...magnitudes);
-      const maxMag = Math.max(...magnitudes);
+    if (minMag !== Infinity) {
       const range = Math.max(EPSILON, maxMag - minMag);
 
       stars.forEach(star => {

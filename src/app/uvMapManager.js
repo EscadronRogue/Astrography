@@ -51,17 +51,49 @@ function createHiddenPointsMaterial() {
   });
 }
 
+const _rgbaColor = new THREE.Color();
 function rgbaFromHex(hex, alpha = 1) {
-  const color = new THREE.Color(hex || '#ffffff');
-  return `rgba(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)}, ${alpha})`;
+  _rgbaColor.set(hex || '#ffffff');
+  return `rgba(${Math.round(_rgbaColor.r * 255)}, ${Math.round(_rgbaColor.g * 255)}, ${Math.round(_rgbaColor.b * 255)}, ${alpha})`;
+}
+
+// Cached DOM input values — updated on change/input events to avoid per-frame DOM reads
+const _inputCache = new Map();
+let _inputCacheInitialized = false;
+
+function _initInputCache() {
+  if (_inputCacheInitialized) return;
+  _inputCacheInitialized = true;
+  const form = document.getElementById('filters-form');
+  if (!form) return;
+  const handler = (e) => {
+    if (e.target && e.target.id) {
+      _inputCache.set(e.target.id, e.target.value);
+    }
+    if (e.target && e.target.name) {
+      _formDataCache.delete(e.target.name);
+    }
+  };
+  form.addEventListener('input', handler);
+  form.addEventListener('change', handler);
 }
 
 function readNumberInput(id, fallback) {
+  _initInputCache();
+  if (_inputCache.has(id)) {
+    const parsed = Number.parseFloat(_inputCache.get(id));
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
   const el = document.getElementById(id);
   if (!el) return fallback;
   const parsed = Number.parseFloat(el.value);
+  if (Number.isFinite(parsed)) {
+    _inputCache.set(id, el.value);
+  }
   return Number.isFinite(parsed) ? parsed : fallback;
 }
+
+const _formDataCache = new Map();
 
 function clamp01(value) {
   return THREE.MathUtils.clamp(value, 0, 1);
@@ -279,9 +311,12 @@ export class UVMapManager {
   }
 
   getSelectedFormValues(name) {
+    if (_formDataCache.has(name)) return _formDataCache.get(name);
     const form = document.getElementById('filters-form');
     if (!form) return '';
-    return new FormData(form).getAll(name).join('|');
+    const result = new FormData(form).getAll(name).join('|');
+    _formDataCache.set(name, result);
+    return result;
   }
 
   buildStarTopologySignature(stars) {
@@ -778,10 +813,12 @@ export class UVMapManager {
       ctx.save();
       ctx.strokeStyle = rgbaFromHex(color, alpha);
       ctx.lineWidth = 1.6;
+      const _a = new THREE.Vector3();
+      const _b = new THREE.Vector3();
       for (let i = 0; i <= pos.count - 2; i += 2) {
-        const a = new THREE.Vector3().fromBufferAttribute(pos, i);
-        const b = new THREE.Vector3().fromBufferAttribute(pos, i + 1);
-        splitWrappedSegment(spherePositionToUv(a, 100), spherePositionToUv(b, 100)).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
+        _a.fromBufferAttribute(pos, i);
+        _b.fromBufferAttribute(pos, i + 1);
+        splitWrappedSegment(spherePositionToUv(_a, 100), spherePositionToUv(_b, 100)).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
       }
       ctx.restore();
     });

@@ -14,6 +14,10 @@ import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '
 import { populateCellDistanceCaches, sumWeightedDistancesWithinRadius } from '../../shared/cellDistanceCache.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
 
+// Pre-allocated reusable objects to avoid per-cell allocations in hot loops
+const _tempColor = new THREE.Color();
+const _tempColorA = new THREE.Color();
+
 class DensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2) {
     this.minDistance = parseFloat(minDistance);
@@ -48,6 +52,7 @@ class DensityGridOverlay {
       mat
     );
     this.textureMesh.renderOrder = 2;
+    this._heatmapRevision = -1; // tracks last drawn revision to avoid redundant redraws
   }
 
   createGrid(stars) {
@@ -215,7 +220,8 @@ class DensityGridOverlay {
     });
   }
 
-  drawHeatmap(lambda0 = getMollweideLambda0()) {
+  drawHeatmap(lambda0 = getMollweideLambda0(), force = false) {
+    if (!force && this._heatmapRevision === this.revision) return;
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
     ctx.filter = 'blur(8px)';
@@ -249,6 +255,7 @@ class DensityGridOverlay {
     });
     ctx.filter = 'none';
     this.texture.needsUpdate = true;
+    this._heatmapRevision = this.revision;
   }
 
   update(stars, sceneTC, sceneGlobe, sceneMoll) {
@@ -286,24 +293,25 @@ class DensityGridOverlay {
     const bottomThr = sorted[Math.min(bottomIdx, sorted.length - 1)];
     const topThr = sorted[Math.max(topIdx, 0)];
 
+    // Pre-compute the lightened red color once for the top-density branch
+    const _lightRedBase = lightenColor(new THREE.Color(0xff0000), 0.4);
+
     this.cubesData.forEach(cell => {
       const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
-      let color = new THREE.Color(0xffffff);
       let alpha = 0;
       if (cell.density <= bottomThr) {
         const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
-        color = new THREE.Color(0x0000ff).lerp(new THREE.Color(0xffffff), t);
+        _tempColor.set(0x0000ff).lerp(_tempColorA.set(0xffffff), t);
         alpha = 0.5 * (1 - t);
         cell.active = true;
       } else if (cell.density >= topThr) {
         const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
-        const baseRed = new THREE.Color(0xff0000);
-        const lightRed = lightenColor(baseRed.clone(), 0.4);
-        color = lightRed.lerp(baseRed, t);
+        _tempColor.copy(_lightRedBase).lerp(_tempColorA.set(0xff0000), t);
         alpha = 0.5 * t;
         cell.active = true;
       } else {
+        _tempColor.set(0xffffff);
         cell.active = false;
       }
 
@@ -311,9 +319,9 @@ class DensityGridOverlay {
       cell.tcMesh.material.opacity = finalAlpha;
       cell.globeMesh.material.opacity = finalAlpha;
       cell.mollweideMesh.material.opacity = finalAlpha;
-      cell.tcMesh.material.color.copy(color);
-      cell.globeMesh.material.color.copy(color);
-      cell.mollweideMesh.material.color.copy(color);
+      cell.tcMesh.material.color.copy(_tempColor);
+      cell.globeMesh.material.color.copy(_tempColor);
+      cell.mollweideMesh.material.color.copy(_tempColor);
       cell.tcMesh.visible = cell.active;
       cell.globeMesh.scale.set(scale, scale, 1);
       cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
@@ -324,22 +332,20 @@ class DensityGridOverlay {
       line.visible = visible;
       lineM.visible = visible;
       if (visible) {
-        const c1 = cell1.tcMesh.material.color;
-        const c2 = cell2.tcMesh.material.color;
-        const avgColor = c1.clone().lerp(c2, 0.5);
+        _tempColor.copy(cell1.tcMesh.material.color).lerp(cell2.tcMesh.material.color, 0.5);
         const avgOpacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
-        line.material.color.copy(avgColor);
+        line.material.color.copy(_tempColor);
         line.material.opacity = avgOpacity;
         line.material.vertexColors = false;
         line.material.needsUpdate = true;
-        lineM.material.uniforms.color.value.copy(avgColor);
+        lineM.material.uniforms.color.value.copy(_tempColor);
         lineM.material.uniforms.opacityFactor.value = avgOpacity;
         lineM.material.uniforms.fadePower.value = this.fadePower;
         lineM.material.needsUpdate = true;
       }
     });
-    this.drawHeatmap(getMollweideLambda0());
     this.revision += 1;
+    this.drawHeatmap(getMollweideLambda0());
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
@@ -368,8 +374,8 @@ class DensityGridOverlay {
         obj.lineM.material.uniforms.fadePower.value = this.fadePower;
       }
     });
-    this.drawHeatmap(lambda0);
     this.revision += 1;
+    this.drawHeatmap(lambda0, true); // force redraw since Mollweide positions changed
   }
 }
 

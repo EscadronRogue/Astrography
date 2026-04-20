@@ -27,7 +27,11 @@ export function applyColorFilter(stars, filters) {
       star.displayColor = getStableConstellationColor((star.constellation || '').toUpperCase()) || DEFAULT_STAR_COLOR;
     });
   } else if (filters.color === 'galactic-plane') {
-    const maxZ = Math.max(EPSILON, ...stars.map(s => Math.abs(Number.isFinite(s.z_coordinate) ? s.z_coordinate : 0)));
+    let maxZ = EPSILON;
+    for (let i = 0; i < stars.length; i++) {
+      const absZ = Math.abs(Number.isFinite(stars[i].z_coordinate) ? stars[i].z_coordinate : 0);
+      if (absZ > maxZ) maxZ = absZ;
+    }
     stars.forEach(star => {
       const z = Number.isFinite(star.z_coordinate) ? star.z_coordinate : 0;
       const factor = Math.abs(z) / maxZ;

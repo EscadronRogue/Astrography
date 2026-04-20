@@ -32,9 +32,16 @@ export function applySizeFilter(stars, filters) {
   // Pre-compute distance range if needed
   let distMin, distMax;
   if (filters.size === 'distance') {
-    const distances = stars.map(s => s.distance).filter(Number.isFinite);
-    distMin = Math.min(...distances);
-    distMax = Math.max(...distances);
+    distMin = Infinity;
+    distMax = -Infinity;
+    for (let i = 0; i < stars.length; i++) {
+      const d = stars[i].distance;
+      if (Number.isFinite(d)) {
+        if (d < distMin) distMin = d;
+        if (d > distMax) distMax = d;
+      }
+    }
+    if (distMin === Infinity) { distMin = 0; distMax = 0; }
   }
 
   stars.forEach(star => {

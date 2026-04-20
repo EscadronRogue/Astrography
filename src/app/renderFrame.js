@@ -5,7 +5,11 @@ export function createRenderRequester(mapManagers, getEditManager) {
     renderRequested = true;
     requestAnimationFrame(() => {
       renderRequested = false;
-      mapManagers.forEach(manager => manager.render());
+      for (let i = 0; i < mapManagers.length; i++) {
+        const manager = mapManagers[i];
+        if (!manager.canvas.isConnected) continue;
+        manager.render();
+      }
       const editManager = getEditManager();
       if (editManager) editManager.updateEditOverlay();
     });

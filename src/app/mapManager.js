@@ -35,16 +35,34 @@ function buildConnectionVisualSignature(connectionObjs) {
   return `${connectionObjs.length}:${hash}`;
 }
 
+let _cachedBounds = null;
+let _cachedBoundsLength = -1;
+
 function getConnectionDistanceBounds(connectionObjs) {
   if (!connectionObjs.length) {
     return { largestDistance: 0, smallestDistance: 0 };
   }
 
-  const distances = connectionObjs.map(pair => pair.distance);
-  return {
-    largestDistance: Math.max(...distances),
-    smallestDistance: Math.min(...distances)
-  };
+  // Return cached result if connection count hasn't changed
+  if (_cachedBounds && _cachedBoundsLength === connectionObjs.length) {
+    return _cachedBounds;
+  }
+
+  let largest = -Infinity;
+  let smallest = Infinity;
+  for (let i = 0; i < connectionObjs.length; i++) {
+    const d = connectionObjs[i].distance;
+    if (d > largest) largest = d;
+    if (d < smallest) smallest = d;
+  }
+  _cachedBounds = { largestDistance: largest, smallestDistance: smallest };
+  _cachedBoundsLength = connectionObjs.length;
+  return _cachedBounds;
+}
+
+function invalidateConnectionBoundsCache() {
+  _cachedBounds = null;
+  _cachedBoundsLength = -1;
 }
 
 function createStarTexture() {
@@ -242,6 +260,9 @@ export class MapManager {
   }
 
   updateStarPositions(stars) {
+    // Reusable objects to avoid per-star allocations
+    const _color = new THREE.Color();
+
     if (this.mapType === 'Mollweide') {
       if (!this.points) return;
       const positions = this.points.geometry.attributes.position.array;
@@ -249,21 +270,16 @@ export class MapManager {
       const sizes = this.points.geometry.attributes.size.array;
       for (let i = 0; i < stars.length; i++) {
         const star = stars[i];
-        const pos = this.mapType === 'TrueCoordinates'
-          ? (star.truePosition ? star.truePosition.clone() : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate))
-          : this.mapType === 'Globe'
-            ? (star.spherePosition ? star.spherePosition.clone() : new THREE.Vector3(0, 0, 0))
-            : (star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0));
+        const pos = star.mollweidePosition;
+        positions[i * 3]     = pos ? pos.x : 0;
+        positions[i * 3 + 1] = pos ? pos.y : 0;
+        positions[i * 3 + 2] = pos ? pos.z : 0;
         const size = star.displaySize !== undefined ? star.displaySize : 1;
-        const scale = size * (this.mapType === 'Mollweide' ? 0.4 : 0.2) * 25.0;
-        positions[i * 3] = pos.x;
-        positions[i * 3 + 1] = pos.y;
-        positions[i * 3 + 2] = pos.z;
-        sizes[i] = scale;
-        const color = new THREE.Color(star.displayColor || '#ffffff');
-        colors[i * 3] = color.r;
-        colors[i * 3 + 1] = color.g;
-        colors[i * 3 + 2] = color.b;
+        sizes[i] = size * 0.4 * 25.0;
+        _color.set(star.displayColor || '#ffffff');
+        colors[i * 3]     = _color.r;
+        colors[i * 3 + 1] = _color.g;
+        colors[i * 3 + 2] = _color.b;
       }
       this.points.geometry.attributes.position.needsUpdate = true;
       this.points.geometry.attributes.customColor.needsUpdate = true;
@@ -272,23 +288,34 @@ export class MapManager {
       if (!this.instancedMesh) return;
       const dummy = new THREE.Object3D();
       const colors = this.instancedMesh.instanceColor.array;
+      const isTrueCoordinates = this.mapType === 'TrueCoordinates';
+      const isGlobe = this.mapType === 'Globe';
       for (let i = 0; i < stars.length; i++) {
         const star = stars[i];
-        const pos = this.mapType === 'TrueCoordinates'
-          ? (star.truePosition ? star.truePosition.clone() : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate))
-          : this.mapType === 'Globe'
-            ? (star.spherePosition ? star.spherePosition.clone() : new THREE.Vector3(0, 0, 0))
-            : (star.mollweidePosition ? star.mollweidePosition.clone() : new THREE.Vector3(0, 0, 0));
+        let pos;
+        if (isTrueCoordinates) {
+          pos = star.truePosition;
+          if (!pos) {
+            dummy.position.set(star.x_coordinate, star.y_coordinate, star.z_coordinate);
+          } else {
+            dummy.position.copy(pos);
+          }
+        } else if (isGlobe) {
+          pos = star.spherePosition;
+          if (pos) { dummy.position.copy(pos); } else { dummy.position.set(0, 0, 0); }
+        } else {
+          pos = star.mollweidePosition;
+          if (pos) { dummy.position.copy(pos); } else { dummy.position.set(0, 0, 0); }
+        }
         const size = star.displaySize !== undefined ? star.displaySize : 1;
         const scale = size * 0.2;
-        dummy.position.copy(pos);
         dummy.scale.set(scale, scale, scale);
         dummy.updateMatrix();
         this.instancedMesh.setMatrixAt(i, dummy.matrix);
-        const color = new THREE.Color(star.displayColor || '#ffffff');
-        colors[i * 3] = color.r;
-        colors[i * 3 + 1] = color.g;
-        colors[i * 3 + 2] = color.b;
+        _color.set(star.displayColor || '#ffffff');
+        colors[i * 3]     = _color.r;
+        colors[i * 3 + 1] = _color.g;
+        colors[i * 3 + 2] = _color.b;
       }
       this.instancedMesh.instanceMatrix.needsUpdate = true;
       this.instancedMesh.instanceColor.needsUpdate = true;
@@ -310,6 +337,7 @@ export class MapManager {
     this.connectionPairKeys = [];
     this.connectionParamSignature = '';
     this.connectionVisualSignature = '';
+    invalidateConnectionBoundsCache();
   }
 
   storeConnectionState(connectionObjs) {
@@ -403,9 +431,8 @@ export class MapManager {
       return;
     }
 
-    const c1 = new THREE.Color(starA.displayColor || '#ffffff');
-    const c2 = new THREE.Color(starB.displayColor || '#ffffff');
-    const blendColor = c1.clone().lerp(c2, 0.5);
+    const blendColor = new THREE.Color(starA.displayColor || '#ffffff')
+      .lerp(new THREE.Color(starB.displayColor || '#ffffff'), 0.5);
     const normDist = (distance - bounds.smallestDistance) / (bounds.largestDistance - bounds.smallestDistance || 1);
     const width = THREE.MathUtils.lerp(getConnectionLineParams().connectionMaxWidth, 1, normDist);
     const relativeOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist);
@@ -526,9 +553,9 @@ export class MapManager {
   addTCDistanceLabels(connectionObjs, opacityFactor) {
     const { connectionLabelSize } = getConnectionLineParams();
     if (connectionLabelSize <= 0.01) return;
-    const distances = connectionObjs.map(p => p.distance);
-    const largest = Math.max(...distances);
-    const smallest = Math.min(...distances);
+    const bounds = getConnectionDistanceBounds(connectionObjs);
+    const largest = bounds.largestDistance;
+    const smallest = bounds.smallestDistance;
     connectionObjs.forEach(pair => {
       const { starA, starB, distance } = pair;
       const posA = starA.truePosition || new THREE.Vector3(starA.x_coordinate, starA.y_coordinate, starA.z_coordinate);

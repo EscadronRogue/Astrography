@@ -8,6 +8,9 @@ import { loadCachedCloudData } from './cloudDataCache.js';
 import { uniqueColorFromName, getCloudNameFromFileUrl } from '../../shared/colorUtils.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
 
+// Pre-allocated reusable color to avoid per-cell allocations
+const _tempCloudColor = new THREE.Color();
+
 class CloudDensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2, cloudName = '') {
     this.minDistance = parseFloat(minDistance);
@@ -135,7 +138,7 @@ class CloudDensityGridOverlay {
       if (minD2 <= rad2) {
         const minD = Math.sqrt(minD2);
         const t = minD / radius;
-        const color = lightenColor(this.color.clone(), t * 0.5);
+        const color = lightenColor(_tempCloudColor.copy(this.color), t * 0.5);
         const alpha = (1 - t) * this.opacityFactor;
         cell.tcMesh.material.color.copy(color);
         cell.globeMesh.material.color.copy(color);
