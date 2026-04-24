@@ -20,6 +20,7 @@ import { setTooltipContext, invalidateTooltipCache } from '../render/interaction
 import { setRenderRequester, requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { ExportManager } from '../features/export/exportManager.js';
 import { exportTrueCoordinatesSTL } from '../features/export/stlExporter.js';
+import { exportPrintableSTLKit } from '../features/export/stlKitExporter.js';
 import { EditManager } from '../features/editing/editManager.js';
 import { applyGlobeSurface } from './globeSurface.js';
 import { updateMollweidePosition, createMollweideScheduler } from './mollweideUpdater.js';
@@ -353,6 +354,31 @@ export async function bootstrapApp() {
         const stars = state.currentFilteredStars;
         const connections = state.currentConnections;
         exportTrueCoordinatesSTL(stars, connections);
+      });
+    }
+
+    // 3D-printable STL kit export
+    const stlKitBtn = document.getElementById('export-stl-kit');
+    if (stlKitBtn) {
+      stlKitBtn.addEventListener('click', () => {
+        const stars = state.currentFilteredStars;
+        const connections = state.currentConnections;
+        stlKitBtn.disabled = true;
+        stlKitBtn.textContent = 'Generating…';
+        // Yield to the browser so the button text updates before heavy work
+        setTimeout(() => {
+          exportPrintableSTLKit(stars, connections)
+            .then(() => {
+              stlKitBtn.disabled = false;
+              stlKitBtn.textContent = 'STL for 3D Printing';
+            })
+            .catch(err => {
+              console.error('STL kit export failed:', err);
+              alert(`STL kit export failed: ${err.message}`);
+              stlKitBtn.disabled = false;
+              stlKitBtn.textContent = 'STL for 3D Printing';
+            });
+        }, 50);
       });
     }
     editManager.setConstellationLinesMoll(getConstellationLinesMoll());

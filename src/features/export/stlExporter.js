@@ -19,19 +19,19 @@ import { getPrimaryClass } from '../../shared/stellarClassUtils.js';
 // ---------------------------------------------------------------------------
 
 /** mm per light-year in the exported STL. */
-const MM_PER_LY = 5;
+export const MM_PER_LY = 5;
 
 /** Standard star (G-class) diameter in mm. */
 const STANDARD_DIAMETER_MM = 8;
 
 /** Standard star radius in mm (all geometry is built in mm). */
-const STANDARD_RADIUS = STANDARD_DIAMETER_MM / 2; // 4 mm
+export const STANDARD_RADIUS = STANDARD_DIAMETER_MM / 2; // 4 mm
 
 /** Connection tube diameter in mm. */
 const TUBE_DIAMETER_MM = 2;
 
 /** Connection tube radius in mm. */
-const TUBE_RADIUS = TUBE_DIAMETER_MM / 2; // 1 mm
+export const TUBE_RADIUS = TUBE_DIAMETER_MM / 2; // 1 mm
 
 // ---------------------------------------------------------------------------
 // Stellar class → size multiplier (relative to standard G-class star)
@@ -52,7 +52,7 @@ const CLASS_SIZE_MULTIPLIER = {
   Other: 0.50
 };
 
-function getExportRadius(star) {
+export function getExportRadius(star) {
   const cls = getPrimaryClass(star);
   const multiplier = CLASS_SIZE_MULTIPLIER[cls] ?? CLASS_SIZE_MULTIPLIER.Other;
   return STANDARD_RADIUS * multiplier;
@@ -67,7 +67,7 @@ function getExportRadius(star) {
  * hierarchy (lowest hierarchy number = most luminous class).  Among ties,
  * pick the brightest (lowest absolute magnitude).
  */
-function filterMainStars(stars) {
+export function filterMainStars(stars) {
   const HIERARCHY = { O: 1, B: 2, A: 3, D: 4, F: 5, G: 6, K: 7, M: 8, L: 9, T: 10, Y: 11, Other: 12 };
 
   const systemMap = new Map();
@@ -116,7 +116,7 @@ const TUBE_RADIAL_SEGMENTS = 8;
  * Generate triangles for a UV sphere centred at `centre` (in export-units)
  * with the given `radius`.
  */
-function buildSphereTriangles(cx, cy, cz, radius, widthSegs = SPHERE_SEGMENTS, heightSegs = SPHERE_SEGMENTS) {
+export function buildSphereTriangles(cx, cy, cz, radius, widthSegs = SPHERE_SEGMENTS, heightSegs = SPHERE_SEGMENTS) {
   const triangles = [];
 
   for (let iy = 0; iy < heightSegs; iy++) {
@@ -154,7 +154,7 @@ function buildSphereTriangles(cx, cy, cz, radius, widthSegs = SPHERE_SEGMENTS, h
  * Generate triangles for a capped cylinder (tube) between two points
  * (already in export-units).
  */
-function buildTubeTriangles(sx, sy, sz, ex, ey, ez, radius = TUBE_RADIUS, radialSegs = TUBE_RADIAL_SEGMENTS) {
+export function buildTubeTriangles(sx, sy, sz, ex, ey, ez, radius = TUBE_RADIUS, radialSegs = TUBE_RADIAL_SEGMENTS) {
   const triangles = [];
 
   const dx = ex - sx, dy = ey - sy, dz = ez - sz;
@@ -224,7 +224,7 @@ function computeNormal(a, b, c) {
 // Binary STL writer
 // ---------------------------------------------------------------------------
 
-function trianglesToBinarySTL(triangles) {
+export function trianglesToBinarySTL(triangles) {
   const triCount = triangles.length;
   const bufferSize = 80 + 4 + triCount * 50;
   const buffer = new ArrayBuffer(bufferSize);
