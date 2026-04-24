@@ -19,6 +19,7 @@ import { initStarInteractions, setupStarInteractionToggle, updateSelectedStarHig
 import { setTooltipContext, invalidateTooltipCache } from '../render/interactions/tooltips.js';
 import { setRenderRequester, requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { ExportManager } from '../features/export/exportManager.js';
+import { exportTrueCoordinatesSTL } from '../features/export/stlExporter.js';
 import { EditManager } from '../features/editing/editManager.js';
 import { applyGlobeSurface } from './globeSurface.js';
 import { updateMollweidePosition, createMollweideScheduler } from './mollweideUpdater.js';
@@ -344,6 +345,16 @@ export async function bootstrapApp() {
 
     exportManager = new ExportManager(mollweideMap);
     exportManager.setup();
+
+    // STL export for the True Coordinates map
+    const stlBtn = document.getElementById('export-stl');
+    if (stlBtn) {
+      stlBtn.addEventListener('click', () => {
+        const stars = state.currentFilteredStars;
+        const connections = state.currentConnections;
+        exportTrueCoordinatesSTL(stars, connections);
+      });
+    }
     editManager.setConstellationLinesMoll(getConstellationLinesMoll());
     editManager.setIsolationOverlay(state.isolationOverlay);
     editManager.setupAll();
