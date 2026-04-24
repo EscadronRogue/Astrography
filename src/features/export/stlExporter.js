@@ -24,14 +24,14 @@ const MM_PER_LY = 5;
 /** Standard star (G-class) diameter in mm. */
 const STANDARD_DIAMETER_MM = 8;
 
-/** Standard star radius in export-units (LY-scaled). */
-const STANDARD_RADIUS = (STANDARD_DIAMETER_MM / 2) / MM_PER_LY; // 0.8
+/** Standard star radius in mm (all geometry is built in mm). */
+const STANDARD_RADIUS = STANDARD_DIAMETER_MM / 2; // 4 mm
 
 /** Connection tube diameter in mm. */
 const TUBE_DIAMETER_MM = 2;
 
-/** Connection tube radius in export-units. */
-const TUBE_RADIUS = (TUBE_DIAMETER_MM / 2) / MM_PER_LY; // 0.2
+/** Connection tube radius in mm. */
+const TUBE_RADIUS = TUBE_DIAMETER_MM / 2; // 1 mm
 
 // ---------------------------------------------------------------------------
 // Stellar class → size multiplier (relative to standard G-class star)
