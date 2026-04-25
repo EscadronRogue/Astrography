@@ -51,48 +51,47 @@ const ENGRAVE_DEPTH = 0.5;
 const ENGRAVE_OUTSIDE_BLEED = 0.25;
 const ENGRAVE_WIDTH_FACTOR = 0.8;
 const ENGRAVE_HEIGHT_FACTOR = 0.72;
-const DIGIT_WIDTH_UNITS = 8;
-const DIGIT_HEIGHT_UNITS = 10;
-const DIGIT_SPACING_UNITS = 1;
-const DIGIT_LINE_SPACING_UNITS = 2;
-const DIGIT_STROKE_WIDTH_UNITS = 1.3;
-const STROKE_LENGTH_BLEED_UNITS = 0.35;
+const DIGIT_WIDTH_UNITS = 1;
+const DIGIT_HEIGHT_UNITS = 1;
+const DIGIT_SPACING_UNITS = 0.22;
+const DIGIT_LINE_SPACING_UNITS = 0.3;
+const STROKE_WIDTH_UNITS = 0.16;
+const STROKE_SEGMENT_OVERLAP_UNITS = 0.06;
 
-const VECTOR_DIGIT_GLYPHS = {
+const VECTOR_DIGIT_STROKES = {
   '0': [
-    [[-2.2, 5], [2.2, 5], [3.4, 3.8], [3.4, -3.8], [2.2, -5], [-2.2, -5], [-3.4, -3.8], [-3.4, 3.8], [-2.2, 5]]
+    [[0.24, 0.02], [0.08, 0.18], [0.08, 0.82], [0.24, 0.98], [0.76, 0.98], [0.92, 0.82], [0.92, 0.18], [0.76, 0.02], [0.24, 0.02]]
   ],
   '1': [
-    [[-1.6, 2.8], [0, 5], [0, -5]],
-    [[-1.8, -5], [1.8, -5]]
+    [[0.3, 0.78], [0.5, 0.98], [0.5, 0.02]],
+    [[0.24, 0.02], [0.76, 0.02]]
   ],
   '2': [
-    [[-3.2, 3.6], [-2.2, 5], [2.2, 5], [3.2, 4], [3.2, 2], [-3.2, -3.5], [-3.2, -5], [3.2, -5]]
+    [[0.1, 0.78], [0.24, 0.98], [0.76, 0.98], [0.9, 0.8], [0.9, 0.62], [0.12, 0.02], [0.9, 0.02]]
   ],
   '3': [
-    [[-3, 5], [2, 5], [3.2, 3.8], [3.2, 1.4], [2.2, 0.2], [-0.2, 0]],
-    [[-0.2, 0], [2.2, -0.2], [3.2, -1.4], [3.2, -3.8], [2, -5], [-3, -5]]
+    [[0.1, 0.98], [0.78, 0.98], [0.56, 0.56], [0.78, 0.48], [0.92, 0.28], [0.76, 0.02], [0.14, 0.02]]
   ],
   '4': [
-    [[2.6, 5], [2.6, -5]],
-    [[-3, 1.2], [3, 1.2]],
-    [[-3, 1.2], [1.4, 5]]
+    [[0.78, 0.02], [0.78, 0.98]],
+    [[0.12, 0.34], [0.9, 0.34]],
+    [[0.12, 0.34], [0.58, 0.98]]
   ],
   '5': [
-    [[3, 5], [-3, 5], [-3, 0.8], [1.8, 0.8], [3.2, -0.6], [3.2, -3.8], [2, -5], [-3, -5]]
+    [[0.9, 0.98], [0.18, 0.98], [0.14, 0.54], [0.72, 0.54], [0.9, 0.38], [0.9, 0.16], [0.72, 0.02], [0.14, 0.02]]
   ],
   '6': [
-    [[3, 4.2], [2, 5], [-2.2, 5], [-3.4, 3.6], [-3.4, -3.6], [-2.2, -5], [2.2, -5], [3.4, -3.8], [3.4, -1.4], [2.2, -0.2], [-3.2, -0.2]]
+    [[0.86, 0.84], [0.72, 0.98], [0.24, 0.98], [0.08, 0.8], [0.08, 0.18], [0.24, 0.02], [0.78, 0.02], [0.92, 0.18], [0.92, 0.42], [0.76, 0.56], [0.24, 0.56], [0.08, 0.42]]
   ],
   '7': [
-    [[-3, 5], [3.4, 5], [0, -5]]
+    [[0.08, 0.98], [0.92, 0.98], [0.34, 0.02]]
   ],
   '8': [
-    [[-2.2, 5], [2.2, 5], [3.4, 3.8], [3.4, 1.4], [2.2, 0], [-2.2, 0], [-3.4, 1.4], [-3.4, 3.8], [-2.2, 5]],
-    [[-2.2, 0], [2.2, 0], [3.4, -1.4], [3.4, -3.8], [2.2, -5], [-2.2, -5], [-3.4, -3.8], [-3.4, -1.4], [-2.2, 0]]
+    [[0.24, 0.02], [0.08, 0.18], [0.08, 0.4], [0.24, 0.56], [0.76, 0.56], [0.92, 0.4], [0.92, 0.18], [0.76, 0.02], [0.24, 0.02]],
+    [[0.24, 0.56], [0.08, 0.72], [0.08, 0.82], [0.24, 0.98], [0.76, 0.98], [0.92, 0.82], [0.92, 0.72], [0.76, 0.56]]
   ],
   '9': [
-    [[-3.2, -4.2], [-2.2, -5], [2.2, -5], [3.4, -3.6], [3.4, 3.6], [2.2, 5], [-2.2, 5], [-3.4, 3.8], [-3.4, 1.4], [-2.2, 0.2], [3.2, 0.2]]
+    [[0.92, 0.56], [0.76, 0.42], [0.24, 0.42], [0.08, 0.58], [0.08, 0.82], [0.24, 0.98], [0.76, 0.98], [0.92, 0.82], [0.92, 0.18], [0.74, 0.02], [0.28, 0.02]]
   ]
 };
 
@@ -318,58 +317,59 @@ function layoutDigits(numberText) {
   return splitBalanced(numberText, 3);
 }
 
-function buildStrokeSegmentCSG(start, end, basis, unitScale, surfaceCentreDist, halfDepth) {
-  const startX = start[0] * unitScale;
-  const startY = start[1] * unitScale;
-  const endX = end[0] * unitScale;
-  const endY = end[1] * unitScale;
-  const dx = endX - startX;
-  const dy = endY - startY;
-  const length = Math.sqrt(dx * dx + dy * dy);
-
-  if (length < 1e-6) return CSG.fromPolygons([]);
-
-  const along = vecNormalise(
-    basis.right[0] * dx + basis.up[0] * dy,
-    basis.right[1] * dx + basis.up[1] * dy,
-    basis.right[2] * dx + basis.up[2] * dy
-  );
-  const across = vecNormalise(
-    basis.right[0] * -dy + basis.up[0] * dx,
-    basis.right[1] * -dy + basis.up[1] * dx,
-    basis.right[2] * -dy + basis.up[2] * dx
-  );
-  const centre = [
-    basis.right[0] * ((startX + endX) / 2) + basis.up[0] * ((startY + endY) / 2) + basis.forward[0] * surfaceCentreDist,
-    basis.right[1] * ((startX + endX) / 2) + basis.up[1] * ((startY + endY) / 2) + basis.forward[1] * surfaceCentreDist,
-    basis.right[2] * ((startX + endX) / 2) + basis.up[2] * ((startY + endY) / 2) + basis.forward[2] * surfaceCentreDist
+function makePointOnFacet(right, up, forward, x, y, forwardOffset) {
+  return [
+    right[0] * x + up[0] * y + forward[0] * forwardOffset,
+    right[1] * x + up[1] * y + forward[1] * forwardOffset,
+    right[2] * x + up[2] * y + forward[2] * forwardOffset
   ];
+}
+
+function buildStrokeSegmentCSG(startPoint, endPoint, strokeWidth, right, up, forward, forwardOffset, halfDepth) {
+  const dx = endPoint[0] - startPoint[0];
+  const dy = endPoint[1] - startPoint[1];
+  const length = Math.sqrt(dx * dx + dy * dy);
+  if (length < 1e-8) return CSG.fromPolygons([]);
+
+  const centre = makePointOnFacet(
+    right,
+    up,
+    forward,
+    (startPoint[0] + endPoint[0]) / 2,
+    (startPoint[1] + endPoint[1]) / 2,
+    forwardOffset
+  );
+  const axisAlong = vecNormalise(
+    right[0] * dx + up[0] * dy,
+    right[1] * dx + up[1] * dy,
+    right[2] * dx + up[2] * dy
+  );
+  const axisAcross = vecNormalise(...vecCross(forward, axisAlong));
 
   return CSG.fromTriangles(
     buildOrientedBoxTriangles(
       centre,
-      across,
-      along,
-      basis.forward,
-      (DIGIT_STROKE_WIDTH_UNITS * unitScale) / 2,
-      length / 2 + (STROKE_LENGTH_BLEED_UNITS * unitScale) / 2,
+      axisAlong,
+      axisAcross,
+      forward,
+      length / 2 + strokeWidth * STROKE_SEGMENT_OVERLAP_UNITS,
+      strokeWidth / 2,
       halfDepth
     )
   );
 }
 
-function buildGlyphStrokeCSG(polylines, offsetXUnits, offsetYUnits, basis, unitScale, surfaceCentreDist, halfDepth) {
-  let result = CSG.fromPolygons([]);
-
-  for (const polyline of polylines) {
-    for (let index = 0; index < polyline.length - 1; index += 1) {
-      const start = [polyline[index][0] + offsetXUnits, polyline[index][1] + offsetYUnits];
-      const end = [polyline[index + 1][0] + offsetXUnits, polyline[index + 1][1] + offsetYUnits];
-      result = result.union(buildStrokeSegmentCSG(start, end, basis, unitScale, surfaceCentreDist, halfDepth));
-    }
-  }
-
-  return result;
+function buildStrokeNodeCSG(point, strokeWidth, right, up, forward, forwardOffset, halfDepth) {
+  const start = makePointOnFacet(right, up, forward, point[0], point[1], forwardOffset - halfDepth);
+  const end = makePointOnFacet(right, up, forward, point[0], point[1], forwardOffset + halfDepth);
+  return CSG.fromTriangles(
+    buildTubeTriangles(
+      start[0], start[1], start[2],
+      end[0], end[1], end[2],
+      strokeWidth / 2,
+      12
+    )
+  );
 }
 
 function buildNumberEngravingCSG(numberText, dir, facet) {
@@ -389,33 +389,56 @@ function buildNumberEngravingCSG(numberText, dir, facet) {
   );
   const surfaceCentreDist = facet.facetPlaneOffset + (ENGRAVE_OUTSIDE_BLEED - ENGRAVE_DEPTH) / 2;
   const halfDepth = (ENGRAVE_OUTSIDE_BLEED + ENGRAVE_DEPTH) / 2;
-  const topLineCentreYUnits = totalHeightUnits / 2 - DIGIT_HEIGHT_UNITS / 2;
-  const basis = { right, up, forward };
+  const totalHeightMM = totalHeightUnits * unitScale;
+  const topLineCentreY = totalHeightMM / 2 - (DIGIT_HEIGHT_UNITS * unitScale) / 2;
+  const strokeWidth = STROKE_WIDTH_UNITS * unitScale;
   let result = CSG.fromPolygons([]);
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     const lineWidthUnits = line.length * DIGIT_WIDTH_UNITS + Math.max(0, line.length - 1) * DIGIT_SPACING_UNITS;
-    const firstDigitCentreXUnits = -lineWidthUnits / 2 + DIGIT_WIDTH_UNITS / 2;
-    const digitCentreYUnits = topLineCentreYUnits - lineIndex * (DIGIT_HEIGHT_UNITS + DIGIT_LINE_SPACING_UNITS);
+    const lineWidthMM = lineWidthUnits * unitScale;
+    const firstDigitCentreX = -lineWidthMM / 2 + (DIGIT_WIDTH_UNITS * unitScale) / 2;
+    const digitCentreY = topLineCentreY - lineIndex * (DIGIT_HEIGHT_UNITS + DIGIT_LINE_SPACING_UNITS) * unitScale;
 
     for (let index = 0; index < line.length; index += 1) {
       const digit = line[index];
-      const glyphPolylines = VECTOR_DIGIT_GLYPHS[digit];
-      if (!glyphPolylines) continue;
+      const strokes = VECTOR_DIGIT_STROKES[digit];
+      if (!strokes) continue;
+      const digitCentreX = firstDigitCentreX + index * (DIGIT_WIDTH_UNITS + DIGIT_SPACING_UNITS) * unitScale;
+      const digitOriginX = digitCentreX - (DIGIT_WIDTH_UNITS * unitScale) / 2;
+      const digitOriginY = digitCentreY - (DIGIT_HEIGHT_UNITS * unitScale) / 2;
 
-      const digitCentreXUnits = firstDigitCentreXUnits + index * (DIGIT_WIDTH_UNITS + DIGIT_SPACING_UNITS);
-      result = result.union(
-        buildGlyphStrokeCSG(
-          glyphPolylines,
-          digitCentreXUnits,
-          digitCentreYUnits,
-          basis,
-          unitScale,
-          surfaceCentreDist,
-          halfDepth
-        )
-      );
+      for (const stroke of strokes) {
+        if (!Array.isArray(stroke) || stroke.length === 0) continue;
+
+        const points = stroke.map(([x, y]) => [
+          digitOriginX + x * DIGIT_WIDTH_UNITS * unitScale,
+          digitOriginY + y * DIGIT_HEIGHT_UNITS * unitScale
+        ]);
+
+        result = result.union(
+          buildStrokeNodeCSG(points[0], strokeWidth, right, up, forward, surfaceCentreDist, halfDepth)
+        );
+
+        for (let pointIndex = 1; pointIndex < points.length; pointIndex += 1) {
+          result = result.union(
+            buildStrokeSegmentCSG(
+              points[pointIndex - 1],
+              points[pointIndex],
+              strokeWidth,
+              right,
+              up,
+              forward,
+              surfaceCentreDist,
+              halfDepth
+            )
+          );
+          result = result.union(
+            buildStrokeNodeCSG(points[pointIndex], strokeWidth, right, up, forward, surfaceCentreDist, halfDepth)
+          );
+        }
+      }
     }
   }
 
