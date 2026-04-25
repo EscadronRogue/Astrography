@@ -1,28 +1,17 @@
 /**
  * @file 3D-printable STL kit exporter for the True Coordinates map.
  *
- * Produces a ZIP file containing one STL per star system.  Each STL is a
- * single solid mesh comprising:
- *
- *   1. The star's sphere (no holes)
- *   2. Half-length connection tubes fused into the sphere via CSG union,
- *      each ending with either a male pin or female socket so two halves
- *      snap together without glue.
- *   3. A flat name-tag "flag" extending from the sphere with the star's
- *      name rendered as raised pixel-font text.
- *
- * Pin/socket assignment is balanced: a greedy algorithm alternates male
- * and female ends across each star's connections so no star is all-male
- * or all-female.
- *
- * Each piece is exported at the origin for easy slicing / printing.
+ * Produces a ZIP file containing:
+ * - one STL per exported star system
+ * - plain half-length connection tubes with flat ends
+ * - engraved system numbers ranked by distance from Sol
+ * - one separate sleeve joint STL that slides over tube ends
  */
 
 import { CSG } from '../../vendor/csg.js';
+import { getPrimaryClass } from '../../shared/stellarClassUtils.js';
 import {
-  MM_PER_LY,
   TUBE_RADIUS,
-  getExportRadius,
   filterMainStars,
   buildSphereTriangles,
   buildTubeTriangles,
@@ -30,62 +19,45 @@ import {
 } from './stlExporter.js';
 
 // ---------------------------------------------------------------------------
-// Constants
+// Printable-kit scale and sizing
 // ---------------------------------------------------------------------------
 
-// Pin & socket dimensions (mm)
-const PIN_RADIUS    = 0.6;   // narrower than tube (TUBE_RADIUS = 1)
-const PIN_LENGTH    = 3.0;   // how far the pin protrudes past the cut
-const SOCKET_RADIUS = 0.65;  // slight clearance around pin
-const SOCKET_DEPTH  = 3.2;   // slightly deeper than pin for easy insertion
+const KIT_MM_PER_LY = 3;
+const PRINTABLE_STANDARD_DIAMETER_MM = 8;
+const PRINTABLE_STANDARD_RADIUS = PRINTABLE_STANDARD_DIAMETER_MM / 2;
+const REDUCED_STAR_SCALE = 0.75;
+const STANDARD_SIZE_CLASSES = new Set(['O', 'B', 'A', 'F', 'G', 'K']);
 
-// Name-tag dimensions (mm)
-const TAG_PLATE_THICK  = 0.4;
-const TAG_PLATE_PAD    = 0.5;  // padding around text on plate
-const TAG_PLATE_INSET  = 0.3;  // how far plate sinks into sphere for overlap
-const TAG_TEXT_RAISE   = 0.25; // how much text protrudes above plate
-const TAG_MAX_WIDTH    = 18;   // max plate width in mm
-const TAG_PIXEL_MAX    = 0.35; // max pixel size
-const TAG_PIXEL_MIN    = 0.15; // min pixel size (below this we truncate)
-const FONT_CHAR_W      = 5;   // character width in pixels
-const FONT_CHAR_H      = 7;   // character height in pixels
-const FONT_CHAR_GAP    = 1;   // gap between characters in pixels
-const FONT_LINE_GAP    = 2;   // vertical gap between lines in pixels
+// This keeps the tube well fused into the sphere when the solids are unioned.
+const TUBE_SPHERE_INSET = -1;
 
 // ---------------------------------------------------------------------------
-// Pixel font — 5×7 uppercase, digits & basic punctuation
-// Each character is 7 rows of 5-bit masks (bit 4 = left, bit 0 = right)
+// Sleeve joint dimensions
 // ---------------------------------------------------------------------------
+
+const JOINT_LENGTH = 4.0;
+const JOINT_OUTER_RADIUS = TUBE_RADIUS + 0.8;
+const JOINT_INNER_RADIUS = TUBE_RADIUS + 0.15;
+const JOINT_BORE_OVERSHOOT = 0.4;
+
+// ---------------------------------------------------------------------------
+// Engraved numbering
+// ---------------------------------------------------------------------------
+
+const ENGRAVE_DEPTH = 0.35;
+const ENGRAVE_OUTSIDE_BLEED = 0.25;
+const ENGRAVE_PIXEL_MAX = 0.34;
+const ENGRAVE_MAX_LINES = 3;
+const ENGRAVE_WIDTH_FACTOR = 1.6;
+const ENGRAVE_HEIGHT_FACTOR = 1.3;
+
+const FONT_CHAR_W = 5;
+const FONT_CHAR_H = 7;
+const FONT_CHAR_GAP = 1;
+const FONT_LINE_GAP = 2;
 
 /* eslint-disable no-multi-spaces */
-const PIXEL_FONT = {
-  A: [0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
-  B: [0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E],
-  C: [0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E],
-  D: [0x1C, 0x12, 0x11, 0x11, 0x11, 0x12, 0x1C],
-  E: [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F],
-  F: [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10],
-  G: [0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0E],
-  H: [0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
-  I: [0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E],
-  J: [0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C],
-  K: [0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11],
-  L: [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F],
-  M: [0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11],
-  N: [0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11],
-  O: [0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
-  P: [0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10],
-  Q: [0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D],
-  R: [0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11],
-  S: [0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E],
-  T: [0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
-  U: [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
-  V: [0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04],
-  W: [0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A],
-  X: [0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11],
-  Y: [0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04],
-  Z: [0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F],
-
+const DIGIT_FONT = {
   '0': [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
   '1': [0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E],
   '2': [0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F],
@@ -95,21 +67,26 @@ const PIXEL_FONT = {
   '6': [0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E],
   '7': [0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
   '8': [0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
-  '9': [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C],
-
-  ' ': [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-  '-': [0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x00],
-  '.': [0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C],
-  "'": [0x04, 0x04, 0x08, 0x00, 0x00, 0x00, 0x00],
-  '+': [0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00],
-  '/': [0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10],
-  '(': [0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02],
-  ')': [0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08],
+  '9': [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C]
 };
 /* eslint-enable no-multi-spaces */
 
+const FEATURE_CANDIDATES = (() => {
+  const dirs = [];
+  for (let x = -1; x <= 1; x += 1) {
+    for (let y = -1; y <= 1; y += 1) {
+      for (let z = -1; z <= 1; z += 1) {
+        if (x === 0 && y === 0 && z === 0) continue;
+        const len = Math.sqrt(x * x + y * y + z * z);
+        dirs.push([x / len, y / len, z / len]);
+      }
+    }
+  }
+  return dirs;
+})();
+
 // ---------------------------------------------------------------------------
-// General helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
 function sanitizeFilename(name) {
@@ -122,9 +99,19 @@ function sanitizeFilename(name) {
 
 function getSystemName(star) {
   return star.Common_name_of_the_star_system
-      || star.Common_name_of_the_star
-      || star.starId
-      || 'Unknown';
+    || star.Common_name_of_the_star
+    || star.starId
+    || 'Unknown';
+}
+
+function getRankingDistance(star) {
+  return Number.isFinite(star?.distance) ? star.distance : Number.POSITIVE_INFINITY;
+}
+
+function getPrintableKitRadius(star) {
+  const cls = getPrimaryClass(star);
+  const multiplier = STANDARD_SIZE_CLASSES.has(cls) ? 1 : REDUCED_STAR_SCALE;
+  return PRINTABLE_STANDARD_RADIUS * multiplier;
 }
 
 function vecNormalise(x, y, z) {
@@ -144,429 +131,228 @@ function vecCross(a, b) {
   ];
 }
 
-// ---------------------------------------------------------------------------
-// Low-level geometry: oriented box (12 triangles)
-// ---------------------------------------------------------------------------
-
-/**
- * Build triangles for a box defined by a centre, three orthogonal half-axes,
- * and their half-lengths.  Useful for arbitrarily-oriented cuboids.
- *
- * @param {number[]} c          – centre [x,y,z]
- * @param {number[]} axisR      – "right" unit vector
- * @param {number[]} axisU      – "up" unit vector
- * @param {number[]} axisF      – "forward" unit vector
- * @param {number}   halfR,halfU,halfF – half-extents along each axis
- * @returns {Array} triangles [{a,b,c}, …]
- */
 function buildOrientedBoxTriangles(c, axisR, axisU, axisF, halfR, halfU, halfF) {
-  // 8 corners
   const corner = (sr, su, sf) => [
     c[0] + axisR[0] * sr * halfR + axisU[0] * su * halfU + axisF[0] * sf * halfF,
     c[1] + axisR[1] * sr * halfR + axisU[1] * su * halfU + axisF[1] * sf * halfF,
-    c[2] + axisR[2] * sr * halfR + axisU[2] * su * halfU + axisF[2] * sf * halfF,
+    c[2] + axisR[2] * sr * halfR + axisU[2] * su * halfU + axisF[2] * sf * halfF
   ];
+
   const v = [
-    corner(-1, -1, -1), // 0
-    corner(+1, -1, -1), // 1
-    corner(+1, +1, -1), // 2
-    corner(-1, +1, -1), // 3
-    corner(-1, -1, +1), // 4
-    corner(+1, -1, +1), // 5
-    corner(+1, +1, +1), // 6
-    corner(-1, +1, +1), // 7
+    corner(-1, -1, -1),
+    corner(+1, -1, -1),
+    corner(+1, +1, -1),
+    corner(-1, +1, -1),
+    corner(-1, -1, +1),
+    corner(+1, -1, +1),
+    corner(+1, +1, +1),
+    corner(-1, +1, +1)
   ];
-  // 6 faces × 2 triangles, outward-facing normals
+
   const faces = [
-    [0,3,2,1], // -F face
-    [4,5,6,7], // +F face
-    [0,1,5,4], // -U face
-    [2,3,7,6], // +U face
-    [0,4,7,3], // -R face
-    [1,2,6,5], // +R face
+    [0, 3, 2, 1],
+    [4, 5, 6, 7],
+    [0, 1, 5, 4],
+    [2, 3, 7, 6],
+    [0, 4, 7, 3],
+    [1, 2, 6, 5]
   ];
-  const tris = [];
-  for (const f of faces) {
-    tris.push({ a: v[f[0]], b: v[f[1]], c: v[f[2]] });
-    tris.push({ a: v[f[0]], b: v[f[2]], c: v[f[3]] });
+
+  const triangles = [];
+  for (const face of faces) {
+    triangles.push({ a: v[face[0]], b: v[face[1]], c: v[face[2]] });
+    triangles.push({ a: v[face[0]], b: v[face[2]], c: v[face[3]] });
   }
-  return tris;
+
+  return triangles;
 }
 
-// ---------------------------------------------------------------------------
-// Pin & socket tube builders
-// ---------------------------------------------------------------------------
+function buildFeatureBasis(forward) {
+  let worldUp = [0, 1, 0];
+  if (Math.abs(vecDot(forward, worldUp)) > 0.9) worldUp = [1, 0, 0];
 
-/**
- * Build a half-tube with a MALE pin at its cut end.
- * Tube: from 1 mm inside sphere centre → midpoint.
- * Pin:  from midpoint → midpoint + PIN_LENGTH (narrower radius).
- * Both are unioned via CSG.
- */
-function buildHalfTubeMaleCSG(nx, ny, nz, distance) {
+  const lookDir = [-forward[0], -forward[1], -forward[2]];
+  const right = vecNormalise(...vecCross(lookDir, worldUp));
+  const up = vecNormalise(...vecCross(right, lookDir));
+
+  return { right, up, forward };
+}
+
+function buildHalfTubeCSG(nx, ny, nz, distance) {
   if (distance < 1e-10) return CSG.fromPolygons([]);
 
   const halfDist = distance / 2;
-  const inset = -1; // 1 mm inside the sphere
-
-  // Main tube body
-  const tubeStart = [nx * inset, ny * inset, nz * inset];
-  const tubeEnd   = [nx * halfDist, ny * halfDist, nz * halfDist];
-  const tubeTris  = buildTubeTriangles(
+  const tubeStart = [nx * TUBE_SPHERE_INSET, ny * TUBE_SPHERE_INSET, nz * TUBE_SPHERE_INSET];
+  const tubeEnd = [nx * halfDist, ny * halfDist, nz * halfDist];
+  const tubeTris = buildTubeTriangles(
     tubeStart[0], tubeStart[1], tubeStart[2],
     tubeEnd[0], tubeEnd[1], tubeEnd[2],
-    TUBE_RADIUS, 16
+    TUBE_RADIUS,
+    16
   );
 
-  // Pin extending past the cut
-  const pinEnd = [nx * (halfDist + PIN_LENGTH), ny * (halfDist + PIN_LENGTH), nz * (halfDist + PIN_LENGTH)];
-  const pinTris = buildTubeTriangles(
-    tubeEnd[0], tubeEnd[1], tubeEnd[2],
-    pinEnd[0], pinEnd[1], pinEnd[2],
-    PIN_RADIUS, 16
-  );
-
-  // Union via CSG to get a clean manifold join
-  const tubeCSG = CSG.fromTriangles(tubeTris);
-  const pinCSG  = CSG.fromTriangles(pinTris);
-  return tubeCSG.union(pinCSG);
+  return CSG.fromTriangles(tubeTris);
 }
 
-/**
- * Build a half-tube with a FEMALE socket at its cut end.
- * Tube: from 1 mm inside sphere centre → midpoint.
- * Socket: a cylindrical bore subtracted from the tube end, SOCKET_DEPTH deep.
- */
-function buildHalfTubeFemaleCSG(nx, ny, nz, distance) {
-  if (distance < 1e-10) return CSG.fromPolygons([]);
-
-  const halfDist = distance / 2;
-  const inset = -1;
-
-  // Main tube body
-  const tubeStart = [nx * inset, ny * inset, nz * inset];
-  const tubeEnd   = [nx * halfDist, ny * halfDist, nz * halfDist];
-  const tubeTris  = buildTubeTriangles(
-    tubeStart[0], tubeStart[1], tubeStart[2],
-    tubeEnd[0], tubeEnd[1], tubeEnd[2],
-    TUBE_RADIUS, 16
+function buildJointTriangles() {
+  const outer = CSG.fromTriangles(
+    buildTubeTriangles(0, 0, -JOINT_LENGTH / 2, 0, 0, JOINT_LENGTH / 2, JOINT_OUTER_RADIUS, 24)
   );
-  let result = CSG.fromTriangles(tubeTris);
-
-  // Socket bore — cylinder subtracted from the cut end going inward
-  const socketStart = [
-    nx * (halfDist + 1),                   // slightly past the face
-    ny * (halfDist + 1),
-    nz * (halfDist + 1),
-  ];
-  const socketEnd = [
-    nx * (halfDist - SOCKET_DEPTH),
-    ny * (halfDist - SOCKET_DEPTH),
-    nz * (halfDist - SOCKET_DEPTH),
-  ];
-  const socketTris = buildTubeTriangles(
-    socketStart[0], socketStart[1], socketStart[2],
-    socketEnd[0], socketEnd[1], socketEnd[2],
-    SOCKET_RADIUS, 16
+  const inner = CSG.fromTriangles(
+    buildTubeTriangles(
+      0,
+      0,
+      -(JOINT_LENGTH / 2 + JOINT_BORE_OVERSHOOT),
+      0,
+      0,
+      JOINT_LENGTH / 2 + JOINT_BORE_OVERSHOOT,
+      JOINT_INNER_RADIUS,
+      24
+    )
   );
-  const socketCSG = CSG.fromTriangles(socketTris);
-  result = result.subtract(socketCSG);
 
-  return result;
+  return outer.subtract(inner).toTriangles();
 }
 
-// ---------------------------------------------------------------------------
-// Male/female assignment — balanced greedy
-// ---------------------------------------------------------------------------
-
-/**
- * For every unique connection pair, decide which system gets the male end.
- * Uses a greedy approach: the system with fewer male assignments so far gets
- * the next male end.  Ties broken alphabetically.
- *
- * @param {Map} systemConnections  – system → connection list
- * @returns {Map<string, string>}  – pairKey → system name that gets the male end
- */
-function assignMaleFemale(systemConnections) {
-  // Collect unique pairs in sorted order for determinism
-  const pairsSet = new Set();
-  for (const [sys, conns] of systemConnections) {
-    for (const c of conns) {
-      const pair = sys < c.otherSystem ? `${sys}|${c.otherSystem}` : `${c.otherSystem}|${sys}`;
-      pairsSet.add(pair);
-    }
-  }
-  const sortedPairs = [...pairsSet].sort();
-
-  const maleCount = new Map(); // system → number of male ends assigned
-  const maleMap = new Map();   // pairKey → system that is male
-
-  for (const pair of sortedPairs) {
-    const [sA, sB] = pair.split('|');
-    const cA = maleCount.get(sA) || 0;
-    const cB = maleCount.get(sB) || 0;
-
-    // Give male to the system with fewer males; break ties alphabetically
-    const maleSystem = cA <= cB ? sA : sB;
-    maleMap.set(pair, maleSystem);
-    maleCount.set(maleSystem, (maleCount.get(maleSystem) || 0) + 1);
-  }
-
-  return maleMap;
-}
-
-// ---------------------------------------------------------------------------
-// Name-tag placement — find direction furthest from all tubes
-// ---------------------------------------------------------------------------
-
-const TAG_CANDIDATES = (() => {
-  const dirs = [];
-  for (let x = -1; x <= 1; x++) {
-    for (let y = -1; y <= 1; y++) {
-      for (let z = -1; z <= 1; z++) {
-        if (x === 0 && y === 0 && z === 0) continue;
-        const len = Math.sqrt(x * x + y * y + z * z);
-        dirs.push([x / len, y / len, z / len]);
-      }
-    }
-  }
-  return dirs; // 26 candidate directions
-})();
-
-/**
- * Pick a direction for the name tag that maximises the minimum angle from
- * any connection tube direction.  Falls back to +Y if no connections.
- */
-function findTagDirection(connectionDirs) {
+function findFeatureDirection(connectionDirs) {
   if (!connectionDirs || connectionDirs.length === 0) return [0, 1, 0];
 
   let bestDir = [0, 1, 0];
   let bestMinAngle = -Infinity;
 
-  for (const cand of TAG_CANDIDATES) {
+  for (const candidate of FEATURE_CANDIDATES) {
     let minAngle = Infinity;
-    for (const td of connectionDirs) {
-      // angle between candidate and tube direction (smaller = closer)
-      const dot = vecDot(cand, td);
+    for (const tubeDir of connectionDirs) {
+      const dot = vecDot(candidate, tubeDir);
       const angle = Math.acos(Math.max(-1, Math.min(dot, 1)));
       if (angle < minAngle) minAngle = angle;
     }
     if (minAngle > bestMinAngle) {
       bestMinAngle = minAngle;
-      bestDir = cand;
+      bestDir = candidate;
     }
   }
+
   return bestDir;
 }
 
-// ---------------------------------------------------------------------------
-// Name-tag geometry builder
-// ---------------------------------------------------------------------------
-
-/**
- * Build an orthonormal basis {right, up, forward} from a forward direction.
- * `forward` = the tag direction (pointing away from sphere, toward viewer).
- * The basis is derived from the VIEWER's perspective (looking along -forward)
- * so that text laid out in +right / +up reads naturally left-to-right,
- * top-to-bottom.
- */
-function buildTagBasis(forward) {
-  let worldUp = [0, 1, 0];
-  if (Math.abs(vecDot(forward, worldUp)) > 0.9) worldUp = [1, 0, 0];
-
-  // Viewer looks along -forward; derive screen-space right & up
-  const lookDir = [-forward[0], -forward[1], -forward[2]];
-  const right = vecNormalise(...vecCross(lookDir, worldUp));
-  const up    = vecNormalise(...vecCross(right, lookDir));
-  return { right, up, forward };
-}
-
-// ---------------------------------------------------------------------------
-// Compact text layout — word-wrap targeting a roughly square label
-// ---------------------------------------------------------------------------
-
-/**
- * Split `name` into wrapped lines that produce the most compact (closest to
- * square) label.  Honours word boundaries when possible; falls back to
- * character-level breaks for single very long words.
- *
- * @param {string} name      – raw star system name
- * @param {number} pixelSize – mm per pixel
- * @returns {{ lines: string[], widthPx: number, heightPx: number, pixelSize: number }}
- */
-function computeCompactLayout(name) {
-  const text = name.toUpperCase();
-  const words = text.split(/\s+/);
-  const charPx = FONT_CHAR_W + FONT_CHAR_GAP; // 6 px per character cell
-  const linePx = FONT_CHAR_H + FONT_LINE_GAP;  // 9 px per line cell
-
-  // Total length if everything were on one line
-  const totalLenPx = text.length * charPx - FONT_CHAR_GAP;
-
-  // Only single words (no wrapping possible) get the single-line fast path
-  if (words.length <= 1) {
-    return {
-      lines: [text],
-      widthPx: totalLenPx,
-      heightPx: FONT_CHAR_H,
-      pixelSize: TAG_PIXEL_MAX
-    };
-  }
-
-  // Target a roughly square label: find the line count that makes
-  // widthPx ≈ heightPx.  Always consider 1-line through idealLines+2
-  // and let the aspect-ratio comparison pick the winner — even short
-  // names like "ROSS 154" will wrap when that produces a squarer plate.
-  const idealLines = Math.max(1, Math.round(Math.sqrt(totalLenPx / linePx)));
-
-  let bestLayout = null;
-  let bestRatio  = Infinity;
-
-  for (let targetLines = 1; targetLines <= idealLines + 2; targetLines++) {
-    const targetWidthPx = Math.ceil(totalLenPx / targetLines);
-    const lines = wrapWords(words, targetWidthPx, charPx);
-
-    let maxW = 0;
-    for (const line of lines) {
-      const w = line.length * charPx - FONT_CHAR_GAP;
-      if (w > maxW) maxW = w;
-    }
-    const h = lines.length * linePx - FONT_LINE_GAP;
-    const ratio = maxW > h ? maxW / h : h / maxW; // how far from square
-
-    if (ratio < bestRatio) {
-      bestRatio = ratio;
-      bestLayout = { lines, widthPx: maxW, heightPx: h };
-    }
-  }
-
-  // Determine pixel size to fit within TAG_MAX_WIDTH
-  let pixelSize = TAG_PIXEL_MAX;
-  const neededWidth = bestLayout.widthPx * pixelSize + 2 * TAG_PLATE_PAD;
-  if (neededWidth > TAG_MAX_WIDTH) {
-    pixelSize = (TAG_MAX_WIDTH - 2 * TAG_PLATE_PAD) / bestLayout.widthPx;
-    if (pixelSize < TAG_PIXEL_MIN) pixelSize = TAG_PIXEL_MIN;
-  }
-
-  return { ...bestLayout, pixelSize };
-}
-
-/** Greedy word-wrap to fit within `maxWidthPx` pixels. */
-function wrapWords(words, maxWidthPx, charPx) {
+function splitBalanced(text, parts) {
   const lines = [];
-  let current = '';
+  let index = 0;
 
-  for (const word of words) {
-    const testLine = current ? current + ' ' + word : word;
-    const testW = testLine.length * charPx - FONT_CHAR_GAP;
-
-    if (testW <= maxWidthPx || !current) {
-      current = testLine;
-    } else {
-      lines.push(current);
-      current = word;
-    }
+  for (let part = 0; part < parts; part += 1) {
+    const remainingChars = text.length - index;
+    const remainingParts = parts - part;
+    const size = Math.ceil(remainingChars / remainingParts);
+    lines.push(text.slice(index, index + size));
+    index += size;
   }
-  if (current) lines.push(current);
-  return lines;
+
+  return lines.filter(Boolean);
 }
 
-// ---------------------------------------------------------------------------
-// Name-tag geometry builder
-// ---------------------------------------------------------------------------
+function computeNumberLayout(text, sphereRadius) {
+  const charPx = FONT_CHAR_W + FONT_CHAR_GAP;
+  const linePx = FONT_CHAR_H + FONT_LINE_GAP;
+  const maxWidth = sphereRadius * ENGRAVE_WIDTH_FACTOR;
+  const maxHeight = sphereRadius * ENGRAVE_HEIGHT_FACTOR;
 
-/**
- * Generate triangles for a name-tag plate with raised pixel text, attached
- * directly to the sphere surface (no stem).
- *
- * The plate is oriented perpendicular to `dir`, inset slightly into the
- * sphere for a solid overlap.  Text wraps across multiple lines to keep
- * the label compact.
- *
- * @param {string}   name         – star system name
- * @param {number[]} dir          – unit direction for the tag
- * @param {number}   sphereRadius – radius of the sphere (mm)
- * @returns {Array} triangles
- */
-function buildTagTriangles(name, dir, sphereRadius) {
-  const triangles = [];
-  const { right, up, forward } = buildTagBasis(dir);
+  let best = null;
+  const maxLines = Math.min(ENGRAVE_MAX_LINES, text.length);
 
-  // ── Layout text into compact wrapped lines ──────────────────────────
-  const layout = computeCompactLayout(name);
+  for (let lineCount = 1; lineCount <= maxLines; lineCount += 1) {
+    const lines = splitBalanced(text, lineCount);
+    const widthPx = Math.max(...lines.map(line => line.length * charPx - FONT_CHAR_GAP));
+    const heightPx = lines.length * linePx - FONT_LINE_GAP;
+    const pixelSize = Math.min(
+      ENGRAVE_PIXEL_MAX,
+      maxWidth / Math.max(widthPx, 1),
+      maxHeight / Math.max(heightPx, 1)
+    );
+
+    if (!best || pixelSize > best.pixelSize || (pixelSize === best.pixelSize && lines.length < best.lines.length)) {
+      best = { lines, widthPx, heightPx, pixelSize };
+    }
+  }
+
+  return best;
+}
+
+function buildNumberEngravingCSG(numberText, dir, sphereRadius) {
+  if (!numberText) return CSG.fromPolygons([]);
+
+  const layout = computeNumberLayout(numberText, sphereRadius);
+  if (!layout) return CSG.fromPolygons([]);
+
   const { lines, widthPx, heightPx, pixelSize } = layout;
-
-  const textWidthMM  = widthPx * pixelSize;
+  const { right, up, forward } = buildFeatureBasis(dir);
+  const charPx = FONT_CHAR_W + FONT_CHAR_GAP;
+  const linePx = FONT_CHAR_H + FONT_LINE_GAP;
+  const surfaceCentreDist = sphereRadius + (ENGRAVE_OUTSIDE_BLEED - ENGRAVE_DEPTH) / 2;
+  const halfDepth = (ENGRAVE_OUTSIDE_BLEED + ENGRAVE_DEPTH) / 2;
   const textHeightMM = heightPx * pixelSize;
-  const plateWidth   = textWidthMM + 2 * TAG_PLATE_PAD;
-  const plateHeight  = textHeightMM + 2 * TAG_PLATE_PAD;
+  const blockTopY = textHeightMM / 2;
+  const triangles = [];
 
-  // ── Plate — flat box attached to sphere surface ─────────────────────
-  // Inner face inset into the sphere for solid overlap with the curved surface
-  const plateInnerDist = sphereRadius - TAG_PLATE_INSET;
-  const plateCentreDist = plateInnerDist + TAG_PLATE_THICK / 2;
-
-  const plateCentre = [
-    forward[0] * plateCentreDist,
-    forward[1] * plateCentreDist,
-    forward[2] * plateCentreDist
-  ];
-  const plateTris = buildOrientedBoxTriangles(
-    plateCentre,
-    right, up, forward,
-    plateWidth / 2, plateHeight / 2, TAG_PLATE_THICK / 2
-  );
-  triangles.push(...plateTris);
-
-  // ── Raised pixel text on the outward plate face ─────────────────────
-  const plateFaceDist = plateInnerDist + TAG_PLATE_THICK; // outer face
-  const charPx  = FONT_CHAR_W + FONT_CHAR_GAP;
-  const linePx  = FONT_CHAR_H + FONT_LINE_GAP;
-
-  // Text block is centred on the plate
-  const blockTopY = textHeightMM / 2; // top of first line (in up direction)
-
-  for (let li = 0; li < lines.length; li++) {
-    const line = lines[li];
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
     const lineWidthMM = (line.length * charPx - FONT_CHAR_GAP) * pixelSize;
-    const lineStartX = -lineWidthMM / 2; // centre each line horizontally
-    const lineTopY   = blockTopY - li * linePx * pixelSize;
+    const lineStartX = -lineWidthMM / 2;
+    const lineTopY = blockTopY - lineIndex * linePx * pixelSize;
 
-    for (let ci = 0; ci < line.length; ci++) {
-      const ch = line[ci];
-      const glyph = PIXEL_FONT[ch];
+    for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
+      const glyph = DIGIT_FONT[line[charIndex]];
       if (!glyph) continue;
 
-      const charOffsetX = ci * charPx * pixelSize;
-
-      for (let row = 0; row < FONT_CHAR_H; row++) {
+      const charOffsetX = charIndex * charPx * pixelSize;
+      for (let row = 0; row < FONT_CHAR_H; row += 1) {
         const bits = glyph[row];
-        for (let col = 0; col < FONT_CHAR_W; col++) {
+        for (let col = 0; col < FONT_CHAR_W; col += 1) {
           if (!((bits >> (FONT_CHAR_W - 1 - col)) & 1)) continue;
 
-          // Pixel centre in local tag coordinates
           const lx = lineStartX + charOffsetX + (col + 0.5) * pixelSize;
           const ly = lineTopY - (row + 0.5) * pixelSize;
-          const lz = plateFaceDist + TAG_TEXT_RAISE / 2;
+          const lz = surfaceCentreDist;
 
-          // Transform to world coordinates
           const centre = [
             right[0] * lx + up[0] * ly + forward[0] * lz,
             right[1] * lx + up[1] * ly + forward[1] * lz,
-            right[2] * lx + up[2] * ly + forward[2] * lz,
+            right[2] * lx + up[2] * ly + forward[2] * lz
           ];
 
-          const pixTris = buildOrientedBoxTriangles(
-            centre, right, up, forward,
-            pixelSize / 2, pixelSize / 2, TAG_TEXT_RAISE / 2
+          triangles.push(
+            ...buildOrientedBoxTriangles(
+              centre,
+              right,
+              up,
+              forward,
+              pixelSize / 2,
+              pixelSize / 2,
+              halfDepth
+            )
           );
-          triangles.push(...pixTris);
         }
       }
     }
   }
 
-  return triangles;
+  return CSG.fromTriangles(triangles);
+}
+
+function buildSystemRankMap(sourceStars) {
+  const rankedStars = filterMainStars(Array.isArray(sourceStars) ? sourceStars : [])
+    .slice()
+    .sort((a, b) => {
+      const distanceDelta = getRankingDistance(a) - getRankingDistance(b);
+      if (distanceDelta !== 0) return distanceDelta;
+      return getSystemName(a).localeCompare(getSystemName(b));
+    });
+
+  const rankMap = new Map();
+  rankedStars.forEach((star, index) => {
+    rankMap.set(getSystemName(star), index + 1);
+  });
+  return rankMap;
 }
 
 // ---------------------------------------------------------------------------
@@ -576,13 +362,12 @@ function buildTagTriangles(name, dir, sphereRadius) {
 /**
  * Export a 3D-printable kit as a ZIP of individual STL files.
  *
- * Each star system is a single solid mesh: sphere + half-tubes with pin/socket
- * connectors + name-tag flag.
- *
- * @param {Array}  stars        – Currently filtered/displayed stars.
- * @param {Array}  connections  – Current connection pairs (may be empty).
+ * @param {Array} stars - Currently filtered/displayed stars.
+ * @param {Array} connections - Current connection pairs.
+ * @param {Object} [options]
+ * @param {Array} [options.allStars] - Full heliocentric star dataset for global numbering.
  */
-export async function exportPrintableSTLKit(stars, connections) {
+export async function exportPrintableSTLKit(stars, connections, options = {}) {
   if (!stars || stars.length === 0) {
     console.warn('STL kit export: no stars to export.');
     return;
@@ -594,38 +379,37 @@ export async function exportPrintableSTLKit(stars, connections) {
     return;
   }
 
-  // ── Collapse to main stars ───────────────────────────────────────────
   const mainStars = filterMainStars(stars);
-
-  // Build lookup: system name → { star, posMM }
+  const rankMap = buildSystemRankMap(options.allStars?.length ? options.allStars : stars);
   const systemInfo = new Map();
+
   for (const star of mainStars) {
     if (!star.truePosition) continue;
-    const sys = getSystemName(star);
-    systemInfo.set(sys, {
+    const systemName = getSystemName(star);
+    systemInfo.set(systemName, {
       star,
       posMM: {
-        x: star.truePosition.x * MM_PER_LY,
-        y: star.truePosition.y * MM_PER_LY,
-        z: star.truePosition.z * MM_PER_LY
+        x: star.truePosition.x * KIT_MM_PER_LY,
+        y: star.truePosition.y * KIT_MM_PER_LY,
+        z: star.truePosition.z * KIT_MM_PER_LY
       }
     });
   }
 
-  // ── Build per-system connection lists & deduplicate ──────────────────
   const systemConnections = new Map();
-
   if (Array.isArray(connections)) {
-    const seen = new Set();
+    const seenPairs = new Set();
+
     for (const { starA, starB } of connections) {
       if (!starA || !starB) continue;
+
       const sysA = getSystemName(starA);
       const sysB = getSystemName(starB);
       if (sysA === sysB) continue;
 
       const pairKey = sysA < sysB ? `${sysA}|${sysB}` : `${sysB}|${sysA}`;
-      if (seen.has(pairKey)) continue;
-      seen.add(pairKey);
+      if (seenPairs.has(pairKey)) continue;
+      seenPairs.add(pairKey);
 
       const infoA = systemInfo.get(sysA);
       const infoB = systemInfo.get(sysB);
@@ -637,70 +421,47 @@ export async function exportPrintableSTLKit(stars, connections) {
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
       if (!systemConnections.has(sysA)) systemConnections.set(sysA, []);
-      systemConnections.get(sysA).push({ otherSystem: sysB, dx, dy, dz, distance });
-
       if (!systemConnections.has(sysB)) systemConnections.set(sysB, []);
+
+      systemConnections.get(sysA).push({ otherSystem: sysB, dx, dy, dz, distance });
       systemConnections.get(sysB).push({ otherSystem: sysA, dx: -dx, dy: -dy, dz: -dz, distance });
     }
   }
 
-  // ── Assign male / female ends ───────────────────────────────────────
-  const maleMap = assignMaleFemale(systemConnections);
-
-  // ── Generate meshes ─────────────────────────────────────────────────
   const zip = new JSZip();
   const starsFolder = zip.folder('stars');
+  const connectorsFolder = zip.folder('connectors');
   let starCount = 0;
-  let maleCount = 0;
-  let femaleCount = 0;
+  let halfTubeCount = 0;
 
-  for (const [sys, info] of systemInfo) {
-    const radius = getExportRadius(info.star);
+  for (const [systemName, info] of systemInfo) {
+    const radius = getPrintableKitRadius(info.star);
+    let csgResult = CSG.fromTriangles(buildSphereTriangles(0, 0, 0, radius, 32, 32));
+    const tubeDirs = [];
+    const starConnections = systemConnections.get(systemName) || [];
 
-    // Sphere at origin
-    const sphereTris = buildSphereTriangles(0, 0, 0, radius, 32, 32);
-    let csgResult = CSG.fromTriangles(sphereTris);
-
-    // Connection tubes with pin/socket
-    const conns = systemConnections.get(sys);
-    const tubeDirs = []; // unit vectors for tag placement avoidance
-
-    if (conns && conns.length > 0) {
-      for (const conn of conns) {
-        const [nx, ny, nz] = vecNormalise(conn.dx, conn.dy, conn.dz);
-        tubeDirs.push([nx, ny, nz]);
-
-        // Determine male or female for this end
-        const pair = sys < conn.otherSystem
-          ? `${sys}|${conn.otherSystem}`
-          : `${conn.otherSystem}|${sys}`;
-        const isMale = maleMap.get(pair) === sys;
-
-        const halfTube = isMale
-          ? buildHalfTubeMaleCSG(nx, ny, nz, conn.distance)
-          : buildHalfTubeFemaleCSG(nx, ny, nz, conn.distance);
-
-        csgResult = csgResult.union(halfTube);
-        if (isMale) maleCount++; else femaleCount++;
-      }
+    for (const connection of starConnections) {
+      const [nx, ny, nz] = vecNormalise(connection.dx, connection.dy, connection.dz);
+      tubeDirs.push([nx, ny, nz]);
+      csgResult = csgResult.union(buildHalfTubeCSG(nx, ny, nz, connection.distance));
+      halfTubeCount += 1;
     }
 
-    // Convert CSG result to triangles
-    const meshTris = csgResult.toTriangles();
+    const systemRank = rankMap.get(systemName);
+    if (Number.isFinite(systemRank)) {
+      const engravingDir = findFeatureDirection(tubeDirs);
+      csgResult = csgResult.subtract(
+        buildNumberEngravingCSG(String(systemRank), engravingDir, radius)
+      );
+    }
 
-    // Name tag (appended as raw triangles — overlapping geometry is fine
-    // for slicers which auto-union shells)
-    const tagDir = findTagDirection(tubeDirs);
-    const tagTris = buildTagTriangles(sys, tagDir, radius);
-
-    const allTris = meshTris.concat(tagTris);
-    const stlBuffer = trianglesToBinarySTL(allTris);
-    const filename = `${sanitizeFilename(sys)}.stl`;
-    starsFolder.file(filename, stlBuffer);
-    starCount++;
+    const stlBuffer = trianglesToBinarySTL(csgResult.toTriangles());
+    starsFolder.file(`${sanitizeFilename(systemName)}.stl`, stlBuffer);
+    starCount += 1;
   }
 
-  // ── Download ZIP ────────────────────────────────────────────────────
+  connectorsFolder.file('tube_joint.stl', trianglesToBinarySTL(buildJointTriangles()));
+
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -710,7 +471,7 @@ export async function exportPrintableSTLKit(stars, connections) {
   URL.revokeObjectURL(url);
 
   console.log(
-    `3D-print kit exported – ${starCount} stars ` +
-    `(${maleCount} male + ${femaleCount} female connectors).`
+    `3D-print kit exported - ${starCount} stars, ${halfTubeCount} half-tubes, ` +
+    'and 1 sleeve joint.'
   );
 }

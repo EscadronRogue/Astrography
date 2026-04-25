@@ -367,7 +367,7 @@ export async function bootstrapApp() {
         stlKitBtn.textContent = 'Generating…';
         // Yield to the browser so the button text updates before heavy work
         setTimeout(() => {
-          exportPrintableSTLKit(stars, connections)
+          exportPrintableSTLKit(stars, connections, { allStars: state.cachedStars })
             .then(() => {
               stlKitBtn.disabled = false;
               stlKitBtn.textContent = 'STL for 3D Printing';
