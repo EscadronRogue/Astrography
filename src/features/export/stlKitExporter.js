@@ -3,7 +3,7 @@
  *
  * Produces a ZIP file containing:
  * - stars/  → one STL per star system (sphere with connection holes + engraved rank)
- * - tubes/  → one STL per connection (full-length tube with flat-top label)
+ * - tubes/  → one STL per connection (full-length tube with an integrated flat crown)
  *
  * Assembly: tubes slide directly into the matching holes in star spheres.
  * No separate joints or connectors.
@@ -46,14 +46,23 @@ const TUBE_INSERTION_DEPTH = 4; // mm into sphere
 const HOLE_SEGMENTS = 24;
 const MIN_TUBE_LENGTH = 2; // skip connections shorter than this (mm)
 
-// Flat-top label on tubes
-const LABEL_PAD_WIDTH = 7;       // mm across tube
-const LABEL_PAD_THICKNESS = 1.0; // mm above tube surface
-const LABEL_PAD_MARGIN = 2;      // mm padding beyond text on each side along tube axis
+// Flattened crown and label on tubes
+const TUBE_FLAT_WIDTH = 3.6;      // mm chord width of the shaved top
+const TUBE_FLAT_END_MARGIN = 1.2; // keep rounded ends so the crown feels carved, not stitched on
 const LABEL_ENGRAVE_DEPTH = 0.5;
 const LABEL_ENGRAVE_BLEED = 0.25;
 const LABEL_TEXT_WIDTH_FACTOR = 0.85;
 const LABEL_TEXT_HEIGHT_FACTOR = 0.78;
+
+// Overlapping-hole merge / Y splitters on stars
+const HOLE_CLUSTER_CLEARANCE = 0.4;
+const MANIFOLD_WALL_THICKNESS = 1.0;
+const MANIFOLD_RADIUS = HOLE_RADIUS + MANIFOLD_WALL_THICKNESS;
+const MANIFOLD_BLEND_INSET = 0.75;
+const MANIFOLD_JUNCTION_OUTSIDE = 3.5;
+const MANIFOLD_SOCKET_EXTRA_OUTSIDE = TUBE_INSERTION_DEPTH + 2.5;
+const MANIFOLD_SOCKET_HOLE_OVERHANG = 1.0;
+const MANIFOLD_JUNCTION_RADIUS = MANIFOLD_RADIUS + 0.25;
 
 // Star-face engraving
 const FACET_DEPTH_FACTOR = 0.3;
@@ -185,6 +194,27 @@ function vecCross(a, b) {
   ];
 }
 
+function vecScale(v, scalar) {
+  return [v[0] * scalar, v[1] * scalar, v[2] * scalar];
+}
+
+function vecLength(v) {
+  return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+}
+
+function vecDistance(a, b) {
+  return vecLength([a[0] - b[0], a[1] - b[1], a[2] - b[2]]);
+}
+
+function unionAllCSG(solids) {
+  if (!Array.isArray(solids) || solids.length === 0) return CSG.fromPolygons([]);
+  let result = solids[0];
+  for (let i = 1; i < solids.length; i += 1) {
+    result = result.union(solids[i]);
+  }
+  return result;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Geometry primitives
 // ═══════════════════════════════════════════════════════════════════════════
@@ -234,6 +264,12 @@ function buildFeatureBasis(forward) {
   const up = vecNormalise(...vecCross(right, lookDir));
 
   return { right, up, forward };
+}
+
+function buildNodeSphereCSG(centre, radius, widthSegs = 20, heightSegs = 20) {
+  return CSG.fromTriangles(
+    buildSphereTriangles(centre[0], centre[1], centre[2], radius, widthSegs, heightSegs)
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -480,11 +516,8 @@ function buildStarNumberCSG(numberText, dir, facet) {
 // Hole subtraction (cylindrical bore for tube insertion)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function buildHoleCSG(direction, sphereRadius) {
+function buildHoleCSG(direction, innerDist, outerDist) {
   const [nx, ny, nz] = direction;
-  // Cylinder extends from slightly outside the sphere to TUBE_INSERTION_DEPTH inside
-  const outerDist = sphereRadius + 1;
-  const innerDist = sphereRadius - TUBE_INSERTION_DEPTH;
   const start = [nx * outerDist, ny * outerDist, nz * outerDist];
   const end = [nx * innerDist, ny * innerDist, nz * innerDist];
 
@@ -499,54 +532,66 @@ function buildHoleCSG(direction, sphereRadius) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Tube flat-top label (rectangular pad + engraved text)
+// Tube flattened crown + engraved text
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Compute label layout for a tube.  Returns null if the tube is too short
+ * Compute the shaved-flat crown geometry for a tube.
+ */
+function getTubeFlatLayout(tubeLength) {
+  const flatWidth = Math.min(TUBE_FLAT_WIDTH, KIT_TUBE_RADIUS * 2 - 0.15);
+  const flatLength = Math.max(0, tubeLength - 2 * TUBE_FLAT_END_MARGIN);
+  if (flatLength < 2.5) return null;
+
+  return {
+    flatLength,
+    flatWidth,
+    surfaceZ: Math.sqrt(Math.max(0, KIT_TUBE_RADIUS * KIT_TUBE_RADIUS - (flatWidth * flatWidth) / 4))
+  };
+}
+
+/**
+ * Compute label layout for a tube crown. Returns null if the tube is too short
  * for any label.
  */
-function computeLabelLayout(text, tubeLength) {
+function computeLabelLayout(text, flatLayout) {
+  if (!flatLayout) return null;
+
   const chars = text.split('');
   const textWidthUnits = chars.length * DIGIT_WIDTH_UNITS
     + Math.max(0, chars.length - 1) * DIGIT_SPACING_UNITS;
 
-  const maxPadLength = Math.min(tubeLength * 0.7, 24);
-  if (maxPadLength < 4) return null; // too short for any label
-
-  const availableWidth = (maxPadLength - 2 * LABEL_PAD_MARGIN) * LABEL_TEXT_WIDTH_FACTOR;
-  const availableHeight = LABEL_PAD_WIDTH * LABEL_TEXT_HEIGHT_FACTOR;
+  const availableWidth = flatLayout.flatLength * LABEL_TEXT_WIDTH_FACTOR;
+  const availableHeight = flatLayout.flatWidth * LABEL_TEXT_HEIGHT_FACTOR;
 
   const unitScale = Math.min(
     availableWidth / Math.max(textWidthUnits, 1),
     availableHeight / Math.max(DIGIT_HEIGHT_UNITS, 1)
   );
 
-  const textWidthMM = textWidthUnits * unitScale;
-  const padLength = Math.max(textWidthMM / LABEL_TEXT_WIDTH_FACTOR + 2 * LABEL_PAD_MARGIN, 6);
-
-  return { unitScale, textWidthMM, padLength };
+  return Number.isFinite(unitScale) && unitScale > 0
+    ? { ...flatLayout }
+    : null;
 }
 
 /**
- * Build label pad CSG in canonical tube orientation (tube along X, pad on +Z).
+ * Build the flat trim cutter in canonical tube orientation (tube along X).
  */
-function buildLabelPadCSG(padLength) {
-  const padHalfLen = padLength / 2;
-  const padHalfWidth = LABEL_PAD_WIDTH / 2;
-  const padTop = KIT_TUBE_RADIUS + LABEL_PAD_THICKNESS;
-  const padCentreZ = padTop / 2; // bottom at Z=0, top at padTop
-  const padHalfZ = padTop / 2;
+function buildTubeFlatTrimCSG(layout) {
+  const halfLen = layout.flatLength / 2;
+  const halfWidth = KIT_TUBE_RADIUS + 1.5;
+  const halfZ = KIT_TUBE_RADIUS + 2;
+  const centreZ = layout.surfaceZ + halfZ;
 
   return CSG.fromTriangles(
     buildOrientedBoxTriangles(
-      [0, 0, padCentreZ],
+      [0, 0, centreZ],
       [1, 0, 0], // along tube
       [0, 1, 0], // across tube
       [0, 0, 1], // up
-      padHalfLen,
-      padHalfWidth,
-      padHalfZ
+      halfLen,
+      halfWidth,
+      halfZ
     )
   );
 }
@@ -556,16 +601,15 @@ function buildLabelPadCSG(padLength) {
  * Text runs along X, character height along Y, engrave depth along -Z.
  */
 function buildLabelTextCSG(text, layout) {
-  const surfaceZ = KIT_TUBE_RADIUS + LABEL_PAD_THICKNESS;
-  const maxWidth = layout.padLength * LABEL_TEXT_WIDTH_FACTOR;
-  const maxHeight = LABEL_PAD_WIDTH * LABEL_TEXT_HEIGHT_FACTOR;
+  const maxWidth = layout.flatLength * LABEL_TEXT_WIDTH_FACTOR;
+  const maxHeight = layout.flatWidth * LABEL_TEXT_HEIGHT_FACTOR;
 
   return buildTextCSG(
     text,
     [1, 0, 0], // right
     [0, 1, 0], // up
     [0, 0, 1], // forward
-    surfaceZ,
+    layout.surfaceZ,
     maxWidth,
     maxHeight,
     LABEL_STROKE_WIDTH_UNITS,
@@ -573,6 +617,186 @@ function buildLabelTextCSG(text, layout) {
     LABEL_ENGRAVE_BLEED
     // single-line by default
   );
+}
+
+function clusterHoleEndpoints(endpoints, sphereRadius) {
+  if (!Array.isArray(endpoints) || endpoints.length === 0) return [];
+
+  const visited = new Array(endpoints.length).fill(false);
+  const overlapLimit = 2 * HOLE_RADIUS + HOLE_CLUSTER_CLEARANCE;
+  const clusters = [];
+
+  for (let startIndex = 0; startIndex < endpoints.length; startIndex += 1) {
+    if (visited[startIndex]) continue;
+
+    const stack = [startIndex];
+    visited[startIndex] = true;
+    const members = [];
+
+    while (stack.length) {
+      const index = stack.pop();
+      const entry = endpoints[index];
+      members.push(entry);
+
+      for (let otherIndex = 0; otherIndex < endpoints.length; otherIndex += 1) {
+        if (visited[otherIndex]) continue;
+
+        const other = endpoints[otherIndex];
+        const centreA = vecScale(entry.dir, sphereRadius);
+        const centreB = vecScale(other.dir, sphereRadius);
+        if (vecDistance(centreA, centreB) >= overlapLimit) continue;
+
+        visited[otherIndex] = true;
+        stack.push(otherIndex);
+      }
+    }
+
+    clusters.push(members);
+  }
+
+  return clusters;
+}
+
+function getClusterMergedDirection(cluster) {
+  let sx = 0;
+  let sy = 0;
+  let sz = 0;
+
+  for (const member of cluster) {
+    sx += member.dir[0];
+    sy += member.dir[1];
+    sz += member.dir[2];
+  }
+
+  return vecNormalise(sx, sy, sz);
+}
+
+function getClusterSocketOuterDistance(cluster, sphereRadius) {
+  let requiredDistance = sphereRadius + MANIFOLD_SOCKET_EXTRA_OUTSIDE;
+  const requiredSeparation = 2 * HOLE_RADIUS + HOLE_CLUSTER_CLEARANCE;
+
+  for (let i = 0; i < cluster.length; i += 1) {
+    for (let j = i + 1; j < cluster.length; j += 1) {
+      const dirDelta = vecDistance(cluster[i].dir, cluster[j].dir);
+      if (dirDelta < 1e-6) continue;
+      requiredDistance = Math.max(requiredDistance, requiredSeparation / dirDelta);
+    }
+  }
+
+  return requiredDistance;
+}
+
+function buildSystemSocketPlan(endpoints, sphereRadius) {
+  const anchors = new Map();
+  const openingDirections = [];
+  const positiveSolids = [];
+  const negativeSolids = [];
+
+  const clusters = clusterHoleEndpoints(endpoints, sphereRadius);
+  for (const cluster of clusters) {
+    if (cluster.length === 1) {
+      const member = cluster[0];
+      anchors.set(member.connectionId, vecScale(member.dir, sphereRadius - TUBE_INSERTION_DEPTH));
+      openingDirections.push(member.dir);
+      negativeSolids.push(
+        buildHoleCSG(member.dir, sphereRadius - TUBE_INSERTION_DEPTH, sphereRadius + 1)
+      );
+      continue;
+    }
+
+    const mergedDir = getClusterMergedDirection(cluster);
+    const junctionPoint = vecScale(mergedDir, sphereRadius + MANIFOLD_JUNCTION_OUTSIDE);
+    const stemStart = vecScale(mergedDir, sphereRadius - MANIFOLD_BLEND_INSET);
+    const socketOuterDistance = getClusterSocketOuterDistance(cluster, sphereRadius);
+
+    openingDirections.push(mergedDir, ...cluster.map(member => member.dir));
+
+    positiveSolids.push(
+      CSG.fromTriangles(
+        buildTubeTriangles(
+          stemStart[0], stemStart[1], stemStart[2],
+          junctionPoint[0], junctionPoint[1], junctionPoint[2],
+          MANIFOLD_RADIUS,
+          KIT_TUBE_SEGMENTS
+        )
+      )
+    );
+    positiveSolids.push(buildNodeSphereCSG(junctionPoint, MANIFOLD_JUNCTION_RADIUS));
+
+    negativeSolids.push(
+      buildHoleCSG(
+        mergedDir,
+        sphereRadius - TUBE_INSERTION_DEPTH,
+        sphereRadius + Math.max(1.5, MANIFOLD_JUNCTION_OUTSIDE * 0.65)
+      )
+    );
+
+    for (const member of cluster) {
+      const socketOuterPoint = vecScale(member.dir, socketOuterDistance);
+      const socketInnerPoint = vecScale(member.dir, socketOuterDistance - TUBE_INSERTION_DEPTH);
+
+      positiveSolids.push(
+        CSG.fromTriangles(
+          buildTubeTriangles(
+            junctionPoint[0], junctionPoint[1], junctionPoint[2],
+            socketOuterPoint[0], socketOuterPoint[1], socketOuterPoint[2],
+            MANIFOLD_RADIUS,
+            KIT_TUBE_SEGMENTS
+          )
+        )
+      );
+      positiveSolids.push(buildNodeSphereCSG(socketOuterPoint, MANIFOLD_RADIUS, 16, 16));
+
+      negativeSolids.push(
+        buildHoleCSG(
+          member.dir,
+          socketOuterDistance - TUBE_INSERTION_DEPTH,
+          socketOuterDistance + MANIFOLD_SOCKET_HOLE_OVERHANG
+        )
+      );
+
+      anchors.set(member.connectionId, socketInnerPoint);
+    }
+  }
+
+  return { anchors, openingDirections, positiveSolids, negativeSolids };
+}
+
+function buildEndpointMap(connections) {
+  const endpointMap = new Map();
+
+  for (const conn of connections) {
+    if (!endpointMap.has(conn.sysA)) endpointMap.set(conn.sysA, []);
+    if (!endpointMap.has(conn.sysB)) endpointMap.set(conn.sysB, []);
+    endpointMap.get(conn.sysA).push({ connectionId: conn.id, dir: conn.dirA, otherSystem: conn.sysB });
+    endpointMap.get(conn.sysB).push({ connectionId: conn.id, dir: conn.dirB, otherSystem: conn.sysA });
+  }
+
+  return endpointMap;
+}
+
+function buildSystemSocketPlans(systemInfo, connections) {
+  const endpointMap = buildEndpointMap(connections);
+  const plans = new Map();
+
+  for (const [systemName, info] of systemInfo) {
+    plans.set(
+      systemName,
+      buildSystemSocketPlan(endpointMap.get(systemName) || [], info.radius)
+    );
+  }
+
+  return plans;
+}
+
+function getConnectionAnchorWorld(info, connectionId, plan, fallbackLocalAnchor) {
+  const offset = plan?.anchors.get(connectionId) || fallbackLocalAnchor;
+
+  return [
+    info.posMM.x + offset[0],
+    info.posMM.y + offset[1],
+    info.posMM.z + offset[2]
+  ];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -644,7 +868,7 @@ function buildSystemRankMap(sourceStars) {
  *
  * The ZIP contains:
  *   stars/   – one STL per system (sphere with holes + engraved rank)
- *   tubes/   – one STL per connection (full tube with flat-top label)
+ *   tubes/   – one STL per connection (full tube with an integrated flat crown)
  *
  * @param {Array}  stars       Currently filtered/displayed stars.
  * @param {Array}  connections Current connection pairs.
@@ -684,8 +908,7 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   }
 
   // ── Build all connection pairs ───────────────────────────────────────
-  const allConnections = [];   // { sysA, sysB, distance, dx, dy, dz }
-  const systemConnMap = new Map(); // system → [{ otherSystem, direction }]
+  const candidateConnections = [];
 
   if (Array.isArray(connections)) {
     const seenPairs = new Set();
@@ -709,25 +932,62 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
       const dy = infoB.posMM.y - infoA.posMM.y;
       const dz = infoB.posMM.z - infoA.posMM.z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const dirAtoB = vecNormalise(dx, dy, dz);
+      const dirBtoA = [-dirAtoB[0], -dirAtoB[1], -dirAtoB[2]];
 
       // Check if a tube can physically fit between the two spheres
       const tubeLength = distance - infoA.radius - infoB.radius + 2 * TUBE_INSERTION_DEPTH;
       if (tubeLength < MIN_TUBE_LENGTH) continue;
 
-      allConnections.push({ sysA, sysB, distance, tubeLength, dx, dy, dz });
-
-      // Record directions for each star's holes
-      const dirAtoB = vecNormalise(dx, dy, dz);
-      const dirBtoA = [-dirAtoB[0], -dirAtoB[1], -dirAtoB[2]];
-
-      if (!systemConnMap.has(sysA)) systemConnMap.set(sysA, []);
-      if (!systemConnMap.has(sysB)) systemConnMap.set(sysB, []);
-      systemConnMap.get(sysA).push(dirAtoB);
-      systemConnMap.get(sysB).push(dirBtoA);
+      candidateConnections.push({
+        id: candidateConnections.length,
+        sysA,
+        sysB,
+        distance,
+        dx,
+        dy,
+        dz,
+        dirA: dirAtoB,
+        dirB: dirBtoA
+      });
     }
   }
 
   // ── Build ZIP ────────────────────────────────────────────────────────
+  let allConnections = candidateConnections;
+  let socketPlans = buildSystemSocketPlans(systemInfo, allConnections);
+
+  // Re-validate printable tube lengths after merged sockets shift some tube
+  // anchors outward into shared Y splitters.
+  for (let pass = 0; pass < 3; pass += 1) {
+    const viableConnections = allConnections.filter(conn => {
+      const infoA = systemInfo.get(conn.sysA);
+      const infoB = systemInfo.get(conn.sysB);
+      if (!infoA || !infoB) return false;
+
+      const anchorA = getConnectionAnchorWorld(
+        infoA,
+        conn.id,
+        socketPlans.get(conn.sysA),
+        vecScale(conn.dirA, infoA.radius - TUBE_INSERTION_DEPTH)
+      );
+      const anchorB = getConnectionAnchorWorld(
+        infoB,
+        conn.id,
+        socketPlans.get(conn.sysB),
+        vecScale(conn.dirB, infoB.radius - TUBE_INSERTION_DEPTH)
+      );
+      return vecDistance(anchorA, anchorB) >= MIN_TUBE_LENGTH;
+    });
+
+    if (viableConnections.length === allConnections.length) break;
+
+    allConnections = viableConnections;
+    socketPlans = buildSystemSocketPlans(systemInfo, allConnections);
+  }
+
+  socketPlans = buildSystemSocketPlans(systemInfo, allConnections);
+
   const zip = new JSZip();
   const starsFolder = zip.folder('stars');
   const tubesFolder = zip.folder('tubes');
@@ -742,27 +1002,40 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   // ── Stars ────────────────────────────────────────────────────────────
   for (const [systemName, info] of systemInfo) {
     const radius = info.radius;
-    const holeDirs = systemConnMap.get(systemName) || [];
+    const socketPlan = socketPlans.get(systemName) || {
+      anchors: new Map(),
+      openingDirections: [],
+      positiveSolids: [],
+      negativeSolids: []
+    };
+    const holeDirs = socketPlan.openingDirections;
 
     // Find best direction for engraved rank number (away from holes)
     const engravingDir = findFeatureDirection(holeDirs);
 
-    // Build sphere
-    let csg = CSG.fromTriangles(buildSphereTriangles(0, 0, 0, radius, 32, 32));
+    // Build sphere plus any merged-socket Y manifold solids.
+    const positiveSolids = [
+      CSG.fromTriangles(buildSphereTriangles(0, 0, 0, radius, 32, 32)),
+      ...socketPlan.positiveSolids
+    ];
+    const cutSolids = [];
 
     // Cut flat facet for engraved number
     const facet = buildFacetTrimCSG(engravingDir, radius);
-    csg = csg.subtract(facet.csg);
+    cutSolids.push(facet.csg);
 
     // Engrave rank number
     if (Number.isFinite(info.rank)) {
-      const engravingCSG = buildStarNumberCSG(String(info.rank), engravingDir, facet);
-      csg = csg.subtract(engravingCSG);
+      cutSolids.push(buildStarNumberCSG(String(info.rank), engravingDir, facet));
     }
 
-    // Subtract holes for each connection
-    for (const dir of holeDirs) {
-      csg = csg.subtract(buildHoleCSG(dir, radius));
+    // Socket cutters are planned from the same overlap-merge logic used for
+    // the tube anchors, so star and tube exports stay aligned.
+    cutSolids.push(...socketPlan.negativeSolids);
+
+    let csg = unionAllCSG(positiveSolids);
+    if (cutSolids.length) {
+      csg = csg.subtract(unionAllCSG(cutSolids));
     }
 
     // Orient for print (engraved face up) and place on build plate
@@ -778,6 +1051,8 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   for (const conn of allConnections) {
     const infoA = systemInfo.get(conn.sysA);
     const infoB = systemInfo.get(conn.sysB);
+    const planA = socketPlans.get(conn.sysA);
+    const planB = socketPlans.get(conn.sysB);
     const rankA = infoA.rank;
     const rankB = infoB.rank;
 
@@ -789,7 +1064,21 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     const labelRankB = Math.max(rankA, rankB);
     const labelText = `${labelRankA}-${labelRankB}`;
 
-    const tubeLength = conn.tubeLength;
+    const anchorA = getConnectionAnchorWorld(
+      infoA,
+      conn.id,
+      planA,
+      vecScale(conn.dirA, infoA.radius - TUBE_INSERTION_DEPTH)
+    );
+    const anchorB = getConnectionAnchorWorld(
+      infoB,
+      conn.id,
+      planB,
+      vecScale(conn.dirB, infoB.radius - TUBE_INSERTION_DEPTH)
+    );
+    const tubeLength = vecDistance(anchorA, anchorB);
+    if (tubeLength < MIN_TUBE_LENGTH) continue;
+
     const halfLen = tubeLength / 2;
 
     // Build tube in canonical orientation: along X, centred at origin
@@ -797,14 +1086,20 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
       buildTubeTriangles(-halfLen, 0, 0, halfLen, 0, 0, KIT_TUBE_RADIUS, KIT_TUBE_SEGMENTS)
     );
 
-    // Add flat-top label pad and engraved text
-    const layout = computeLabelLayout(labelText, tubeLength);
-    if (layout) {
-      const padCSG = buildLabelPadCSG(layout.padLength);
-      csg = csg.union(padCSG);
+    // Shave an integrated crown into the tube, then engrave the label into it.
+    const cutSolids = [];
+    const flatLayout = getTubeFlatLayout(tubeLength);
+    if (flatLayout) {
+      cutSolids.push(buildTubeFlatTrimCSG(flatLayout));
 
-      const textCSG = buildLabelTextCSG(labelText, layout);
-      csg = csg.subtract(textCSG);
+      const labelLayout = computeLabelLayout(labelText, flatLayout);
+      if (labelLayout) {
+        cutSolids.push(buildLabelTextCSG(labelText, labelLayout));
+      }
+    }
+
+    if (cutSolids.length) {
+      csg = csg.subtract(unionAllCSG(cutSolids));
     }
 
     // Already in print orientation (tube along X, label faces +Z up)
