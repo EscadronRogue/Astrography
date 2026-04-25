@@ -40,17 +40,17 @@ const SOCKET_RADIUS = 0.65;  // slight clearance around pin
 const SOCKET_DEPTH  = 3.2;   // slightly deeper than pin for easy insertion
 
 // Name-tag dimensions (mm)
-const TAG_STEM_RADIUS  = 0.4;
-const TAG_STEM_EXTEND  = 1.5;  // extension beyond sphere surface
 const TAG_PLATE_THICK  = 0.4;
 const TAG_PLATE_PAD    = 0.5;  // padding around text on plate
+const TAG_PLATE_INSET  = 0.3;  // how far plate sinks into sphere for overlap
 const TAG_TEXT_RAISE   = 0.25; // how much text protrudes above plate
-const TAG_MAX_WIDTH    = 18;   // max plate width
+const TAG_MAX_WIDTH    = 18;   // max plate width in mm
 const TAG_PIXEL_MAX    = 0.35; // max pixel size
 const TAG_PIXEL_MIN    = 0.15; // min pixel size (below this we truncate)
 const FONT_CHAR_W      = 5;   // character width in pixels
 const FONT_CHAR_H      = 7;   // character height in pixels
 const FONT_CHAR_GAP    = 1;   // gap between characters in pixels
+const FONT_LINE_GAP    = 2;   // vertical gap between lines in pixels
 
 // ---------------------------------------------------------------------------
 // Pixel font — 5×7 uppercase, digits & basic punctuation
@@ -365,24 +365,128 @@ function findTagDirection(connectionDirs) {
 
 /**
  * Build an orthonormal basis {right, up, forward} from a forward direction.
- * `forward` = the tag stem direction (pointing away from sphere).
+ * `forward` = the tag direction (pointing away from sphere).
+ * `right` is oriented so that text reads correctly when viewed from outside.
  * `up` will be as close to world-Y as possible.
  */
 function buildTagBasis(forward) {
   let ref = [0, 1, 0];
   if (Math.abs(vecDot(forward, ref)) > 0.9) ref = [1, 0, 0];
 
-  const right = vecNormalise(...vecCross(forward, ref));
+  // Compute right so text reads correctly from the viewer's perspective
+  // (viewer looks along -forward, so their "right" is our -cross(forward, ref))
+  const rawRight = vecCross(forward, ref);
+  const right = vecNormalise(-rawRight[0], -rawRight[1], -rawRight[2]);
   const up    = vecNormalise(...vecCross(right, forward));
   return { right, up, forward };
 }
 
+// ---------------------------------------------------------------------------
+// Compact text layout — word-wrap targeting a roughly square label
+// ---------------------------------------------------------------------------
+
 /**
- * Generate triangles for a name-tag flag: stem + plate + raised pixel text.
+ * Split `name` into wrapped lines that produce the most compact (closest to
+ * square) label.  Honours word boundaries when possible; falls back to
+ * character-level breaks for single very long words.
  *
- * The geometry sits on a sphere centred at the origin with the given radius.
- * The tag extends along `dir` away from the sphere.  The plate face is
- * perpendicular to `dir`, with text on the outward face.
+ * @param {string} name      – raw star system name
+ * @param {number} pixelSize – mm per pixel
+ * @returns {{ lines: string[], widthPx: number, heightPx: number, pixelSize: number }}
+ */
+function computeCompactLayout(name) {
+  const text = name.toUpperCase();
+  const words = text.split(/\s+/);
+  const charPx = FONT_CHAR_W + FONT_CHAR_GAP; // 6 px per character cell
+  const linePx = FONT_CHAR_H + FONT_LINE_GAP;  // 9 px per line cell
+
+  // Total length if everything were on one line
+  const totalLenPx = text.length * charPx - FONT_CHAR_GAP;
+
+  // If short enough at max pixel size, single line is fine
+  const maxAvailPx = Math.floor((TAG_MAX_WIDTH - 2 * TAG_PLATE_PAD) / TAG_PIXEL_MAX);
+
+  if (totalLenPx <= maxAvailPx) {
+    return {
+      lines: [text],
+      widthPx: totalLenPx,
+      heightPx: FONT_CHAR_H,
+      pixelSize: TAG_PIXEL_MAX
+    };
+  }
+
+  // Target a roughly square label: find target line width (in pixels) that
+  // makes  (widthPx * pixelSize) ≈ (heightPx * pixelSize)  →  widthPx ≈ heightPx
+  // With N lines: heightPx ≈ N * linePx, widthPx ≈ totalLenPx / N
+  // Square when  totalLenPx / N ≈ N * linePx  →  N ≈ sqrt(totalLenPx / linePx)
+  const idealLines = Math.max(1, Math.round(Math.sqrt(totalLenPx / linePx)));
+
+  // Try wrapping at a few target widths around the ideal, pick best
+  let bestLayout = null;
+  let bestRatio  = Infinity;
+
+  for (let targetLines = Math.max(1, idealLines - 1);
+       targetLines <= idealLines + 2;
+       targetLines++) {
+    const targetWidthPx = Math.ceil(totalLenPx / targetLines);
+    const lines = wrapWords(words, targetWidthPx, charPx);
+
+    let maxW = 0;
+    for (const line of lines) {
+      const w = line.length * charPx - FONT_CHAR_GAP;
+      if (w > maxW) maxW = w;
+    }
+    const h = lines.length * linePx - FONT_LINE_GAP;
+    const ratio = maxW > h ? maxW / h : h / maxW; // how far from square
+
+    if (ratio < bestRatio) {
+      bestRatio = ratio;
+      bestLayout = { lines, widthPx: maxW, heightPx: h };
+    }
+  }
+
+  // Determine pixel size to fit within TAG_MAX_WIDTH
+  let pixelSize = TAG_PIXEL_MAX;
+  const neededWidth = bestLayout.widthPx * pixelSize + 2 * TAG_PLATE_PAD;
+  if (neededWidth > TAG_MAX_WIDTH) {
+    pixelSize = (TAG_MAX_WIDTH - 2 * TAG_PLATE_PAD) / bestLayout.widthPx;
+    if (pixelSize < TAG_PIXEL_MIN) pixelSize = TAG_PIXEL_MIN;
+  }
+
+  return { ...bestLayout, pixelSize };
+}
+
+/** Greedy word-wrap to fit within `maxWidthPx` pixels. */
+function wrapWords(words, maxWidthPx, charPx) {
+  const lines = [];
+  let current = '';
+
+  for (const word of words) {
+    const testLine = current ? current + ' ' + word : word;
+    const testW = testLine.length * charPx - FONT_CHAR_GAP;
+
+    if (testW <= maxWidthPx || !current) {
+      current = testLine;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Name-tag geometry builder
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate triangles for a name-tag plate with raised pixel text, attached
+ * directly to the sphere surface (no stem).
+ *
+ * The plate is oriented perpendicular to `dir`, inset slightly into the
+ * sphere for a solid overlap.  Text wraps across multiple lines to keep
+ * the label compact.
  *
  * @param {string}   name         – star system name
  * @param {number[]} dir          – unit direction for the tag
@@ -391,62 +495,26 @@ function buildTagBasis(forward) {
  */
 function buildTagTriangles(name, dir, sphereRadius) {
   const triangles = [];
-  const text = name.toUpperCase();
   const { right, up, forward } = buildTagBasis(dir);
 
-  // ── Compute pixel size & possibly truncate ──────────────────────────
-  const fullCharWidth = FONT_CHAR_W + FONT_CHAR_GAP; // 6 pixels per char
-  let displayText = text;
-  let pixelSize = TAG_PIXEL_MAX;
+  // ── Layout text into compact wrapped lines ──────────────────────────
+  const layout = computeCompactLayout(name);
+  const { lines, widthPx, heightPx, pixelSize } = layout;
 
-  // Desired text width in mm
-  let textWidthPx = displayText.length * fullCharWidth - FONT_CHAR_GAP;
-  let textWidthMM = textWidthPx * pixelSize;
-
-  if (textWidthMM > TAG_MAX_WIDTH - 2 * TAG_PLATE_PAD) {
-    // Try shrinking pixel size
-    pixelSize = (TAG_MAX_WIDTH - 2 * TAG_PLATE_PAD) / textWidthPx;
-    if (pixelSize < TAG_PIXEL_MIN) {
-      // Truncate the name
-      pixelSize = TAG_PIXEL_MIN;
-      const maxChars = Math.floor(
-        (TAG_MAX_WIDTH - 2 * TAG_PLATE_PAD) / (fullCharWidth * pixelSize)
-      );
-      displayText = text.slice(0, Math.max(maxChars - 2, 1)) + '..';
-      textWidthPx = displayText.length * fullCharWidth - FONT_CHAR_GAP;
-      textWidthMM = textWidthPx * pixelSize;
-    } else {
-      textWidthMM = textWidthPx * pixelSize;
-    }
-  }
-
-  const textHeightMM = FONT_CHAR_H * pixelSize;
+  const textWidthMM  = widthPx * pixelSize;
+  const textHeightMM = heightPx * pixelSize;
   const plateWidth   = textWidthMM + 2 * TAG_PLATE_PAD;
   const plateHeight  = textHeightMM + 2 * TAG_PLATE_PAD;
 
-  // ── Stem — cylinder from inside sphere to plate attachment point ─────
-  const stemStart = [
-    forward[0] * (sphereRadius - 1),
-    forward[1] * (sphereRadius - 1),
-    forward[2] * (sphereRadius - 1)
-  ];
-  const stemEnd = [
-    forward[0] * (sphereRadius + TAG_STEM_EXTEND),
-    forward[1] * (sphereRadius + TAG_STEM_EXTEND),
-    forward[2] * (sphereRadius + TAG_STEM_EXTEND)
-  ];
-  const stemTris = buildTubeTriangles(
-    stemStart[0], stemStart[1], stemStart[2],
-    stemEnd[0], stemEnd[1], stemEnd[2],
-    TAG_STEM_RADIUS, 8
-  );
-  triangles.push(...stemTris);
+  // ── Plate — flat box attached to sphere surface ─────────────────────
+  // Inner face inset into the sphere for solid overlap with the curved surface
+  const plateInnerDist = sphereRadius - TAG_PLATE_INSET;
+  const plateCentreDist = plateInnerDist + TAG_PLATE_THICK / 2;
 
-  // ── Plate — flat box at the end of the stem ─────────────────────────
   const plateCentre = [
-    stemEnd[0] + forward[0] * (TAG_PLATE_THICK / 2),
-    stemEnd[1] + forward[1] * (TAG_PLATE_THICK / 2),
-    stemEnd[2] + forward[2] * (TAG_PLATE_THICK / 2)
+    forward[0] * plateCentreDist,
+    forward[1] * plateCentreDist,
+    forward[2] * plateCentreDist
   ];
   const plateTris = buildOrientedBoxTriangles(
     plateCentre,
@@ -456,40 +524,49 @@ function buildTagTriangles(name, dir, sphereRadius) {
   triangles.push(...plateTris);
 
   // ── Raised pixel text on the outward plate face ─────────────────────
-  // Text origin: top-left corner of the first character on the plate face
-  const plateFaceOffset = sphereRadius + TAG_STEM_EXTEND + TAG_PLATE_THICK;
-  const textStartX = -textWidthMM / 2;   // in "right" axis
-  const textStartY =  textHeightMM / 2;  // in "up" axis (top)
+  const plateFaceDist = plateInnerDist + TAG_PLATE_THICK; // outer face
+  const charPx  = FONT_CHAR_W + FONT_CHAR_GAP;
+  const linePx  = FONT_CHAR_H + FONT_LINE_GAP;
 
-  for (let ci = 0; ci < displayText.length; ci++) {
-    const ch = displayText[ci];
-    const glyph = PIXEL_FONT[ch];
-    if (!glyph) continue; // skip unknown characters
+  // Text block is centred on the plate
+  const blockTopY = textHeightMM / 2; // top of first line (in up direction)
 
-    const charOffsetX = ci * fullCharWidth * pixelSize;
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    const lineWidthMM = (line.length * charPx - FONT_CHAR_GAP) * pixelSize;
+    const lineStartX = -lineWidthMM / 2; // centre each line horizontally
+    const lineTopY   = blockTopY - li * linePx * pixelSize;
 
-    for (let row = 0; row < FONT_CHAR_H; row++) {
-      const bits = glyph[row];
-      for (let col = 0; col < FONT_CHAR_W; col++) {
-        if (!((bits >> (FONT_CHAR_W - 1 - col)) & 1)) continue;
+    for (let ci = 0; ci < line.length; ci++) {
+      const ch = line[ci];
+      const glyph = PIXEL_FONT[ch];
+      if (!glyph) continue;
 
-        // Pixel centre in local tag coordinates
-        const lx = textStartX + charOffsetX + (col + 0.5) * pixelSize;
-        const ly = textStartY - (row + 0.5) * pixelSize;
-        const lz = plateFaceOffset + TAG_TEXT_RAISE / 2;
+      const charOffsetX = ci * charPx * pixelSize;
 
-        // Transform to world
-        const centre = [
-          right[0] * lx + up[0] * ly + forward[0] * lz,
-          right[1] * lx + up[1] * ly + forward[1] * lz,
-          right[2] * lx + up[2] * ly + forward[2] * lz,
-        ];
+      for (let row = 0; row < FONT_CHAR_H; row++) {
+        const bits = glyph[row];
+        for (let col = 0; col < FONT_CHAR_W; col++) {
+          if (!((bits >> (FONT_CHAR_W - 1 - col)) & 1)) continue;
 
-        const pixTris = buildOrientedBoxTriangles(
-          centre, right, up, forward,
-          pixelSize / 2, pixelSize / 2, TAG_TEXT_RAISE / 2
-        );
-        triangles.push(...pixTris);
+          // Pixel centre in local tag coordinates
+          const lx = lineStartX + charOffsetX + (col + 0.5) * pixelSize;
+          const ly = lineTopY - (row + 0.5) * pixelSize;
+          const lz = plateFaceDist + TAG_TEXT_RAISE / 2;
+
+          // Transform to world coordinates
+          const centre = [
+            right[0] * lx + up[0] * ly + forward[0] * lz,
+            right[1] * lx + up[1] * ly + forward[1] * lz,
+            right[2] * lx + up[2] * ly + forward[2] * lz,
+          ];
+
+          const pixTris = buildOrientedBoxTriangles(
+            centre, right, up, forward,
+            pixelSize / 2, pixelSize / 2, TAG_TEXT_RAISE / 2
+          );
+          triangles.push(...pixTris);
+        }
       }
     }
   }
