@@ -578,25 +578,29 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
 
   for (const [systemName, info] of systemInfo) {
     const radius = getPrintableKitRadius(info.star);
-    let csgResult = CSG.fromTriangles(buildSphereTriangles(0, 0, 0, radius, 32, 32));
     const tubeDirs = [];
     const starConnections = systemConnections.get(systemName) || [];
 
     for (const connection of starConnections) {
       const [nx, ny, nz] = vecNormalise(connection.dx, connection.dy, connection.dz);
       tubeDirs.push([nx, ny, nz]);
-      csgResult = csgResult.union(buildHalfTubeCSG(nx, ny, nz, connection.distance));
-      halfTubeCount += 1;
     }
 
     const engravingDir = findFeatureDirection(tubeDirs);
     const facet = buildFacetTrimCSG(engravingDir, radius);
-    csgResult = csgResult.subtract(facet.csg);
+    let csgResult = CSG.fromTriangles(buildSphereTriangles(0, 0, 0, radius, 32, 32))
+      .subtract(facet.csg);
     const systemRank = rankMap.get(systemName);
     if (Number.isFinite(systemRank)) {
       csgResult = csgResult.subtract(
         buildNumberEngravingCSG(String(systemRank), engravingDir, facet)
       );
+    }
+
+    for (const connection of starConnections) {
+      const [nx, ny, nz] = vecNormalise(connection.dx, connection.dy, connection.dz);
+      csgResult = csgResult.union(buildHalfTubeCSG(nx, ny, nz, connection.distance));
+      halfTubeCount += 1;
     }
 
     const orientedTriangles = orientTrianglesForPrint(csgResult.toTriangles(), engravingDir);
