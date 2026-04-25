@@ -1,11 +1,13 @@
 /**
  * @file 3D-printable STL kit exporter for the True Coordinates map.
  *
- * Produces a ZIP file containing:
- *  – one STL per star system: a sphere with cylindrical holes bored through
- *    it at the exact 3D angles of its connections, sized to accept the tubes
- *  – one STL per connection: a standalone tube oriented along the Z-axis,
- *    with the correct length to span center-to-center between the two stars
+ * Produces a ZIP file containing one STL per star system.  Each STL is a
+ * single solid mesh: the star's sphere with half-length connection tubes
+ * fused directly into it via CSG union.
+ *
+ * Assembly concept: every connection tube is split at its midpoint — each
+ * star carries its own half.  Small physical connectors / joints are used
+ * to join the two halves together when assembling the model.
  *
  * Each piece is exported at the origin for easy slicing / printing.
  */
@@ -38,31 +40,34 @@ function getSystemName(star) {
 }
 
 // ---------------------------------------------------------------------------
-// Bore-hole cylinder builder
+// Half-length tube builder (CSG)
 // ---------------------------------------------------------------------------
 
 /**
- * Build a CSG cylinder centered at the origin, aligned along `direction`,
- * long enough to fully penetrate a sphere of the given radius.
+ * Build a CSG tube from the origin toward a target direction, with length
+ * equal to half the full connection distance.  The tube starts slightly
+ * inside the sphere (to guarantee a solid overlap for the CSG union) and
+ * extends outward to the midpoint of the connection.
  *
- * @param {number} dx,dy,dz  – direction vector (need not be normalised)
- * @param {number} sphereRadius – radius of the sphere being drilled
- * @param {number} boreRadius   – radius of the hole
+ * @param {number} dx,dy,dz  – direction vector toward the connected star (mm)
+ * @param {number} distance  – full center-to-center distance (mm)
  * @returns {CSG}
  */
-function buildBoreCylinderCSG(dx, dy, dz, sphereRadius, boreRadius) {
-  const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-  if (len < 1e-10) return CSG.fromPolygons([]);
+function buildHalfTubeCSG(dx, dy, dz, distance) {
+  if (distance < 1e-10) return CSG.fromPolygons([]);
 
-  // Normalise
-  const nx = dx / len, ny = dy / len, nz = dz / len;
+  // Normalise direction
+  const nx = dx / distance, ny = dy / distance, nz = dz / distance;
 
-  // The cylinder extends well beyond the sphere in both directions
-  const halfLen = sphereRadius + 2; // generous overshoot in mm
-  const startX = -nx * halfLen, startY = -ny * halfLen, startZ = -nz * halfLen;
-  const endX   =  nx * halfLen, endY   =  ny * halfLen, endZ   =  nz * halfLen;
+  // Tube runs from a point slightly behind the origin (overlap with sphere
+  // interior ensures a watertight union) to the midpoint of the connection.
+  const inset    = -1;                  // 1 mm inside the sphere
+  const halfDist = distance / 2;
 
-  const tris = buildTubeTriangles(startX, startY, startZ, endX, endY, endZ, boreRadius, 16);
+  const startX = nx * inset,  startY = ny * inset,  startZ = nz * inset;
+  const endX   = nx * halfDist, endY = ny * halfDist, endZ = nz * halfDist;
+
+  const tris = buildTubeTriangles(startX, startY, startZ, endX, endY, endZ, TUBE_RADIUS, 16);
   return CSG.fromTriangles(tris);
 }
 
@@ -72,6 +77,9 @@ function buildBoreCylinderCSG(dx, dy, dz, sphereRadius, boreRadius) {
 
 /**
  * Export a 3D-printable kit as a ZIP of individual STL files.
+ *
+ * Each star system is exported as a single solid mesh: sphere + half-length
+ * connection tubes fused via CSG union.  No separate tube files are produced.
  *
  * @param {Array}  stars        – Currently filtered/displayed stars.
  * @param {Array}  connections  – Current connection pairs (may be empty).
@@ -109,9 +117,9 @@ export async function exportPrintableSTLKit(stars, connections) {
   // ── Build per-system connection lists & deduplicate ──────────────────
   // systemConnections: systemName → [ { otherSystem, dx, dy, dz, distance } ]
   const systemConnections = new Map();
-  const uniqueTubes = new Map(); // pairKey → { sysA, sysB, distance }
 
   if (Array.isArray(connections)) {
+    const seen = new Set();
     for (const { starA, starB } of connections) {
       if (!starA || !starB) continue;
       const sysA = getSystemName(starA);
@@ -119,7 +127,8 @@ export async function exportPrintableSTLKit(stars, connections) {
       if (sysA === sysB) continue;
 
       const pairKey = sysA < sysB ? `${sysA}|${sysB}` : `${sysB}|${sysA}`;
-      if (uniqueTubes.has(pairKey)) continue;
+      if (seen.has(pairKey)) continue;
+      seen.add(pairKey);
 
       const infoA = systemInfo.get(sysA);
       const infoB = systemInfo.get(sysB);
@@ -130,9 +139,7 @@ export async function exportPrintableSTLKit(stars, connections) {
       const dz = infoB.posMM.z - infoA.posMM.z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      uniqueTubes.set(pairKey, { sysA, sysB, distance });
-
-      // Record on both systems
+      // Record on both systems (opposite directions)
       if (!systemConnections.has(sysA)) systemConnections.set(sysA, []);
       systemConnections.get(sysA).push({ otherSystem: sysB, dx, dy, dz, distance });
 
@@ -143,48 +150,35 @@ export async function exportPrintableSTLKit(stars, connections) {
 
   const zip = new JSZip();
   const starsFolder = zip.folder('stars');
-  const tubesFolder = zip.folder('tubes');
   let starCount = 0;
-  let tubeCount = 0;
+  let tubeSegments = 0;
 
-  // ── Generate drilled spheres ─────────────────────────────────────────
+  // ── Generate sphere + half-tube meshes ───────────────────────────────
   for (const [sys, info] of systemInfo) {
     const radius = getExportRadius(info.star);
 
-    // Build sphere at origin
+    // Build sphere at origin (high detail for clean prints)
     const sphereTris = buildSphereTriangles(0, 0, 0, radius, 32, 32);
-    let csgSphere = CSG.fromTriangles(sphereTris);
+    let csgResult = CSG.fromTriangles(sphereTris);
 
-    // Bore holes for each connection
+    // Fuse half-length tubes for each connection
     const conns = systemConnections.get(sys);
     if (conns && conns.length > 0) {
       for (const conn of conns) {
-        const boreCylinder = buildBoreCylinderCSG(
+        const halfTube = buildHalfTubeCSG(
           conn.dx, conn.dy, conn.dz,
-          radius,
-          TUBE_RADIUS
+          conn.distance
         );
-        csgSphere = csgSphere.subtract(boreCylinder);
+        csgResult = csgResult.union(halfTube);
+        tubeSegments++;
       }
     }
 
-    const resultTris = csgSphere.toTriangles();
+    const resultTris = csgResult.toTriangles();
     const stlBuffer = trianglesToBinarySTL(resultTris);
     const filename = `${sanitizeFilename(sys)}.stl`;
     starsFolder.file(filename, stlBuffer);
     starCount++;
-  }
-
-  // ── Generate standalone tubes ────────────────────────────────────────
-  // Each tube is exported at the origin, aligned along the Z-axis,
-  // with length = center-to-center distance between the two systems.
-  for (const [, tube] of uniqueTubes) {
-    const halfLen = tube.distance / 2;
-    const tubeTris = buildTubeTriangles(0, 0, -halfLen, 0, 0, halfLen, TUBE_RADIUS, 16);
-    const stlBuffer = trianglesToBinarySTL(tubeTris);
-    const filename = `${sanitizeFilename(tube.sysA)}--${sanitizeFilename(tube.sysB)}.stl`;
-    tubesFolder.file(filename, stlBuffer);
-    tubeCount++;
   }
 
   // ── Generate & download ZIP ──────────────────────────────────────────
@@ -197,7 +191,7 @@ export async function exportPrintableSTLKit(stars, connections) {
   URL.revokeObjectURL(url);
 
   console.log(
-    `3D-print kit exported – ${starCount} drilled spheres, ` +
-    `${tubeCount} tubes.`
+    `3D-print kit exported – ${starCount} star meshes ` +
+    `(${tubeSegments} half-tube segments fused).`
   );
 }

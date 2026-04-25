@@ -276,6 +276,24 @@ export class CSG {
     return result;
   }
 
+  /**
+   * Return a new CSG solid representing the union of this solid and `csg`.
+   *   A.union(B) = A ∪ B
+   */
+  union(csg) {
+    const a = new Node(this.polygons);
+    const b = new Node(csg.polygons);
+    a.clipTo(b);
+    b.clipTo(a);
+    b.invert();
+    b.clipTo(a);
+    b.invert();
+    a.build(b.allPolygons());
+    const result = new CSG();
+    result.polygons = a.allPolygons();
+    return result;
+  }
+
   /** Build a CSG from an array of Polygon instances. */
   static fromPolygons(polygons) {
     const csg = new CSG();
