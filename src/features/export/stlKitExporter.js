@@ -44,13 +44,17 @@ const JOINT_BORE_OVERSHOOT = 0.4;
 // Engraved numbering
 // ---------------------------------------------------------------------------
 
-const ENGRAVE_DEPTH = 0.65;
-const ENGRAVE_OUTSIDE_BLEED = 0.35;
-const ENGRAVE_WIDTH_FACTOR = 2.25;
-const ENGRAVE_HEIGHT_FACTOR = 1.65;
+const FACET_DEPTH_FACTOR = 0.3;
+const FACET_BOX_HALF_DEPTH_FACTOR = 1.5;
+const FACET_BOX_HALF_EXTENT_FACTOR = 2.2;
+const ENGRAVE_DEPTH = 0.5;
+const ENGRAVE_OUTSIDE_BLEED = 0.25;
+const ENGRAVE_WIDTH_FACTOR = 0.8;
+const ENGRAVE_HEIGHT_FACTOR = 0.72;
 const DIGIT_WIDTH_UNITS = 6;
 const DIGIT_HEIGHT_UNITS = 10;
 const DIGIT_SPACING_UNITS = 1;
+const DIGIT_LINE_SPACING_UNITS = 2;
 const SEGMENT_OVERLAP_UNITS = 0.25;
 
 const SEVEN_SEGMENT_BOXES = {
@@ -241,51 +245,120 @@ function findFeatureDirection(connectionDirs) {
   return bestDir;
 }
 
-function buildNumberEngravingCSG(numberText, dir, sphereRadius) {
+function splitBalanced(text, parts) {
+  const lines = [];
+  let index = 0;
+
+  for (let part = 0; part < parts; part += 1) {
+    const remainingChars = text.length - index;
+    const remainingParts = parts - part;
+    const size = Math.ceil(remainingChars / remainingParts);
+    lines.push(text.slice(index, index + size));
+    index += size;
+  }
+
+  return lines.filter(Boolean);
+}
+
+function getFacetDepth(sphereRadius) {
+  return sphereRadius * FACET_DEPTH_FACTOR;
+}
+
+function getFacetPlaneOffset(sphereRadius, facetDepth = getFacetDepth(sphereRadius)) {
+  return sphereRadius - facetDepth;
+}
+
+function getFacetDiameter(sphereRadius, facetDepth = getFacetDepth(sphereRadius)) {
+  const planeOffset = getFacetPlaneOffset(sphereRadius, facetDepth);
+  return 2 * Math.sqrt(Math.max(0, sphereRadius * sphereRadius - planeOffset * planeOffset));
+}
+
+function buildFacetTrimCSG(dir, sphereRadius) {
+  const { right, up, forward } = buildFeatureBasis(dir);
+  const facetDepth = getFacetDepth(sphereRadius);
+  const planeOffset = getFacetPlaneOffset(sphereRadius, facetDepth);
+  const halfDepth = sphereRadius * FACET_BOX_HALF_DEPTH_FACTOR;
+  const halfExtent = sphereRadius * FACET_BOX_HALF_EXTENT_FACTOR;
+  const centreDist = planeOffset + halfDepth;
+  const centre = [
+    forward[0] * centreDist,
+    forward[1] * centreDist,
+    forward[2] * centreDist
+  ];
+
+  return {
+    facetDepth,
+    facetDiameter: getFacetDiameter(sphereRadius, facetDepth),
+    facetPlaneOffset: planeOffset,
+    csg: CSG.fromTriangles(
+      buildOrientedBoxTriangles(centre, right, up, forward, halfExtent, halfExtent, halfDepth)
+    )
+  };
+}
+
+function layoutDigits(numberText) {
+  if (numberText.length <= 2) return [numberText];
+  if (numberText.length <= 4) return splitBalanced(numberText, 2);
+  return splitBalanced(numberText, 3);
+}
+
+function buildNumberEngravingCSG(numberText, dir, facet) {
   if (!numberText) return CSG.fromPolygons([]);
 
   const { right, up, forward } = buildFeatureBasis(dir);
-  const maxWidth = sphereRadius * ENGRAVE_WIDTH_FACTOR;
-  const maxHeight = sphereRadius * ENGRAVE_HEIGHT_FACTOR;
-  const totalWidthUnits = numberText.length * DIGIT_WIDTH_UNITS + Math.max(0, numberText.length - 1) * DIGIT_SPACING_UNITS;
-  const unitScale = Math.min(
-    maxWidth / Math.max(totalWidthUnits, 1),
-    maxHeight / DIGIT_HEIGHT_UNITS
+  const lines = layoutDigits(numberText);
+  const maxWidth = facet.facetDiameter * ENGRAVE_WIDTH_FACTOR;
+  const maxHeight = facet.facetDiameter * ENGRAVE_HEIGHT_FACTOR;
+  const maxWidthUnits = Math.max(
+    ...lines.map(line => line.length * DIGIT_WIDTH_UNITS + Math.max(0, line.length - 1) * DIGIT_SPACING_UNITS)
   );
-  const surfaceCentreDist = sphereRadius + (ENGRAVE_OUTSIDE_BLEED - ENGRAVE_DEPTH) / 2;
+  const totalHeightUnits = lines.length * DIGIT_HEIGHT_UNITS + Math.max(0, lines.length - 1) * DIGIT_LINE_SPACING_UNITS;
+  const unitScale = Math.min(
+    maxWidth / Math.max(maxWidthUnits, 1),
+    maxHeight / Math.max(totalHeightUnits, 1)
+  );
+  const surfaceCentreDist = facet.facetPlaneOffset + (ENGRAVE_OUTSIDE_BLEED - ENGRAVE_DEPTH) / 2;
   const halfDepth = (ENGRAVE_OUTSIDE_BLEED + ENGRAVE_DEPTH) / 2;
-  const totalWidthMM = totalWidthUnits * unitScale;
-  const firstDigitCentreX = -totalWidthMM / 2 + (DIGIT_WIDTH_UNITS * unitScale) / 2;
+  const totalHeightMM = totalHeightUnits * unitScale;
+  const topLineCentreY = totalHeightMM / 2 - (DIGIT_HEIGHT_UNITS * unitScale) / 2;
   const triangles = [];
 
-  for (let index = 0; index < numberText.length; index += 1) {
-    const digit = numberText[index];
-    const segments = SEVEN_SEGMENT_DIGITS[digit];
-    if (!segments) continue;
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const lineWidthUnits = line.length * DIGIT_WIDTH_UNITS + Math.max(0, line.length - 1) * DIGIT_SPACING_UNITS;
+    const lineWidthMM = lineWidthUnits * unitScale;
+    const firstDigitCentreX = -lineWidthMM / 2 + (DIGIT_WIDTH_UNITS * unitScale) / 2;
+    const digitCentreY = topLineCentreY - lineIndex * (DIGIT_HEIGHT_UNITS + DIGIT_LINE_SPACING_UNITS) * unitScale;
 
-    const digitCentreX = firstDigitCentreX + index * (DIGIT_WIDTH_UNITS + DIGIT_SPACING_UNITS) * unitScale;
+    for (let index = 0; index < line.length; index += 1) {
+      const digit = line[index];
+      const segments = SEVEN_SEGMENT_DIGITS[digit];
+      if (!segments) continue;
 
-    for (const segmentKey of segments) {
-      const box = SEVEN_SEGMENT_BOXES[segmentKey];
-      if (!box) continue;
+      const digitCentreX = firstDigitCentreX + index * (DIGIT_WIDTH_UNITS + DIGIT_SPACING_UNITS) * unitScale;
 
-      const centre = [
-        right[0] * (digitCentreX + box.x * unitScale) + up[0] * (box.y * unitScale) + forward[0] * surfaceCentreDist,
-        right[1] * (digitCentreX + box.x * unitScale) + up[1] * (box.y * unitScale) + forward[1] * surfaceCentreDist,
-        right[2] * (digitCentreX + box.x * unitScale) + up[2] * (box.y * unitScale) + forward[2] * surfaceCentreDist
-      ];
+      for (const segmentKey of segments) {
+        const box = SEVEN_SEGMENT_BOXES[segmentKey];
+        if (!box) continue;
 
-      triangles.push(
-        ...buildOrientedBoxTriangles(
-          centre,
-          right,
-          up,
-          forward,
-          ((box.width + SEGMENT_OVERLAP_UNITS) * unitScale) / 2,
-          ((box.height + SEGMENT_OVERLAP_UNITS) * unitScale) / 2,
-          halfDepth
-        )
-      );
+        const centre = [
+          right[0] * (digitCentreX + box.x * unitScale) + up[0] * (digitCentreY + box.y * unitScale) + forward[0] * surfaceCentreDist,
+          right[1] * (digitCentreX + box.x * unitScale) + up[1] * (digitCentreY + box.y * unitScale) + forward[1] * surfaceCentreDist,
+          right[2] * (digitCentreX + box.x * unitScale) + up[2] * (digitCentreY + box.y * unitScale) + forward[2] * surfaceCentreDist
+        ];
+
+        triangles.push(
+          ...buildOrientedBoxTriangles(
+            centre,
+            right,
+            up,
+            forward,
+            ((box.width + SEGMENT_OVERLAP_UNITS) * unitScale) / 2,
+            ((box.height + SEGMENT_OVERLAP_UNITS) * unitScale) / 2,
+            halfDepth
+          )
+        );
+      }
     }
   }
 
@@ -437,10 +510,12 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     }
 
     const engravingDir = findFeatureDirection(tubeDirs);
+    const facet = buildFacetTrimCSG(engravingDir, radius);
+    csgResult = csgResult.subtract(facet.csg);
     const systemRank = rankMap.get(systemName);
     if (Number.isFinite(systemRank)) {
       csgResult = csgResult.subtract(
-        buildNumberEngravingCSG(String(systemRank), engravingDir, radius)
+        buildNumberEngravingCSG(String(systemRank), engravingDir, facet)
       );
     }
 
