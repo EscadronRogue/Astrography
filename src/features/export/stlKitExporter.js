@@ -365,19 +365,19 @@ function findTagDirection(connectionDirs) {
 
 /**
  * Build an orthonormal basis {right, up, forward} from a forward direction.
- * `forward` = the tag direction (pointing away from sphere).
- * `right` is oriented so that text reads correctly when viewed from outside.
- * `up` will be as close to world-Y as possible.
+ * `forward` = the tag direction (pointing away from sphere, toward viewer).
+ * The basis is derived from the VIEWER's perspective (looking along -forward)
+ * so that text laid out in +right / +up reads naturally left-to-right,
+ * top-to-bottom.
  */
 function buildTagBasis(forward) {
-  let ref = [0, 1, 0];
-  if (Math.abs(vecDot(forward, ref)) > 0.9) ref = [1, 0, 0];
+  let worldUp = [0, 1, 0];
+  if (Math.abs(vecDot(forward, worldUp)) > 0.9) worldUp = [1, 0, 0];
 
-  // Compute right so text reads correctly from the viewer's perspective
-  // (viewer looks along -forward, so their "right" is our -cross(forward, ref))
-  const rawRight = vecCross(forward, ref);
-  const right = vecNormalise(-rawRight[0], -rawRight[1], -rawRight[2]);
-  const up    = vecNormalise(...vecCross(right, forward));
+  // Viewer looks along -forward; derive screen-space right & up
+  const lookDir = [-forward[0], -forward[1], -forward[2]];
+  const right = vecNormalise(...vecCross(lookDir, worldUp));
+  const up    = vecNormalise(...vecCross(right, lookDir));
   return { right, up, forward };
 }
 
