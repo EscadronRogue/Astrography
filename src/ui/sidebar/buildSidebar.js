@@ -161,13 +161,44 @@ function initSliderSync() {
   }
 
   bindEnableGroup('enable-connections', [
-    'connection-slider', 'connection-number',
     'connection-opacity-slider', 'connection-opacity-number',
     'connection-width-slider', 'connection-width-number',
     'connection-fade-slider', 'connection-fade-number',
     'connection-label-size-slider', 'connection-label-size-number'
   ]);
   syncSliderPair('connection-slider', 'connection-number');
+  syncSliderPair('connection-k-slider', 'connection-k-number');
+
+  // Connection mode: mutual exclusivity of distance vs k-nearest sliders.
+  // When connections are enabled, only the active mode's controls are enabled.
+  function syncConnectionModeControls() {
+    const enabled = document.getElementById('enable-connections')?.checked ?? false;
+    const modeRadios = document.querySelectorAll('input[name="connection-mode"]');
+    const isKNearest = document.querySelector('input[name="connection-mode"][value="k-nearest"]')?.checked ?? false;
+
+    // Enable/disable radios themselves
+    modeRadios.forEach(r => { r.disabled = !enabled; });
+
+    // Distance controls: enabled only in distance mode
+    const distEls = ['connection-slider', 'connection-number'];
+    distEls.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !enabled || isKNearest;
+    });
+
+    // K-nearest controls: enabled only in k-nearest mode
+    const kEls = ['connection-k-slider', 'connection-k-number'];
+    kEls.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !enabled || !isKNearest;
+    });
+  }
+
+  document.getElementById('enable-connections')?.addEventListener('change', syncConnectionModeControls);
+  document.querySelectorAll('input[name="connection-mode"]').forEach(r => {
+    r.addEventListener('change', syncConnectionModeControls);
+  });
+  syncConnectionModeControls();
   syncSliderPair('connection-opacity-slider', 'connection-opacity-number', 'connection-opacity-value');
   syncSliderPair('connection-width-slider', 'connection-width-number');
   syncSliderPair('connection-fade-slider', 'connection-fade-number');

@@ -403,10 +403,8 @@ function computeCompactLayout(name) {
   // Total length if everything were on one line
   const totalLenPx = text.length * charPx - FONT_CHAR_GAP;
 
-  // If short enough at max pixel size, single line is fine
-  const maxAvailPx = Math.floor((TAG_MAX_WIDTH - 2 * TAG_PLATE_PAD) / TAG_PIXEL_MAX);
-
-  if (totalLenPx <= maxAvailPx) {
+  // Only single words (no wrapping possible) get the single-line fast path
+  if (words.length <= 1) {
     return {
       lines: [text],
       widthPx: totalLenPx,
@@ -415,19 +413,16 @@ function computeCompactLayout(name) {
     };
   }
 
-  // Target a roughly square label: find target line width (in pixels) that
-  // makes  (widthPx * pixelSize) ≈ (heightPx * pixelSize)  →  widthPx ≈ heightPx
-  // With N lines: heightPx ≈ N * linePx, widthPx ≈ totalLenPx / N
-  // Square when  totalLenPx / N ≈ N * linePx  →  N ≈ sqrt(totalLenPx / linePx)
+  // Target a roughly square label: find the line count that makes
+  // widthPx ≈ heightPx.  Always consider 1-line through idealLines+2
+  // and let the aspect-ratio comparison pick the winner — even short
+  // names like "ROSS 154" will wrap when that produces a squarer plate.
   const idealLines = Math.max(1, Math.round(Math.sqrt(totalLenPx / linePx)));
 
-  // Try wrapping at a few target widths around the ideal, pick best
   let bestLayout = null;
   let bestRatio  = Infinity;
 
-  for (let targetLines = Math.max(1, idealLines - 1);
-       targetLines <= idealLines + 2;
-       targetLines++) {
+  for (let targetLines = 1; targetLines <= idealLines + 2; targetLines++) {
     const targetWidthPx = Math.ceil(totalLenPx / targetLines);
     const lines = wrapWords(words, targetWidthPx, charPx);
 

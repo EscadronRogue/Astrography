@@ -112,9 +112,20 @@
               <label for="enable-connections">Enable Connections</label>
             </div>
             <div class="filter-item">
-              <label for="connection-slider">Max Distance (LY):</label>
+              <label>
+                <input type="radio" name="connection-mode" value="distance" checked disabled />
+                Max Distance (LY)
+              </label>
               <input type="range" id="connection-slider" name="connections" min="1" max="50" value="7" disabled />
               <input type="number" id="connection-number" name="connections" min="1" max="50" value="7" disabled />
+            </div>
+            <div class="filter-item">
+              <label>
+                <input type="radio" name="connection-mode" value="k-nearest" disabled />
+                K Nearest Systems
+              </label>
+              <input type="range" id="connection-k-slider" name="connection-k-nearest" min="1" max="20" value="3" disabled />
+              <input type="number" id="connection-k-number" name="connection-k-nearest" min="1" max="20" value="3" disabled />
             </div>
           </div>
         </fieldset>

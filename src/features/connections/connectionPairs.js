@@ -114,6 +114,86 @@ export function computeConnectionPairs(stars, maxDistance) {
   return pairs;
 }
 
+// ---------------------------------------------------------------------------
+// K-nearest systems connection mode
+// ---------------------------------------------------------------------------
+
+/**
+ * Return the system name for a star (used for deduplication to one star per system).
+ */
+function getSystemName(star) {
+  return star.Common_name_of_the_star_system
+      || star.Common_name_of_the_star
+      || star.starId
+      || 'Unknown';
+}
+
+/**
+ * Compute connection pairs where each system is connected to its K closest
+ * neighbouring systems.  Only the main star per system is used as the
+ * representative, and the resulting pairs are deduplicated.
+ *
+ * @param {Array}  stars – Array of star records (may contain multiple stars per system).
+ * @param {number} k     – Number of nearest systems each star should connect to.
+ * @returns {Array}  – Same pair format as computeConnectionPairs.
+ */
+export function computeKNearestPairs(stars, k) {
+  if (!Array.isArray(stars) || stars.length < 2 || !(k > 0)) return [];
+
+  // Collapse to one representative star per system (highest class, then brightest)
+  const systemMap = new Map();
+  for (const star of stars) {
+    const sys = getSystemName(star);
+    const pos = getPosition(star);
+    if (!pos) continue;
+    const existing = systemMap.get(sys);
+    if (!existing) {
+      systemMap.set(sys, { star, position: pos });
+    }
+    // Keep the first seen per system (filtered stars are already prioritised)
+  }
+
+  const systems = Array.from(systemMap.values());
+  if (systems.length < 2) return [];
+
+  // For each system, find its K nearest neighbours (brute-force — fine for
+  // typical star counts in the hundreds)
+  const pairSet = new Map(); // pairKey → pair object
+
+  for (let i = 0; i < systems.length; i++) {
+    const self = systems[i];
+
+    // Compute distances to all other systems
+    const neighbours = [];
+    for (let j = 0; j < systems.length; j++) {
+      if (j === i) continue;
+      const distance = self.position.distanceTo(systems[j].position);
+      neighbours.push({ idx: j, distance });
+    }
+
+    // Sort by distance, take closest K
+    neighbours.sort((a, b) => a.distance - b.distance);
+    const closest = neighbours.slice(0, k);
+
+    for (const nb of closest) {
+      const other = systems[nb.idx];
+      const pairKey = createPairKey(self.star, other.star);
+      if (!pairSet.has(pairKey)) {
+        pairSet.set(pairKey, {
+          starA: self.star,
+          starB: other.star,
+          distance: nb.distance,
+          pairKey
+        });
+      }
+    }
+  }
+
+  const pairs = Array.from(pairSet.values());
+  pairs.sort((left, right) => left.pairKey.localeCompare(right.pairKey));
+  return pairs;
+}
+
 export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates', opacity = 0.5) {
   const positions = [];
   const colors = [];

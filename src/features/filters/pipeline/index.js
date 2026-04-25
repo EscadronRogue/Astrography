@@ -4,7 +4,7 @@ import { applySizeFilter } from '../logic/sizeFilter.js';
 import { applyColorFilter } from '../logic/colorFilter.js';
 import { applyOpacityFilter } from '../logic/opacityFilter.js';
 import { applyStarsShownFilter } from '../logic/starsShownFilter.js';
-import { computeConnectionPairs } from '../../connections/connectionPairs.js';
+import { computeConnectionPairs, computeKNearestPairs } from '../../connections/connectionPairs.js';
 import { setConnectionLineParams, getConnectionLineParams } from '../../connections/connectionSettings.js';
 import { applyStellarClassLogic } from '../logic/stellarClassFilter.js';
 import { applyDistanceFilter } from '../logic/distanceFilter.js';
@@ -56,8 +56,13 @@ export function applyFilters(allStars, context = {}) {
   let mollweideConnections = [];
 
   if (filters.enableConnections) {
-    connections = computeConnectionPairs(filteredStars, filters.connections);
-    globeConnections = computeConnectionPairs(nonViewpointStars, filters.connections);
+    if (filters.connectionMode === 'k-nearest') {
+      connections = computeKNearestPairs(filteredStars, filters.connectionKNearest);
+      globeConnections = computeKNearestPairs(nonViewpointStars, filters.connectionKNearest);
+    } else {
+      connections = computeConnectionPairs(filteredStars, filters.connections);
+      globeConnections = computeConnectionPairs(nonViewpointStars, filters.connections);
+    }
     mollweideConnections = globeConnections;
   }
 

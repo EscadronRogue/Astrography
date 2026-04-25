@@ -41,6 +41,8 @@ export function readFilterState(filterForm) {
     opacity: formData.get('opacity'),
     starsShown: formData.get('stars-shown'),
     connections: readNumericValue(formData, 'connections', 7),
+    connectionMode: formData.get('connection-mode') || 'distance',
+    connectionKNearest: readNumericValue(formData, 'connection-k-nearest', 3, Number.parseInt),
     showConstellationBoundaries: readCheckboxValue(formData, 'show-constellation-boundaries'),
     showConstellationNames: readCheckboxValue(formData, 'show-constellation-names'),
     showConstellationOverlay: readCheckboxValue(formData, 'show-constellation-overlay'),
