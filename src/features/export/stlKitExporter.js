@@ -3,11 +3,10 @@
  *
  * Produces a ZIP file containing:
  * - stars/  → one STL per star system (sphere with connection holes + engraved rank)
- * - tubes/  → one STL per connection span (flattened-top tube with engraved rank pair)
- * - splitters/  → one STL per merged-hole Y splitter
+ * - tubes/  → one STL per connection (full-length tube with flat-top label)
  *
- * Assembly: regular tubes still slide directly into sphere holes.
- * Where hole bores would overlap, a printed Y splitter plugs into one merged hole.
+ * Assembly: tubes slide directly into the matching holes in star spheres.
+ * No separate joints or connectors.
  *
  * Physical scale:
  *   1 LY  = 5 mm
@@ -47,21 +46,10 @@ const TUBE_INSERTION_DEPTH = 4; // mm into sphere
 const HOLE_SEGMENTS = 24;
 const MIN_TUBE_LENGTH = 2; // skip connections shorter than this (mm)
 
-// Hole clustering / Y splitters
-const HOLE_CLUSTER_MARGIN = 0.35;
-const SPLITTER_BRANCH_RADIUS = HOLE_RADIUS + 0.8;
-const SPLITTER_HUB_RADIUS = SPLITTER_BRANCH_RADIUS + 0.85;
-const SPLITTER_SOCKET_CLEARANCE = 2 * HOLE_RADIUS + 0.35;
-const SPLITTER_SOCKET_OFFSET_MIN = 3;
-const SPLITTER_SOCKET_OFFSET_MAX = 9;
-const SPLITTER_JUNCTION_OFFSET_MIN = 1.8;
-const SPLITTER_JUNCTION_OFFSET_FACTOR = 0.55;
-const SPLITTER_SPHERE_SEGMENTS = 18;
-
 // Flat-top label on tubes
-const TUBE_FACET_TARGET_WIDTH = KIT_TUBE_RADIUS * 1.9;
-const TUBE_FACET_END_MARGIN = 1.2;
-const TUBE_FACET_MAX_LENGTH = 26;
+const LABEL_PAD_WIDTH = 7;       // mm across tube
+const LABEL_PAD_THICKNESS = 1.0; // mm above tube surface
+const LABEL_PAD_MARGIN = 2;      // mm padding beyond text on each side along tube axis
 const LABEL_ENGRAVE_DEPTH = 0.5;
 const LABEL_ENGRAVE_BLEED = 0.25;
 const LABEL_TEXT_WIDTH_FACTOR = 0.85;
@@ -197,30 +185,6 @@ function vecCross(a, b) {
   ];
 }
 
-function vecAdd(a, b) {
-  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-}
-
-function vecSub(a, b) {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
-
-function vecScale(v, scalar) {
-  return [v[0] * scalar, v[1] * scalar, v[2] * scalar];
-}
-
-function vecLength(v) {
-  return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-}
-
-function vecDistance(a, b) {
-  return vecLength(vecSub(a, b));
-}
-
-function vecProjectOnPlane(v, normal) {
-  return vecSub(v, vecScale(normal, vecDot(v, normal)));
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Geometry primitives
 // ═══════════════════════════════════════════════════════════════════════════
@@ -270,82 +234,6 @@ function buildFeatureBasis(forward) {
   const up = vecNormalise(...vecCross(right, lookDir));
 
   return { right, up, forward };
-}
-
-function getDirectionChordDistance(directionA, directionB, radius) {
-  if (radius <= 0) return 0;
-  return radius * vecLength(vecSub(directionA, directionB));
-}
-
-function doHoleDirectionsOverlap(directionA, directionB, sphereRadius) {
-  const mergeDistance = 2 * HOLE_RADIUS + HOLE_CLUSTER_MARGIN;
-  const surfaceDistance = getDirectionChordDistance(directionA, directionB, sphereRadius);
-  const innerDistance = getDirectionChordDistance(
-    directionA,
-    directionB,
-    Math.max(0, sphereRadius - TUBE_INSERTION_DEPTH)
-  );
-
-  return surfaceDistance < mergeDistance || innerDistance < mergeDistance;
-}
-
-function mergeEndpointCluster(endpoints) {
-  let sum = [0, 0, 0];
-  for (const endpoint of endpoints) {
-    sum = vecAdd(sum, endpoint.direction);
-  }
-  return {
-    endpoints,
-    direction: vecNormalise(sum[0], sum[1], sum[2])
-  };
-}
-
-function clusterConnectionEndpoints(endpoints, sphereRadius) {
-  const clusters = endpoints.map(endpoint => mergeEndpointCluster([endpoint]));
-
-  let merged = true;
-  while (merged) {
-    merged = false;
-
-    for (let i = 0; i < clusters.length; i += 1) {
-      for (let j = i + 1; j < clusters.length; j += 1) {
-        const clusterA = clusters[i];
-        const clusterB = clusters[j];
-        const memberOverlap = clusterA.endpoints.some(endpointA =>
-          clusterB.endpoints.some(endpointB =>
-            doHoleDirectionsOverlap(endpointA.direction, endpointB.direction, sphereRadius)
-          )
-        );
-        const mergedCentreOverlap = doHoleDirectionsOverlap(clusterA.direction, clusterB.direction, sphereRadius);
-
-        if (!memberOverlap && !mergedCentreOverlap) continue;
-
-        clusters.splice(j, 1);
-        clusters[i] = mergeEndpointCluster(clusterA.endpoints.concat(clusterB.endpoints));
-        merged = true;
-        break;
-      }
-
-      if (merged) break;
-    }
-  }
-
-  return clusters;
-}
-
-function computeSplitterSocketOffset(port, sphereRadius) {
-  let socketOffset = SPLITTER_SOCKET_OFFSET_MIN;
-
-  for (let i = 0; i < port.endpoints.length; i += 1) {
-    for (let j = i + 1; j < port.endpoints.length; j += 1) {
-      const chordFactor = vecLength(vecSub(port.endpoints[i].direction, port.endpoints[j].direction));
-      if (chordFactor < 1e-6) continue;
-      const requiredOffset = SPLITTER_SOCKET_CLEARANCE / chordFactor - sphereRadius;
-      if (requiredOffset > socketOffset) socketOffset = requiredOffset;
-    }
-  }
-
-  return Math.min(SPLITTER_SOCKET_OFFSET_MAX, Math.max(SPLITTER_SOCKET_OFFSET_MIN, socketOffset));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -592,11 +480,11 @@ function buildStarNumberCSG(numberText, dir, facet) {
 // Hole subtraction (cylindrical bore for tube insertion)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function buildHoleCSG(direction, openingDistance) {
+function buildHoleCSG(direction, sphereRadius) {
   const [nx, ny, nz] = direction;
-  // Cylinder extends from slightly outside the opening to TUBE_INSERTION_DEPTH inside
-  const outerDist = openingDistance + 1;
-  const innerDist = openingDistance - TUBE_INSERTION_DEPTH;
+  // Cylinder extends from slightly outside the sphere to TUBE_INSERTION_DEPTH inside
+  const outerDist = sphereRadius + 1;
+  const innerDist = sphereRadius - TUBE_INSERTION_DEPTH;
   const start = [nx * outerDist, ny * outerDist, nz * outerDist];
   const end = [nx * innerDist, ny * innerDist, nz * innerDist];
 
@@ -610,173 +498,80 @@ function buildHoleCSG(direction, openingDistance) {
   );
 }
 
-function getEndpointReceptacle(endpoint, sphereRadius) {
-  const usesSplitter = endpoint.port && endpoint.port.endpoints.length > 1;
-  const openingDistance = usesSplitter ? sphereRadius + endpoint.port.socketOffset : sphereRadius;
-
-  return {
-    axis: endpoint.direction,
-    openingCenter: vecScale(endpoint.direction, openingDistance)
-  };
-}
-
-function buildPortSplitterCSG(port, sphereRadius) {
-  const trunkStart = vecScale(port.direction, Math.max(0.2, sphereRadius - TUBE_INSERTION_DEPTH));
-  const junctionPoint = vecScale(port.direction, sphereRadius + port.junctionOffset);
-
-  let csg = CSG.fromTriangles(
-    buildTubeTriangles(
-      trunkStart[0], trunkStart[1], trunkStart[2],
-      junctionPoint[0], junctionPoint[1], junctionPoint[2],
-      KIT_TUBE_RADIUS,
-      KIT_TUBE_SEGMENTS
-    )
-  );
-
-  csg = csg.union(CSG.fromTriangles(
-    buildSphereTriangles(
-      junctionPoint[0], junctionPoint[1], junctionPoint[2],
-      SPLITTER_HUB_RADIUS,
-      SPLITTER_SPHERE_SEGMENTS,
-      SPLITTER_SPHERE_SEGMENTS
-    )
-  ));
-
-  for (const endpoint of port.endpoints) {
-    const receptacle = getEndpointReceptacle(endpoint, sphereRadius);
-
-    csg = csg.union(CSG.fromTriangles(
-      buildTubeTriangles(
-        junctionPoint[0], junctionPoint[1], junctionPoint[2],
-        receptacle.openingCenter[0], receptacle.openingCenter[1], receptacle.openingCenter[2],
-        SPLITTER_BRANCH_RADIUS,
-        KIT_TUBE_SEGMENTS
-      )
-    ));
-
-    csg = csg.union(CSG.fromTriangles(
-      buildSphereTriangles(
-        receptacle.openingCenter[0], receptacle.openingCenter[1], receptacle.openingCenter[2],
-        SPLITTER_BRANCH_RADIUS,
-        SPLITTER_SPHERE_SEGMENTS,
-        SPLITTER_SPHERE_SEGMENTS
-      )
-    ));
-  }
-
-  for (const endpoint of port.endpoints) {
-    csg = csg.subtract(buildHoleCSG(endpoint.direction, sphereRadius + port.socketOffset));
-  }
-
-  return csg;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-// Tube flat-top label (integrated milled facet + engraved text)
+// Tube flat-top label (rectangular pad + engraved text)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function getTubeFacetWidth() {
-  return Math.min(TUBE_FACET_TARGET_WIDTH, KIT_TUBE_RADIUS * 2 - 0.12);
-}
+/**
+ * Compute label layout for a tube.  Returns null if the tube is too short
+ * for any label.
+ */
+function computeLabelLayout(text, tubeLength) {
+  const chars = text.split('');
+  const textWidthUnits = chars.length * DIGIT_WIDTH_UNITS
+    + Math.max(0, chars.length - 1) * DIGIT_SPACING_UNITS;
 
-function getTubeFacetPlaneOffset(facetWidth = getTubeFacetWidth()) {
-  const halfWidth = facetWidth / 2;
-  return Math.sqrt(Math.max(0, KIT_TUBE_RADIUS * KIT_TUBE_RADIUS - halfWidth * halfWidth));
-}
+  const maxPadLength = Math.min(tubeLength * 0.7, 24);
+  if (maxPadLength < 4) return null; // too short for any label
 
-function getTextBlockUnitScale(lines, maxWidth, maxHeight) {
-  const maxWidthUnits = Math.max(
-    ...lines.map(line => line.length * DIGIT_WIDTH_UNITS + Math.max(0, line.length - 1) * DIGIT_SPACING_UNITS),
-    1
+  const availableWidth = (maxPadLength - 2 * LABEL_PAD_MARGIN) * LABEL_TEXT_WIDTH_FACTOR;
+  const availableHeight = LABEL_PAD_WIDTH * LABEL_TEXT_HEIGHT_FACTOR;
+
+  const unitScale = Math.min(
+    availableWidth / Math.max(textWidthUnits, 1),
+    availableHeight / Math.max(DIGIT_HEIGHT_UNITS, 1)
   );
-  const totalHeightUnits = lines.length * DIGIT_HEIGHT_UNITS
-    + Math.max(0, lines.length - 1) * DIGIT_LINE_SPACING_UNITS;
 
-  return Math.min(
-    maxWidth / maxWidthUnits,
-    maxHeight / Math.max(totalHeightUnits, 1)
-  );
+  const textWidthMM = textWidthUnits * unitScale;
+  const padLength = Math.max(textWidthMM / LABEL_TEXT_WIDTH_FACTOR + 2 * LABEL_PAD_MARGIN, 6);
+
+  return { unitScale, textWidthMM, padLength };
 }
 
-function getTubeLabelLineCandidates(text) {
-  const seen = new Set();
-  const candidates = [];
+/**
+ * Build label pad CSG in canonical tube orientation (tube along X, pad on +Z).
+ */
+function buildLabelPadCSG(padLength) {
+  const padHalfLen = padLength / 2;
+  const padHalfWidth = LABEL_PAD_WIDTH / 2;
+  const padTop = KIT_TUBE_RADIUS + LABEL_PAD_THICKNESS;
+  const padCentreZ = padTop / 2; // bottom at Z=0, top at padTop
+  const padHalfZ = padTop / 2;
 
-  for (let parts = 1; parts <= Math.min(4, Math.max(1, text.length)); parts += 1) {
-    const lines = parts === 1 ? [text] : splitBalanced(text, parts);
-    const key = lines.join('|');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    candidates.push(lines);
-  }
-
-  return candidates;
-}
-
-function computeTubeLabelLayout(text, tubeLength) {
-  const facetLength = Math.min(TUBE_FACET_MAX_LENGTH, tubeLength - 2 * TUBE_FACET_END_MARGIN);
-  if (facetLength < 4) return null;
-
-  const facetWidth = getTubeFacetWidth();
-  const maxWidth = facetLength * LABEL_TEXT_WIDTH_FACTOR;
-  const maxHeight = facetWidth * LABEL_TEXT_HEIGHT_FACTOR;
-
-  let bestLines = null;
-  let bestScale = -Infinity;
-
-  for (const lines of getTubeLabelLineCandidates(text)) {
-    const unitScale = getTextBlockUnitScale(lines, maxWidth, maxHeight);
-    if (unitScale > bestScale) {
-      bestScale = unitScale;
-      bestLines = lines;
-    }
-  }
-
-  return {
-    facetLength,
-    facetWidth,
-    facetPlaneOffset: getTubeFacetPlaneOffset(facetWidth),
-    lines: bestLines
-  };
-}
-
-function buildTubeFacetTrimCSG(facetLength, facetWidth) {
-  const planeOffset = getTubeFacetPlaneOffset(facetWidth);
-  const halfDepth = KIT_TUBE_RADIUS * 2;
-  const halfAcross = KIT_TUBE_RADIUS * 2;
-
-  return {
-    facetPlaneOffset: planeOffset,
-    csg: CSG.fromTriangles(
-      buildOrientedBoxTriangles(
-        [0, 0, planeOffset + halfDepth],
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-        facetLength / 2,
-        halfAcross,
-        halfDepth
-      )
+  return CSG.fromTriangles(
+    buildOrientedBoxTriangles(
+      [0, 0, padCentreZ],
+      [1, 0, 0], // along tube
+      [0, 1, 0], // across tube
+      [0, 0, 1], // up
+      padHalfLen,
+      padHalfWidth,
+      padHalfZ
     )
-  };
+  );
 }
 
+/**
+ * Build engraved label text CSG in canonical tube orientation.
+ * Text runs along X, character height along Y, engrave depth along -Z.
+ */
 function buildLabelTextCSG(text, layout) {
-  const maxWidth = layout.facetLength * LABEL_TEXT_WIDTH_FACTOR;
-  const maxHeight = layout.facetWidth * LABEL_TEXT_HEIGHT_FACTOR;
+  const surfaceZ = KIT_TUBE_RADIUS + LABEL_PAD_THICKNESS;
+  const maxWidth = layout.padLength * LABEL_TEXT_WIDTH_FACTOR;
+  const maxHeight = LABEL_PAD_WIDTH * LABEL_TEXT_HEIGHT_FACTOR;
 
   return buildTextCSG(
     text,
     [1, 0, 0], // right
     [0, 1, 0], // up
     [0, 0, 1], // forward
-    layout.facetPlaneOffset,
+    surfaceZ,
     maxWidth,
     maxHeight,
     LABEL_STROKE_WIDTH_UNITS,
     LABEL_ENGRAVE_DEPTH,
-    LABEL_ENGRAVE_BLEED,
-    layout.lines
+    LABEL_ENGRAVE_BLEED
+    // single-line by default
   );
 }
 
@@ -790,39 +585,6 @@ function rotatePointIntoBasis(point, basis) {
     vecDot(point, basis.up),
     vecDot(point, basis.forward)
   ];
-}
-
-function rotatePointIntoAxes(point, axes) {
-  return [
-    vecDot(point, axes.x),
-    vecDot(point, axes.y),
-    vecDot(point, axes.z)
-  ];
-}
-
-function buildPrimaryAxes(primary, hintVectors = []) {
-  let yAxis = null;
-
-  for (const hint of hintVectors) {
-    const projected = vecProjectOnPlane(hint, primary);
-    if (vecLength(projected) > 1e-5) {
-      yAxis = vecNormalise(projected[0], projected[1], projected[2]);
-      break;
-    }
-  }
-
-  if (!yAxis) {
-    const fallback = Math.abs(primary[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
-    const projectedFallback = vecProjectOnPlane(fallback, primary);
-    yAxis = vecNormalise(projectedFallback[0], projectedFallback[1], projectedFallback[2]);
-  }
-
-  let zAxis = vecCross(primary, yAxis);
-  zAxis = vecNormalise(zAxis[0], zAxis[1], zAxis[2]);
-  yAxis = vecCross(zAxis, primary);
-  yAxis = vecNormalise(yAxis[0], yAxis[1], yAxis[2]);
-
-  return { x: primary, y: yAxis, z: zAxis };
 }
 
 function placeTrianglesOnBuildPlate(triangles) {
@@ -849,17 +611,6 @@ function orientStarForPrint(triangles, faceDirection) {
     a: rotatePointIntoBasis(tri.a, basis),
     b: rotatePointIntoBasis(tri.b, basis),
     c: rotatePointIntoBasis(tri.c, basis)
-  }));
-  return placeTrianglesOnBuildPlate(rotated);
-}
-
-function orientSplitterForPrint(triangles, port) {
-  const hintVectors = port.endpoints.map(endpoint => vecProjectOnPlane(endpoint.direction, port.direction));
-  const axes = buildPrimaryAxes(port.direction, hintVectors);
-  const rotated = triangles.map(tri => ({
-    a: rotatePointIntoAxes(tri.a, axes),
-    b: rotatePointIntoAxes(tri.b, axes),
-    c: rotatePointIntoAxes(tri.c, axes)
   }));
   return placeTrianglesOnBuildPlate(rotated);
 }
@@ -893,8 +644,7 @@ function buildSystemRankMap(sourceStars) {
  *
  * The ZIP contains:
  *   stars/   – one STL per system (sphere with holes + engraved rank)
- *   tubes/   – one STL per connection span (flattened-top tube with engraved rank pair)
- *   splitters/  – one STL per merged-hole Y splitter
+ *   tubes/   – one STL per connection (full tube with flat-top label)
  *
  * @param {Array}  stars       Currently filtered/displayed stars.
  * @param {Array}  connections Current connection pairs.
@@ -934,8 +684,8 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   }
 
   // ── Build all connection pairs ───────────────────────────────────────
-  const allConnections = [];
-  const systemEndpointMap = new Map();
+  const allConnections = [];   // { sysA, sysB, distance, dx, dy, dz }
+  const systemConnMap = new Map(); // system → [{ otherSystem, direction }]
 
   if (Array.isArray(connections)) {
     const seenPairs = new Set();
@@ -960,89 +710,39 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
       const dz = infoB.posMM.z - infoA.posMM.z;
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
+      // Check if a tube can physically fit between the two spheres
+      const tubeLength = distance - infoA.radius - infoB.radius + 2 * TUBE_INSERTION_DEPTH;
+      if (tubeLength < MIN_TUBE_LENGTH) continue;
+
+      allConnections.push({ sysA, sysB, distance, tubeLength, dx, dy, dz });
+
+      // Record directions for each star's holes
       const dirAtoB = vecNormalise(dx, dy, dz);
       const dirBtoA = [-dirAtoB[0], -dirAtoB[1], -dirAtoB[2]];
-      const connection = {
-        id: pairKey,
-        sysA,
-        sysB,
-        distance
-      };
 
-      connection.endpointA = {
-        connection,
-        systemName: sysA,
-        otherSystem: sysB,
-        direction: dirAtoB,
-        port: null
-      };
-      connection.endpointB = {
-        connection,
-        systemName: sysB,
-        otherSystem: sysA,
-        direction: dirBtoA,
-        port: null
-      };
-
-      allConnections.push(connection);
-
-      if (!systemEndpointMap.has(sysA)) systemEndpointMap.set(sysA, []);
-      if (!systemEndpointMap.has(sysB)) systemEndpointMap.set(sysB, []);
-      systemEndpointMap.get(sysA).push(connection.endpointA);
-      systemEndpointMap.get(sysB).push(connection.endpointB);
+      if (!systemConnMap.has(sysA)) systemConnMap.set(sysA, []);
+      if (!systemConnMap.has(sysB)) systemConnMap.set(sysB, []);
+      systemConnMap.get(sysA).push(dirAtoB);
+      systemConnMap.get(sysB).push(dirBtoA);
     }
   }
 
   // ── Build ZIP ────────────────────────────────────────────────────────
-  const systemPortMap = new Map();
-  for (const [systemName, info] of systemInfo) {
-    const endpoints = systemEndpointMap.get(systemName) || [];
-    const ports = clusterConnectionEndpoints(endpoints, info.radius).map((cluster, index) => {
-      const usesSplitter = cluster.endpoints.length > 1;
-      const port = {
-        id: `${systemName}:${index}`,
-        systemName,
-        direction: cluster.direction,
-        endpoints: cluster.endpoints,
-        socketOffset: usesSplitter ? computeSplitterSocketOffset(cluster, info.radius) : 0,
-        junctionOffset: 0
-      };
-
-      if (usesSplitter) {
-        port.junctionOffset = Math.max(
-          SPLITTER_JUNCTION_OFFSET_MIN,
-          port.socketOffset * SPLITTER_JUNCTION_OFFSET_FACTOR
-        );
-      }
-
-      for (const endpoint of cluster.endpoints) {
-        endpoint.port = port;
-      }
-
-      return port;
-    });
-
-    systemPortMap.set(systemName, ports);
-  }
-
   const zip = new JSZip();
   const starsFolder = zip.folder('stars');
   const tubesFolder = zip.folder('tubes');
-  const splittersFolder = zip.folder('splitters');
 
-  const maxRank = Math.max(rankMap.size, systemInfo.size, 1);
+  const maxRank = rankMap.size;
   const padDigits = String(maxRank).length;
   const padRank = (r) => String(r).padStart(padDigits, '0');
 
   let starCount = 0;
   let tubeCount = 0;
-  let splitterCount = 0;
 
   // ── Stars ────────────────────────────────────────────────────────────
   for (const [systemName, info] of systemInfo) {
     const radius = info.radius;
-    const ports = systemPortMap.get(systemName) || [];
-    const holeDirs = ports.map(port => port.direction);
+    const holeDirs = systemConnMap.get(systemName) || [];
 
     // Find best direction for engraved rank number (away from holes)
     const engravingDir = findFeatureDirection(holeDirs);
@@ -1060,9 +760,9 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
       csg = csg.subtract(engravingCSG);
     }
 
-    // Subtract one hole per resolved port
-    for (const port of ports) {
-      csg = csg.subtract(buildHoleCSG(port.direction, radius));
+    // Subtract holes for each connection
+    for (const dir of holeDirs) {
+      csg = csg.subtract(buildHoleCSG(dir, radius));
     }
 
     // Orient for print (engraved face up) and place on build plate
@@ -1074,42 +774,10 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     starCount += 1;
   }
 
-  // ── Splitters ────────────────────────────────────────────────────────
-  for (const [systemName, info] of systemInfo) {
-    const ports = systemPortMap.get(systemName) || [];
-    const rankStr = Number.isFinite(info.rank) ? padRank(info.rank) : '00';
-
-    for (const port of ports) {
-      if (port.endpoints.length < 2) continue;
-
-      const splitterCSG = buildPortSplitterCSG(port, info.radius);
-      const triangles = orientSplitterForPrint(splitterCSG.toTriangles(), port);
-      const stlBuffer = trianglesToBinarySTL(triangles);
-
-      const branchRanks = port.endpoints
-        .map(endpoint => rankMap.get(endpoint.otherSystem))
-        .filter(rank => Number.isFinite(rank))
-        .sort((a, b) => a - b)
-        .map(rank => padRank(rank));
-      const branchNameFallback = port.endpoints
-        .map(endpoint => sanitizeFilename(endpoint.otherSystem))
-        .sort()
-        .join('_');
-      const targetSuffix = branchRanks.length ? branchRanks.join('-') : (branchNameFallback || 'shared');
-
-      splittersFolder.file(
-        `${rankStr}_${sanitizeFilename(systemName)}__to_${targetSuffix}.stl`,
-        stlBuffer
-      );
-      splitterCount += 1;
-    }
-  }
-
   // ── Tubes ────────────────────────────────────────────────────────────
   for (const conn of allConnections) {
     const infoA = systemInfo.get(conn.sysA);
     const infoB = systemInfo.get(conn.sysB);
-    if (!infoA || !infoB) continue;
     const rankA = infoA.rank;
     const rankB = infoB.rank;
 
@@ -1121,12 +789,7 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     const labelRankB = Math.max(rankA, rankB);
     const labelText = `${labelRankA}-${labelRankB}`;
 
-    const receptacleA = getEndpointReceptacle(conn.endpointA, infoA.radius);
-    const receptacleB = getEndpointReceptacle(conn.endpointB, infoB.radius);
-    const start = vecSub(receptacleA.openingCenter, vecScale(receptacleA.axis, TUBE_INSERTION_DEPTH));
-    const end = vecSub(receptacleB.openingCenter, vecScale(receptacleB.axis, TUBE_INSERTION_DEPTH));
-    const tubeLength = vecDistance(start, end);
-    if (tubeLength < MIN_TUBE_LENGTH) continue;
+    const tubeLength = conn.tubeLength;
     const halfLen = tubeLength / 2;
 
     // Build tube in canonical orientation: along X, centred at origin
@@ -1134,11 +797,12 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
       buildTubeTriangles(-halfLen, 0, 0, halfLen, 0, 0, KIT_TUBE_RADIUS, KIT_TUBE_SEGMENTS)
     );
 
-    // Cut an integrated facet into the tube, then engrave the label inside it
-    const layout = computeTubeLabelLayout(labelText, tubeLength);
+    // Add flat-top label pad and engraved text
+    const layout = computeLabelLayout(labelText, tubeLength);
     if (layout) {
-      const facet = buildTubeFacetTrimCSG(layout.facetLength, layout.facetWidth);
-      csg = csg.subtract(facet.csg);
+      const padCSG = buildLabelPadCSG(layout.padLength);
+      csg = csg.union(padCSG);
+
       const textCSG = buildLabelTextCSG(labelText, layout);
       csg = csg.subtract(textCSG);
     }
@@ -1163,7 +827,7 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   URL.revokeObjectURL(url);
 
   console.log(
-    `3D-print kit exported – ${starCount} stars, ${tubeCount} tubes, ${splitterCount} splitters ` +
+    `3D-print kit exported – ${starCount} stars, ${tubeCount} tubes ` +
     `(scale: 1 LY = ${KIT_MM_PER_LY} mm, star ⌀ ${STANDARD_DIAMETER_MM} mm, tube ⌀ ${KIT_TUBE_RADIUS * 2} mm).`
   );
 }
