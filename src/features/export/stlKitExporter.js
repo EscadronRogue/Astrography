@@ -44,32 +44,37 @@ const JOINT_BORE_OVERSHOOT = 0.4;
 // Engraved numbering
 // ---------------------------------------------------------------------------
 
-const ENGRAVE_DEPTH = 0.35;
-const ENGRAVE_OUTSIDE_BLEED = 0.25;
-const ENGRAVE_PIXEL_MAX = 0.34;
-const ENGRAVE_MAX_LINES = 3;
-const ENGRAVE_WIDTH_FACTOR = 1.6;
-const ENGRAVE_HEIGHT_FACTOR = 1.3;
+const ENGRAVE_DEPTH = 0.65;
+const ENGRAVE_OUTSIDE_BLEED = 0.35;
+const ENGRAVE_WIDTH_FACTOR = 2.25;
+const ENGRAVE_HEIGHT_FACTOR = 1.65;
+const DIGIT_WIDTH_UNITS = 6;
+const DIGIT_HEIGHT_UNITS = 10;
+const DIGIT_SPACING_UNITS = 1;
+const SEGMENT_OVERLAP_UNITS = 0.25;
 
-const FONT_CHAR_W = 5;
-const FONT_CHAR_H = 7;
-const FONT_CHAR_GAP = 1;
-const FONT_LINE_GAP = 2;
-
-/* eslint-disable no-multi-spaces */
-const DIGIT_FONT = {
-  '0': [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
-  '1': [0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E],
-  '2': [0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F],
-  '3': [0x1F, 0x02, 0x04, 0x02, 0x01, 0x11, 0x0E],
-  '4': [0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02],
-  '5': [0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E],
-  '6': [0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E],
-  '7': [0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
-  '8': [0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
-  '9': [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C]
+const SEVEN_SEGMENT_BOXES = {
+  a: { x: 0, y: 4, width: 4, height: 2 },
+  b: { x: 2, y: 2, width: 2, height: 4 },
+  c: { x: 2, y: -2, width: 2, height: 4 },
+  d: { x: 0, y: -4, width: 4, height: 2 },
+  e: { x: -2, y: -2, width: 2, height: 4 },
+  f: { x: -2, y: 2, width: 2, height: 4 },
+  g: { x: 0, y: 0, width: 4, height: 2 }
 };
-/* eslint-enable no-multi-spaces */
+
+const SEVEN_SEGMENT_DIGITS = {
+  '0': ['a', 'b', 'c', 'd', 'e', 'f'],
+  '1': ['b', 'c'],
+  '2': ['a', 'b', 'g', 'e', 'd'],
+  '3': ['a', 'b', 'g', 'c', 'd'],
+  '4': ['f', 'g', 'b', 'c'],
+  '5': ['a', 'f', 'g', 'c', 'd'],
+  '6': ['a', 'f', 'g', 'e', 'c', 'd'],
+  '7': ['a', 'b', 'c'],
+  '8': ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
+  '9': ['a', 'b', 'c', 'd', 'f', 'g']
+};
 
 const FEATURE_CANDIDATES = (() => {
   const dirs = [];
@@ -236,107 +241,91 @@ function findFeatureDirection(connectionDirs) {
   return bestDir;
 }
 
-function splitBalanced(text, parts) {
-  const lines = [];
-  let index = 0;
-
-  for (let part = 0; part < parts; part += 1) {
-    const remainingChars = text.length - index;
-    const remainingParts = parts - part;
-    const size = Math.ceil(remainingChars / remainingParts);
-    lines.push(text.slice(index, index + size));
-    index += size;
-  }
-
-  return lines.filter(Boolean);
-}
-
-function computeNumberLayout(text, sphereRadius) {
-  const charPx = FONT_CHAR_W + FONT_CHAR_GAP;
-  const linePx = FONT_CHAR_H + FONT_LINE_GAP;
-  const maxWidth = sphereRadius * ENGRAVE_WIDTH_FACTOR;
-  const maxHeight = sphereRadius * ENGRAVE_HEIGHT_FACTOR;
-
-  let best = null;
-  const maxLines = Math.min(ENGRAVE_MAX_LINES, text.length);
-
-  for (let lineCount = 1; lineCount <= maxLines; lineCount += 1) {
-    const lines = splitBalanced(text, lineCount);
-    const widthPx = Math.max(...lines.map(line => line.length * charPx - FONT_CHAR_GAP));
-    const heightPx = lines.length * linePx - FONT_LINE_GAP;
-    const pixelSize = Math.min(
-      ENGRAVE_PIXEL_MAX,
-      maxWidth / Math.max(widthPx, 1),
-      maxHeight / Math.max(heightPx, 1)
-    );
-
-    if (!best || pixelSize > best.pixelSize || (pixelSize === best.pixelSize && lines.length < best.lines.length)) {
-      best = { lines, widthPx, heightPx, pixelSize };
-    }
-  }
-
-  return best;
-}
-
 function buildNumberEngravingCSG(numberText, dir, sphereRadius) {
   if (!numberText) return CSG.fromPolygons([]);
 
-  const layout = computeNumberLayout(numberText, sphereRadius);
-  if (!layout) return CSG.fromPolygons([]);
-
-  const { lines, widthPx, heightPx, pixelSize } = layout;
   const { right, up, forward } = buildFeatureBasis(dir);
-  const charPx = FONT_CHAR_W + FONT_CHAR_GAP;
-  const linePx = FONT_CHAR_H + FONT_LINE_GAP;
+  const maxWidth = sphereRadius * ENGRAVE_WIDTH_FACTOR;
+  const maxHeight = sphereRadius * ENGRAVE_HEIGHT_FACTOR;
+  const totalWidthUnits = numberText.length * DIGIT_WIDTH_UNITS + Math.max(0, numberText.length - 1) * DIGIT_SPACING_UNITS;
+  const unitScale = Math.min(
+    maxWidth / Math.max(totalWidthUnits, 1),
+    maxHeight / DIGIT_HEIGHT_UNITS
+  );
   const surfaceCentreDist = sphereRadius + (ENGRAVE_OUTSIDE_BLEED - ENGRAVE_DEPTH) / 2;
   const halfDepth = (ENGRAVE_OUTSIDE_BLEED + ENGRAVE_DEPTH) / 2;
-  const textHeightMM = heightPx * pixelSize;
-  const blockTopY = textHeightMM / 2;
+  const totalWidthMM = totalWidthUnits * unitScale;
+  const firstDigitCentreX = -totalWidthMM / 2 + (DIGIT_WIDTH_UNITS * unitScale) / 2;
   const triangles = [];
 
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const line = lines[lineIndex];
-    const lineWidthMM = (line.length * charPx - FONT_CHAR_GAP) * pixelSize;
-    const lineStartX = -lineWidthMM / 2;
-    const lineTopY = blockTopY - lineIndex * linePx * pixelSize;
+  for (let index = 0; index < numberText.length; index += 1) {
+    const digit = numberText[index];
+    const segments = SEVEN_SEGMENT_DIGITS[digit];
+    if (!segments) continue;
 
-    for (let charIndex = 0; charIndex < line.length; charIndex += 1) {
-      const glyph = DIGIT_FONT[line[charIndex]];
-      if (!glyph) continue;
+    const digitCentreX = firstDigitCentreX + index * (DIGIT_WIDTH_UNITS + DIGIT_SPACING_UNITS) * unitScale;
 
-      const charOffsetX = charIndex * charPx * pixelSize;
-      for (let row = 0; row < FONT_CHAR_H; row += 1) {
-        const bits = glyph[row];
-        for (let col = 0; col < FONT_CHAR_W; col += 1) {
-          if (!((bits >> (FONT_CHAR_W - 1 - col)) & 1)) continue;
+    for (const segmentKey of segments) {
+      const box = SEVEN_SEGMENT_BOXES[segmentKey];
+      if (!box) continue;
 
-          const lx = lineStartX + charOffsetX + (col + 0.5) * pixelSize;
-          const ly = lineTopY - (row + 0.5) * pixelSize;
-          const lz = surfaceCentreDist;
+      const centre = [
+        right[0] * (digitCentreX + box.x * unitScale) + up[0] * (box.y * unitScale) + forward[0] * surfaceCentreDist,
+        right[1] * (digitCentreX + box.x * unitScale) + up[1] * (box.y * unitScale) + forward[1] * surfaceCentreDist,
+        right[2] * (digitCentreX + box.x * unitScale) + up[2] * (box.y * unitScale) + forward[2] * surfaceCentreDist
+      ];
 
-          const centre = [
-            right[0] * lx + up[0] * ly + forward[0] * lz,
-            right[1] * lx + up[1] * ly + forward[1] * lz,
-            right[2] * lx + up[2] * ly + forward[2] * lz
-          ];
-
-          triangles.push(
-            ...buildOrientedBoxTriangles(
-              centre,
-              right,
-              up,
-              forward,
-              pixelSize / 2,
-              pixelSize / 2,
-              halfDepth
-            )
-          );
-        }
-      }
+      triangles.push(
+        ...buildOrientedBoxTriangles(
+          centre,
+          right,
+          up,
+          forward,
+          ((box.width + SEGMENT_OVERLAP_UNITS) * unitScale) / 2,
+          ((box.height + SEGMENT_OVERLAP_UNITS) * unitScale) / 2,
+          halfDepth
+        )
+      );
     }
   }
 
   return CSG.fromTriangles(triangles);
+}
+
+function rotatePointIntoBasis(point, basis) {
+  return [
+    vecDot(point, basis.right),
+    vecDot(point, basis.up),
+    vecDot(point, basis.forward)
+  ];
+}
+
+function placeTrianglesOnBuildPlate(triangles) {
+  let minZ = Infinity;
+
+  for (const triangle of triangles) {
+    minZ = Math.min(minZ, triangle.a[2], triangle.b[2], triangle.c[2]);
+  }
+
+  if (!Number.isFinite(minZ)) return triangles;
+  const zOffset = -minZ;
+
+  return triangles.map(triangle => ({
+    a: [triangle.a[0], triangle.a[1], triangle.a[2] + zOffset],
+    b: [triangle.b[0], triangle.b[1], triangle.b[2] + zOffset],
+    c: [triangle.c[0], triangle.c[1], triangle.c[2] + zOffset]
+  }));
+}
+
+function orientTrianglesForPrint(triangles, faceDirection) {
+  const basis = buildFeatureBasis(faceDirection);
+  const rotated = triangles.map(triangle => ({
+    a: rotatePointIntoBasis(triangle.a, basis),
+    b: rotatePointIntoBasis(triangle.b, basis),
+    c: rotatePointIntoBasis(triangle.c, basis)
+  }));
+
+  return placeTrianglesOnBuildPlate(rotated);
 }
 
 function buildSystemRankMap(sourceStars) {
@@ -447,20 +436,24 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
       halfTubeCount += 1;
     }
 
+    const engravingDir = findFeatureDirection(tubeDirs);
     const systemRank = rankMap.get(systemName);
     if (Number.isFinite(systemRank)) {
-      const engravingDir = findFeatureDirection(tubeDirs);
       csgResult = csgResult.subtract(
         buildNumberEngravingCSG(String(systemRank), engravingDir, radius)
       );
     }
 
-    const stlBuffer = trianglesToBinarySTL(csgResult.toTriangles());
+    const orientedTriangles = orientTrianglesForPrint(csgResult.toTriangles(), engravingDir);
+    const stlBuffer = trianglesToBinarySTL(orientedTriangles);
     starsFolder.file(`${sanitizeFilename(systemName)}.stl`, stlBuffer);
     starCount += 1;
   }
 
-  connectorsFolder.file('tube_joint.stl', trianglesToBinarySTL(buildJointTriangles()));
+  connectorsFolder.file(
+    'tube_joint.stl',
+    trianglesToBinarySTL(placeTrianglesOnBuildPlate(buildJointTriangles()))
+  );
 
   const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
   const url = URL.createObjectURL(blob);
