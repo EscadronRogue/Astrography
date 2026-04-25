@@ -189,6 +189,10 @@ function vecCross(a, b) {
   ];
 }
 
+function vecAdd(a, b) {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
 function vecSub(a, b) {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
@@ -269,6 +273,65 @@ function buildNodeSphereCSG(centre, radius, widthSegs = 20, heightSegs = 20) {
   return CSG.fromTriangles(
     buildSphereTriangles(centre[0], centre[1], centre[2], radius, widthSegs, heightSegs)
   );
+}
+
+function transformTriangles(triangles, centre, axisX, axisY, axisZ) {
+  const transformPoint = (point) => ([
+    centre[0] + axisX[0] * point[0] + axisY[0] * point[1] + axisZ[0] * point[2],
+    centre[1] + axisX[1] * point[0] + axisY[1] * point[1] + axisZ[1] * point[2],
+    centre[2] + axisX[2] * point[0] + axisY[2] * point[1] + axisZ[2] * point[2]
+  ]);
+
+  return triangles.map(tri => ({
+    a: transformPoint(tri.a),
+    b: transformPoint(tri.b),
+    c: transformPoint(tri.c)
+  }));
+}
+
+function placeCanonicalCSG(csg, centre, axisX, axisY, axisZ) {
+  return CSG.fromTriangles(
+    transformTriangles(csg.toTriangles(), centre, axisX, axisY, axisZ)
+  );
+}
+
+function buildSegmentLabelBasis(direction, preferredUp = [0, 0, 1]) {
+  let axisX = vecNormalise(...direction);
+  let axisZ = vecSub(preferredUp, vecScale(axisX, vecDot(preferredUp, axisX)));
+
+  if (vecLength(axisZ) < 1e-5) {
+    const fallback = Math.abs(axisX[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    axisZ = vecSub(fallback, vecScale(axisX, vecDot(fallback, axisX)));
+  }
+
+  axisZ = vecNormalise(...axisZ);
+  const axisY = vecNormalise(...vecCross(axisZ, axisX));
+  axisZ = vecNormalise(...vecCross(axisX, axisY));
+
+  return { axisX, axisY, axisZ };
+}
+
+function buildSegmentEndLabelCuts(segmentStart, segmentEnd, text, preferredUp = [0, 0, 1]) {
+  if (!text) return [];
+
+  const direction = vecSub(segmentEnd, segmentStart);
+  const segmentLength = vecLength(direction);
+  const labelLength = Math.min(segmentLength - 0.4, 12);
+  if (!(labelLength > 2)) return [];
+
+  const flatLayout = getTubeFlatLayout(labelLength);
+  if (!flatLayout) return [];
+
+  const labelLayout = computeLabelLayout(text, flatLayout);
+  if (!labelLayout) return [];
+
+  const { axisX, axisY, axisZ } = buildSegmentLabelBasis(direction, preferredUp);
+  const centre = vecAdd(segmentStart, vecScale(axisX, labelLength / 2));
+
+  return [
+    placeCanonicalCSG(buildTubeFlatTrimCSG(flatLayout), centre, axisX, axisY, axisZ),
+    placeCanonicalCSG(buildLabelTextCSG(text, labelLayout), centre, axisX, axisY, axisZ)
+  ];
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -559,6 +622,8 @@ function computeLabelLayout(text, flatLayout) {
   const availableWidth = flatLayout.flatLength * LABEL_TEXT_WIDTH_FACTOR;
   const availableHeight = flatLayout.flatWidth * LABEL_TEXT_HEIGHT_FACTOR;
   const candidateLines = [[text]];
+  let bestLayout = null;
+  let bestScale = -Infinity;
 
   if (text.length > 1) {
     candidateLines.push(text.split('').map(ch => ch));
@@ -575,12 +640,13 @@ function computeLabelLayout(text, flatLayout) {
       availableHeight / Math.max(totalHeightUnits, 1)
     );
 
-    if (Number.isFinite(unitScale) && unitScale > 0) {
-      return { ...flatLayout, lines };
+    if (Number.isFinite(unitScale) && unitScale > bestScale) {
+      bestScale = unitScale;
+      bestLayout = { ...flatLayout, lines };
     }
   }
 
-  return null;
+  return bestLayout;
 }
 
 /**
@@ -628,42 +694,66 @@ function buildLabelTextCSG(text, layout) {
   );
 }
 
-function clusterHoleEndpoints(endpoints, sphereRadius) {
+function clusterHoleEndpoints(endpoints, sphereRadius, forcedGroups = []) {
   if (!Array.isArray(endpoints) || endpoints.length === 0) return [];
 
-  const visited = new Array(endpoints.length).fill(false);
   const overlapLimit = 2 * HOLE_RADIUS + HOLE_CLUSTER_CLEARANCE;
-  const clusters = [];
+  const parent = endpoints.map((_, index) => index);
 
-  for (let startIndex = 0; startIndex < endpoints.length; startIndex += 1) {
-    if (visited[startIndex]) continue;
+  const find = (index) => {
+    let root = index;
+    while (parent[root] !== root) root = parent[root];
+    while (parent[index] !== index) {
+      const next = parent[index];
+      parent[index] = root;
+      index = next;
+    }
+    return root;
+  };
 
-    const stack = [startIndex];
-    visited[startIndex] = true;
-    const members = [];
+  const union = (left, right) => {
+    const rootLeft = find(left);
+    const rootRight = find(right);
+    if (rootLeft !== rootRight) parent[rootRight] = rootLeft;
+  };
 
-    while (stack.length) {
-      const index = stack.pop();
-      const entry = endpoints[index];
-      members.push(entry);
-
-      for (let otherIndex = 0; otherIndex < endpoints.length; otherIndex += 1) {
-        if (visited[otherIndex]) continue;
-
-        const other = endpoints[otherIndex];
-        const centreA = vecScale(entry.dir, sphereRadius);
-        const centreB = vecScale(other.dir, sphereRadius);
-        if (vecDistance(centreA, centreB) >= overlapLimit) continue;
-
-        visited[otherIndex] = true;
-        stack.push(otherIndex);
+  for (let index = 0; index < endpoints.length; index += 1) {
+    for (let otherIndex = index + 1; otherIndex < endpoints.length; otherIndex += 1) {
+      const centreA = vecScale(endpoints[index].dir, sphereRadius);
+      const centreB = vecScale(endpoints[otherIndex].dir, sphereRadius);
+      if (vecDistance(centreA, centreB) < overlapLimit) {
+        union(index, otherIndex);
       }
     }
-
-    clusters.push(members);
   }
 
-  return clusters;
+  const indexByConnectionId = new Map();
+  endpoints.forEach((endpoint, index) => {
+    indexByConnectionId.set(endpoint.connectionId, index);
+  });
+
+  for (const group of forcedGroups) {
+    const indexes = group
+      .map(connectionId => indexByConnectionId.get(connectionId))
+      .filter(Number.isInteger);
+
+    for (let index = 1; index < indexes.length; index += 1) {
+      union(indexes[0], indexes[index]);
+    }
+  }
+
+  const clustersByRoot = new Map();
+  for (let index = 0; index < endpoints.length; index += 1) {
+    const root = find(index);
+    let bucket = clustersByRoot.get(root);
+    if (!bucket) {
+      bucket = [];
+      clustersByRoot.set(root, bucket);
+    }
+    bucket.push(endpoints[index]);
+  }
+
+  return Array.from(clustersByRoot.values());
 }
 
 function getClusterMergedDirection(cluster) {
@@ -677,16 +767,20 @@ function getClusterMergedDirection(cluster) {
     sz += member.dir[2];
   }
 
+  if (Math.sqrt(sx * sx + sy * sy + sz * sz) < 1e-6) {
+    return cluster[0]?.dir || [0, 1, 0];
+  }
+
   return vecNormalise(sx, sy, sz);
 }
 
-function buildSystemSocketPlan(systemName, endpoints, sphereRadius) {
+function buildSystemSocketPlan(systemName, endpoints, sphereRadius, forcedGroups = []) {
   const connectionClusters = new Map();
   const openingDirections = [];
   const negativeSolids = [];
   const clusters = [];
 
-  const groupedClusters = clusterHoleEndpoints(endpoints, sphereRadius);
+  const groupedClusters = clusterHoleEndpoints(endpoints, sphereRadius, forcedGroups);
   for (let index = 0; index < groupedClusters.length; index += 1) {
     const cluster = groupedClusters[index];
     const merged = cluster.length > 1;
@@ -735,14 +829,19 @@ function buildEndpointMap(connections) {
   return endpointMap;
 }
 
-function buildSystemSocketPlans(systemInfo, connections) {
+function buildSystemSocketPlans(systemInfo, connections, forcedMergeMap = new Map()) {
   const endpointMap = buildEndpointMap(connections);
   const plans = new Map();
 
   for (const [systemName, info] of systemInfo) {
     plans.set(
       systemName,
-      buildSystemSocketPlan(systemName, endpointMap.get(systemName) || [], info.radius)
+      buildSystemSocketPlan(
+        systemName,
+        endpointMap.get(systemName) || [],
+        info.radius,
+        forcedMergeMap.get(systemName) || []
+      )
     );
   }
 
@@ -857,6 +956,101 @@ function buildTubeComponents(systemInfo, socketPlans, connections) {
   return components;
 }
 
+function mergeConnectionGroups(groups) {
+  const parent = new Map();
+
+  const ensure = (id) => {
+    if (!parent.has(id)) parent.set(id, id);
+  };
+
+  const find = (id) => {
+    ensure(id);
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    while (parent.get(id) !== id) {
+      const next = parent.get(id);
+      parent.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+
+  const union = (left, right) => {
+    const rootLeft = find(left);
+    const rootRight = find(right);
+    if (rootLeft !== rootRight) parent.set(rootRight, rootLeft);
+  };
+
+  for (const group of groups) {
+    const uniqueIds = Array.from(new Set(group)).sort((a, b) => a - b);
+    if (uniqueIds.length < 2) continue;
+    for (let index = 1; index < uniqueIds.length; index += 1) {
+      union(uniqueIds[0], uniqueIds[index]);
+    }
+  }
+
+  const buckets = new Map();
+  for (const id of parent.keys()) {
+    const root = find(id);
+    let bucket = buckets.get(root);
+    if (!bucket) {
+      bucket = [];
+      buckets.set(root, bucket);
+    }
+    bucket.push(id);
+  }
+
+  return Array.from(buckets.values())
+    .map(group => group.sort((a, b) => a - b))
+    .filter(group => group.length > 1)
+    .sort((left, right) => left[0] - right[0]);
+}
+
+function buildForcedMergeMap(components) {
+  const pendingBySystem = new Map();
+
+  for (const component of components) {
+    const clustersBySystem = new Map();
+
+    for (const cluster of component.clusters) {
+      let bucket = clustersBySystem.get(cluster.systemName);
+      if (!bucket) {
+        bucket = [];
+        clustersBySystem.set(cluster.systemName, bucket);
+      }
+      bucket.push(cluster);
+    }
+
+    for (const [systemName, clusters] of clustersBySystem) {
+      if (clusters.length < 2) continue;
+
+      let bucket = pendingBySystem.get(systemName);
+      if (!bucket) {
+        bucket = [];
+        pendingBySystem.set(systemName, bucket);
+      }
+
+      bucket.push(clusters.flatMap(cluster => cluster.connectionIds));
+    }
+  }
+
+  const forcedMergeMap = new Map();
+  for (const [systemName, groups] of pendingBySystem) {
+    const mergedGroups = mergeConnectionGroups(groups);
+    if (mergedGroups.length) forcedMergeMap.set(systemName, mergedGroups);
+  }
+
+  return forcedMergeMap;
+}
+
+function getForcedMergeSignature(forcedMergeMap) {
+  return JSON.stringify(
+    Array.from(forcedMergeMap.entries())
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([systemName, groups]) => [systemName, groups])
+  );
+}
+
 function getSegmentLength(segment) {
   return vecDistance(segment.start, segment.end);
 }
@@ -936,15 +1130,26 @@ function transformPointToBasis(point, basis) {
 }
 
 function buildTubeComponentCSG(component) {
-  const labelSegment = chooseComponentLabelSegment(component);
-  if (!labelSegment) return null;
+  const mainSegment = chooseComponentLabelSegment(component);
+  if (!mainSegment) return null;
 
-  const basis = buildComponentBasis(component, labelSegment);
+  const basis = buildComponentBasis(component, mainSegment);
   const solids = [];
+  const localEdges = [];
+  const localClusters = component.clusters.map(cluster => ({
+    ...cluster,
+    localAnchor: transformPointToBasis(cluster.anchorWorld, basis),
+    localPiece: transformPointToBasis(cluster.pieceWorld, basis)
+  }));
 
   for (const edge of component.edges) {
     const start = transformPointToBasis(edge.pointA, basis);
     const end = transformPointToBasis(edge.pointB, basis);
+    localEdges.push({
+      ...edge,
+      start,
+      end
+    });
     solids.push(
       CSG.fromTriangles(
         buildTubeTriangles(
@@ -957,22 +1162,20 @@ function buildTubeComponentCSG(component) {
     );
   }
 
-  for (const cluster of component.clusters) {
+  for (const cluster of localClusters) {
     if (!cluster.merged) continue;
 
-    const anchor = transformPointToBasis(cluster.anchorWorld, basis);
-    const piece = transformPointToBasis(cluster.pieceWorld, basis);
     solids.push(
       CSG.fromTriangles(
         buildTubeTriangles(
-          anchor[0], anchor[1], anchor[2],
-          piece[0], piece[1], piece[2],
+          cluster.localAnchor[0], cluster.localAnchor[1], cluster.localAnchor[2],
+          cluster.localPiece[0], cluster.localPiece[1], cluster.localPiece[2],
           KIT_TUBE_RADIUS,
           KIT_TUBE_SEGMENTS
         )
       )
     );
-    solids.push(buildNodeSphereCSG(piece, BRANCH_NODE_RADIUS, 16, 16));
+    solids.push(buildNodeSphereCSG(cluster.localPiece, BRANCH_NODE_RADIUS, 16, 16));
   }
 
   if (!solids.length) return null;
@@ -983,17 +1186,26 @@ function buildTubeComponentCSG(component) {
     .filter(Number.isFinite)
     .sort((left, right) => left - right)
     .filter((rank, index, values) => index === 0 || rank !== values[index - 1]);
-  const labelText = labelRanks.join('-');
   const cutSolids = [];
-  const flatLayout = getTubeFlatLayout(getSegmentLength(labelSegment));
+  const preferredUp = [0, 0, 1];
 
-  if (flatLayout) {
-    cutSolids.push(buildTubeFlatTrimCSG(flatLayout));
+  for (const cluster of localClusters) {
+    if (!Number.isFinite(cluster.rank)) continue;
 
-    const labelLayout = computeLabelLayout(labelText, flatLayout);
-    if (labelLayout) {
-      cutSolids.push(buildLabelTextCSG(labelText, labelLayout));
+    if (cluster.merged) {
+      cutSolids.push(
+        ...buildSegmentEndLabelCuts(cluster.localAnchor, cluster.localPiece, String(cluster.rank), preferredUp)
+      );
+      continue;
     }
+
+    const incidentEdge = localEdges.find(edge => edge.clusterIdA === cluster.id || edge.clusterIdB === cluster.id);
+    if (!incidentEdge) continue;
+    const segmentEnd = incidentEdge.clusterIdA === cluster.id ? incidentEdge.end : incidentEdge.start;
+
+    cutSolids.push(
+      ...buildSegmentEndLabelCuts(cluster.localAnchor, segmentEnd, String(cluster.rank), preferredUp)
+    );
   }
 
   if (cutSolids.length) {
@@ -1159,8 +1371,21 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
 
   // ── Build ZIP ────────────────────────────────────────────────────────
   const allConnections = candidateConnections;
-  const socketPlans = buildSystemSocketPlans(systemInfo, allConnections);
-  const tubeComponents = buildTubeComponents(systemInfo, socketPlans, allConnections);
+  let forcedMergeMap = new Map();
+  let socketPlans = buildSystemSocketPlans(systemInfo, allConnections, forcedMergeMap);
+  let tubeComponents = buildTubeComponents(systemInfo, socketPlans, allConnections);
+
+  // Rebuild until a finished removable part no longer asks to plug into the
+  // same sphere more than once. When that happens, we collapse those terminal
+  // hits into one new merged socket and one medium extremity.
+  for (let pass = 0; pass < 6; pass += 1) {
+    const nextForcedMergeMap = buildForcedMergeMap(tubeComponents);
+    if (getForcedMergeSignature(nextForcedMergeMap) === getForcedMergeSignature(forcedMergeMap)) break;
+
+    forcedMergeMap = nextForcedMergeMap;
+    socketPlans = buildSystemSocketPlans(systemInfo, allConnections, forcedMergeMap);
+    tubeComponents = buildTubeComponents(systemInfo, socketPlans, allConnections);
+  }
 
   const zip = new JSZip();
   const starsFolder = zip.folder('stars');
