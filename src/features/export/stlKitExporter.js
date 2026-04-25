@@ -3,7 +3,7 @@
  *
  * Produces a ZIP file containing:
  * - stars/  → one STL per star system (sphere with connection holes + engraved rank)
- * - tubes/  → one STL per connection (full-length tube with an integrated flat crown)
+ * - tubes/  → branchable tube parts, including Y pieces where star holes merge
  *
  * Assembly: tubes slide directly into the matching holes in star spheres.
  * No separate joints or connectors.
@@ -54,15 +54,10 @@ const LABEL_ENGRAVE_BLEED = 0.25;
 const LABEL_TEXT_WIDTH_FACTOR = 0.85;
 const LABEL_TEXT_HEIGHT_FACTOR = 0.78;
 
-// Overlapping-hole merge / Y splitters on stars
+// Overlapping-hole merge / external Y splitters
 const HOLE_CLUSTER_CLEARANCE = 0.4;
-const MANIFOLD_WALL_THICKNESS = 1.0;
-const MANIFOLD_RADIUS = HOLE_RADIUS + MANIFOLD_WALL_THICKNESS;
-const MANIFOLD_BLEND_INSET = 0.75;
-const MANIFOLD_JUNCTION_OUTSIDE = 3.5;
-const MANIFOLD_SOCKET_EXTRA_OUTSIDE = TUBE_INSERTION_DEPTH + 2.5;
-const MANIFOLD_SOCKET_HOLE_OVERHANG = 1.0;
-const MANIFOLD_JUNCTION_RADIUS = MANIFOLD_RADIUS + 0.25;
+const Y_JUNCTION_OUTSIDE = 4.5;      // mm outside the sphere surface for a usable trunk
+const BRANCH_NODE_RADIUS = KIT_TUBE_RADIUS + 0.25;
 
 // Star-face engraving
 const FACET_DEPTH_FACTOR = 0.3;
@@ -192,6 +187,10 @@ function vecCross(a, b) {
     a[2] * b[0] - a[0] * b[2],
     a[0] * b[1] - a[1] * b[0]
   ];
+}
+
+function vecSub(a, b) {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
 
 function vecScale(v, scalar) {
@@ -557,21 +556,31 @@ function getTubeFlatLayout(tubeLength) {
 function computeLabelLayout(text, flatLayout) {
   if (!flatLayout) return null;
 
-  const chars = text.split('');
-  const textWidthUnits = chars.length * DIGIT_WIDTH_UNITS
-    + Math.max(0, chars.length - 1) * DIGIT_SPACING_UNITS;
-
   const availableWidth = flatLayout.flatLength * LABEL_TEXT_WIDTH_FACTOR;
   const availableHeight = flatLayout.flatWidth * LABEL_TEXT_HEIGHT_FACTOR;
+  const candidateLines = [[text]];
 
-  const unitScale = Math.min(
-    availableWidth / Math.max(textWidthUnits, 1),
-    availableHeight / Math.max(DIGIT_HEIGHT_UNITS, 1)
-  );
+  if (text.length > 1) {
+    candidateLines.push(text.split('').map(ch => ch));
+  }
 
-  return Number.isFinite(unitScale) && unitScale > 0
-    ? { ...flatLayout }
-    : null;
+  for (const lines of candidateLines) {
+    const maxWidthUnits = Math.max(
+      ...lines.map(line => line.length * DIGIT_WIDTH_UNITS + Math.max(0, line.length - 1) * DIGIT_SPACING_UNITS)
+    );
+    const totalHeightUnits = lines.length * DIGIT_HEIGHT_UNITS
+      + Math.max(0, lines.length - 1) * DIGIT_LINE_SPACING_UNITS;
+    const unitScale = Math.min(
+      availableWidth / Math.max(maxWidthUnits, 1),
+      availableHeight / Math.max(totalHeightUnits, 1)
+    );
+
+    if (Number.isFinite(unitScale) && unitScale > 0) {
+      return { ...flatLayout, lines };
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -614,8 +623,8 @@ function buildLabelTextCSG(text, layout) {
     maxHeight,
     LABEL_STROKE_WIDTH_UNITS,
     LABEL_ENGRAVE_DEPTH,
-    LABEL_ENGRAVE_BLEED
-    // single-line by default
+    LABEL_ENGRAVE_BLEED,
+    layout.lines
   );
 }
 
@@ -671,95 +680,46 @@ function getClusterMergedDirection(cluster) {
   return vecNormalise(sx, sy, sz);
 }
 
-function getClusterSocketOuterDistance(cluster, sphereRadius) {
-  let requiredDistance = sphereRadius + MANIFOLD_SOCKET_EXTRA_OUTSIDE;
-  const requiredSeparation = 2 * HOLE_RADIUS + HOLE_CLUSTER_CLEARANCE;
-
-  for (let i = 0; i < cluster.length; i += 1) {
-    for (let j = i + 1; j < cluster.length; j += 1) {
-      const dirDelta = vecDistance(cluster[i].dir, cluster[j].dir);
-      if (dirDelta < 1e-6) continue;
-      requiredDistance = Math.max(requiredDistance, requiredSeparation / dirDelta);
-    }
-  }
-
-  return requiredDistance;
-}
-
-function buildSystemSocketPlan(endpoints, sphereRadius) {
-  const anchors = new Map();
+function buildSystemSocketPlan(systemName, endpoints, sphereRadius) {
+  const connectionClusters = new Map();
   const openingDirections = [];
-  const positiveSolids = [];
   const negativeSolids = [];
+  const clusters = [];
 
-  const clusters = clusterHoleEndpoints(endpoints, sphereRadius);
-  for (const cluster of clusters) {
-    if (cluster.length === 1) {
-      const member = cluster[0];
-      anchors.set(member.connectionId, vecScale(member.dir, sphereRadius - TUBE_INSERTION_DEPTH));
-      openingDirections.push(member.dir);
-      negativeSolids.push(
-        buildHoleCSG(member.dir, sphereRadius - TUBE_INSERTION_DEPTH, sphereRadius + 1)
-      );
-      continue;
-    }
+  const groupedClusters = clusterHoleEndpoints(endpoints, sphereRadius);
+  for (let index = 0; index < groupedClusters.length; index += 1) {
+    const cluster = groupedClusters[index];
+    const merged = cluster.length > 1;
+    const holeDir = merged ? getClusterMergedDirection(cluster) : cluster[0].dir;
+    const anchorLocal = vecScale(holeDir, sphereRadius - TUBE_INSERTION_DEPTH);
+    const pieceLocal = merged
+      ? vecScale(holeDir, sphereRadius + Y_JUNCTION_OUTSIDE)
+      : anchorLocal;
+    const clusterId = `${sanitizeFilename(systemName)}__${index}`;
+    const connectionIds = [];
 
-    const mergedDir = getClusterMergedDirection(cluster);
-    const junctionPoint = vecScale(mergedDir, sphereRadius + MANIFOLD_JUNCTION_OUTSIDE);
-    const stemStart = vecScale(mergedDir, sphereRadius - MANIFOLD_BLEND_INSET);
-    const socketOuterDistance = getClusterSocketOuterDistance(cluster, sphereRadius);
-
-    openingDirections.push(mergedDir, ...cluster.map(member => member.dir));
-
-    positiveSolids.push(
-      CSG.fromTriangles(
-        buildTubeTriangles(
-          stemStart[0], stemStart[1], stemStart[2],
-          junctionPoint[0], junctionPoint[1], junctionPoint[2],
-          MANIFOLD_RADIUS,
-          KIT_TUBE_SEGMENTS
-        )
-      )
-    );
-    positiveSolids.push(buildNodeSphereCSG(junctionPoint, MANIFOLD_JUNCTION_RADIUS));
-
+    openingDirections.push(holeDir);
     negativeSolids.push(
-      buildHoleCSG(
-        mergedDir,
-        sphereRadius - TUBE_INSERTION_DEPTH,
-        sphereRadius + Math.max(1.5, MANIFOLD_JUNCTION_OUTSIDE * 0.65)
-      )
+      buildHoleCSG(holeDir, sphereRadius - TUBE_INSERTION_DEPTH, sphereRadius + 1)
     );
 
     for (const member of cluster) {
-      const socketOuterPoint = vecScale(member.dir, socketOuterDistance);
-      const socketInnerPoint = vecScale(member.dir, socketOuterDistance - TUBE_INSERTION_DEPTH);
-
-      positiveSolids.push(
-        CSG.fromTriangles(
-          buildTubeTriangles(
-            junctionPoint[0], junctionPoint[1], junctionPoint[2],
-            socketOuterPoint[0], socketOuterPoint[1], socketOuterPoint[2],
-            MANIFOLD_RADIUS,
-            KIT_TUBE_SEGMENTS
-          )
-        )
-      );
-      positiveSolids.push(buildNodeSphereCSG(socketOuterPoint, MANIFOLD_RADIUS, 16, 16));
-
-      negativeSolids.push(
-        buildHoleCSG(
-          member.dir,
-          socketOuterDistance - TUBE_INSERTION_DEPTH,
-          socketOuterDistance + MANIFOLD_SOCKET_HOLE_OVERHANG
-        )
-      );
-
-      anchors.set(member.connectionId, socketInnerPoint);
+      connectionClusters.set(member.connectionId, clusterId);
+      connectionIds.push(member.connectionId);
     }
+
+    clusters.push({
+      id: clusterId,
+      systemName,
+      merged,
+      holeDir,
+      anchorLocal,
+      pieceLocal,
+      connectionIds
+    });
   }
 
-  return { anchors, openingDirections, positiveSolids, negativeSolids };
+  return { connectionClusters, clusters, openingDirections, negativeSolids };
 }
 
 function buildEndpointMap(connections) {
@@ -782,21 +742,265 @@ function buildSystemSocketPlans(systemInfo, connections) {
   for (const [systemName, info] of systemInfo) {
     plans.set(
       systemName,
-      buildSystemSocketPlan(endpointMap.get(systemName) || [], info.radius)
+      buildSystemSocketPlan(systemName, endpointMap.get(systemName) || [], info.radius)
     );
   }
 
   return plans;
 }
 
-function getConnectionAnchorWorld(info, connectionId, plan, fallbackLocalAnchor) {
-  const offset = plan?.anchors.get(connectionId) || fallbackLocalAnchor;
-
+function toWorldPoint(info, localPoint) {
   return [
-    info.posMM.x + offset[0],
-    info.posMM.y + offset[1],
-    info.posMM.z + offset[2]
+    info.posMM.x + localPoint[0],
+    info.posMM.y + localPoint[1],
+    info.posMM.z + localPoint[2]
   ];
+}
+
+function buildClusterWorldMap(systemInfo, socketPlans) {
+  const clusterMap = new Map();
+
+  for (const [systemName, plan] of socketPlans) {
+    const info = systemInfo.get(systemName);
+    if (!info) continue;
+
+    for (const cluster of plan.clusters) {
+      clusterMap.set(cluster.id, {
+        ...cluster,
+        rank: info.rank,
+        anchorWorld: toWorldPoint(info, cluster.anchorLocal),
+        pieceWorld: toWorldPoint(info, cluster.pieceLocal)
+      });
+    }
+  }
+
+  return clusterMap;
+}
+
+function buildTubeComponents(systemInfo, socketPlans, connections) {
+  const clusterMap = buildClusterWorldMap(systemInfo, socketPlans);
+  const edges = [];
+  const adjacency = new Map();
+
+  const touch = (clusterId, edgeIndex) => {
+    let bucket = adjacency.get(clusterId);
+    if (!bucket) {
+      bucket = [];
+      adjacency.set(clusterId, bucket);
+    }
+    bucket.push(edgeIndex);
+  };
+
+  for (const conn of connections) {
+    const planA = socketPlans.get(conn.sysA);
+    const planB = socketPlans.get(conn.sysB);
+    const clusterIdA = planA?.connectionClusters.get(conn.id);
+    const clusterIdB = planB?.connectionClusters.get(conn.id);
+    if (!clusterIdA || !clusterIdB) continue;
+
+    const clusterA = clusterMap.get(clusterIdA);
+    const clusterB = clusterMap.get(clusterIdB);
+    if (!clusterA || !clusterB) continue;
+
+    const edgeIndex = edges.length;
+    edges.push({
+      id: conn.id,
+      clusterIdA,
+      clusterIdB,
+      pointA: clusterA.pieceWorld,
+      pointB: clusterB.pieceWorld
+    });
+    touch(clusterIdA, edgeIndex);
+    touch(clusterIdB, edgeIndex);
+  }
+
+  const visited = new Set();
+  const components = [];
+
+  for (const startClusterId of adjacency.keys()) {
+    if (visited.has(startClusterId)) continue;
+
+    const queue = [startClusterId];
+    visited.add(startClusterId);
+    const clusterIds = new Set();
+    const edgeIndexes = new Set();
+
+    while (queue.length) {
+      const clusterId = queue.shift();
+      clusterIds.add(clusterId);
+
+      for (const edgeIndex of adjacency.get(clusterId) || []) {
+        edgeIndexes.add(edgeIndex);
+        const edge = edges[edgeIndex];
+        const otherId = edge.clusterIdA === clusterId ? edge.clusterIdB : edge.clusterIdA;
+        if (!visited.has(otherId)) {
+          visited.add(otherId);
+          queue.push(otherId);
+        }
+      }
+    }
+
+    const componentClusters = Array.from(clusterIds)
+      .map(clusterId => clusterMap.get(clusterId))
+      .filter(Boolean);
+    const componentEdges = Array.from(edgeIndexes).map(index => edges[index]);
+
+    if (componentClusters.length && componentEdges.length) {
+      components.push({
+        clusters: componentClusters,
+        edges: componentEdges,
+        clusterMap: new Map(componentClusters.map(cluster => [cluster.id, cluster]))
+      });
+    }
+  }
+
+  return components;
+}
+
+function getSegmentLength(segment) {
+  return vecDistance(segment.start, segment.end);
+}
+
+function chooseComponentLabelSegment(component) {
+  const trunkSegments = component.clusters
+    .filter(cluster => cluster.merged)
+    .map(cluster => ({
+      type: 'trunk',
+      clusterId: cluster.id,
+      start: cluster.anchorWorld,
+      end: cluster.pieceWorld
+    }))
+    .sort((left, right) => getSegmentLength(right) - getSegmentLength(left));
+
+  if (trunkSegments.length) return trunkSegments[0];
+
+  const edge = component.edges
+    .slice()
+    .sort((left, right) => vecDistance(right.pointA, right.pointB) - vecDistance(left.pointA, left.pointB))[0];
+
+  return edge
+    ? { type: 'edge', edgeId: edge.id, start: edge.pointA, end: edge.pointB }
+    : null;
+}
+
+function chooseComponentReference(component, labelSegment, axis) {
+  if (labelSegment?.type === 'trunk') {
+    for (const edge of component.edges) {
+      if (edge.clusterIdA !== labelSegment.clusterId && edge.clusterIdB !== labelSegment.clusterId) continue;
+      const junction = component.clusterMap.get(labelSegment.clusterId)?.pieceWorld;
+      const other = edge.clusterIdA === labelSegment.clusterId ? edge.pointB : edge.pointA;
+      const candidate = vecSub(other, junction);
+      if (vecLength(vecCross(axis, candidate)) > 1e-5) return candidate;
+    }
+  }
+
+  for (const edge of component.edges) {
+    const candidate = vecSub(edge.pointB, edge.pointA);
+    if (vecLength(vecCross(axis, candidate)) > 1e-5) return candidate;
+  }
+
+  return Math.abs(axis[1]) < 0.9 ? [0, 1, 0] : [0, 0, 1];
+}
+
+function buildComponentBasis(component, labelSegment) {
+  const axis = vecNormalise(...vecSub(labelSegment.end, labelSegment.start));
+  const reference = chooseComponentReference(component, labelSegment, axis);
+  let forward = vecCross(axis, reference);
+
+  if (vecLength(forward) < 1e-5) {
+    forward = vecCross(axis, Math.abs(axis[1]) < 0.9 ? [0, 1, 0] : [0, 0, 1]);
+  }
+
+  const basisForward = vecNormalise(...forward);
+  const basisUp = vecNormalise(...vecCross(basisForward, axis));
+
+  return {
+    origin: [
+      (labelSegment.start[0] + labelSegment.end[0]) / 2,
+      (labelSegment.start[1] + labelSegment.end[1]) / 2,
+      (labelSegment.start[2] + labelSegment.end[2]) / 2
+    ],
+    right: axis,
+    up: basisUp,
+    forward: basisForward
+  };
+}
+
+function transformPointToBasis(point, basis) {
+  const relative = vecSub(point, basis.origin);
+  return [
+    vecDot(relative, basis.right),
+    vecDot(relative, basis.up),
+    vecDot(relative, basis.forward)
+  ];
+}
+
+function buildTubeComponentCSG(component) {
+  const labelSegment = chooseComponentLabelSegment(component);
+  if (!labelSegment) return null;
+
+  const basis = buildComponentBasis(component, labelSegment);
+  const solids = [];
+
+  for (const edge of component.edges) {
+    const start = transformPointToBasis(edge.pointA, basis);
+    const end = transformPointToBasis(edge.pointB, basis);
+    solids.push(
+      CSG.fromTriangles(
+        buildTubeTriangles(
+          start[0], start[1], start[2],
+          end[0], end[1], end[2],
+          KIT_TUBE_RADIUS,
+          KIT_TUBE_SEGMENTS
+        )
+      )
+    );
+  }
+
+  for (const cluster of component.clusters) {
+    if (!cluster.merged) continue;
+
+    const anchor = transformPointToBasis(cluster.anchorWorld, basis);
+    const piece = transformPointToBasis(cluster.pieceWorld, basis);
+    solids.push(
+      CSG.fromTriangles(
+        buildTubeTriangles(
+          anchor[0], anchor[1], anchor[2],
+          piece[0], piece[1], piece[2],
+          KIT_TUBE_RADIUS,
+          KIT_TUBE_SEGMENTS
+        )
+      )
+    );
+    solids.push(buildNodeSphereCSG(piece, BRANCH_NODE_RADIUS, 16, 16));
+  }
+
+  if (!solids.length) return null;
+
+  let csg = unionAllCSG(solids);
+  const labelRanks = component.clusters
+    .map(cluster => cluster.rank)
+    .filter(Number.isFinite)
+    .sort((left, right) => left - right)
+    .filter((rank, index, values) => index === 0 || rank !== values[index - 1]);
+  const labelText = labelRanks.join('-');
+  const cutSolids = [];
+  const flatLayout = getTubeFlatLayout(getSegmentLength(labelSegment));
+
+  if (flatLayout) {
+    cutSolids.push(buildTubeFlatTrimCSG(flatLayout));
+
+    const labelLayout = computeLabelLayout(labelText, flatLayout);
+    if (labelLayout) {
+      cutSolids.push(buildLabelTextCSG(labelText, labelLayout));
+    }
+  }
+
+  if (cutSolids.length) {
+    csg = csg.subtract(unionAllCSG(cutSolids));
+  }
+
+  return { csg, labelRanks };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -868,7 +1072,7 @@ function buildSystemRankMap(sourceStars) {
  *
  * The ZIP contains:
  *   stars/   – one STL per system (sphere with holes + engraved rank)
- *   tubes/   – one STL per connection (full tube with an integrated flat crown)
+ *   tubes/   – straight or branched tube parts, with Y pieces when holes merge
  *
  * @param {Array}  stars       Currently filtered/displayed stars.
  * @param {Array}  connections Current connection pairs.
@@ -954,39 +1158,9 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   }
 
   // ── Build ZIP ────────────────────────────────────────────────────────
-  let allConnections = candidateConnections;
-  let socketPlans = buildSystemSocketPlans(systemInfo, allConnections);
-
-  // Re-validate printable tube lengths after merged sockets shift some tube
-  // anchors outward into shared Y splitters.
-  for (let pass = 0; pass < 3; pass += 1) {
-    const viableConnections = allConnections.filter(conn => {
-      const infoA = systemInfo.get(conn.sysA);
-      const infoB = systemInfo.get(conn.sysB);
-      if (!infoA || !infoB) return false;
-
-      const anchorA = getConnectionAnchorWorld(
-        infoA,
-        conn.id,
-        socketPlans.get(conn.sysA),
-        vecScale(conn.dirA, infoA.radius - TUBE_INSERTION_DEPTH)
-      );
-      const anchorB = getConnectionAnchorWorld(
-        infoB,
-        conn.id,
-        socketPlans.get(conn.sysB),
-        vecScale(conn.dirB, infoB.radius - TUBE_INSERTION_DEPTH)
-      );
-      return vecDistance(anchorA, anchorB) >= MIN_TUBE_LENGTH;
-    });
-
-    if (viableConnections.length === allConnections.length) break;
-
-    allConnections = viableConnections;
-    socketPlans = buildSystemSocketPlans(systemInfo, allConnections);
-  }
-
-  socketPlans = buildSystemSocketPlans(systemInfo, allConnections);
+  const allConnections = candidateConnections;
+  const socketPlans = buildSystemSocketPlans(systemInfo, allConnections);
+  const tubeComponents = buildTubeComponents(systemInfo, socketPlans, allConnections);
 
   const zip = new JSZip();
   const starsFolder = zip.folder('stars');
@@ -1003,9 +1177,9 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   for (const [systemName, info] of systemInfo) {
     const radius = info.radius;
     const socketPlan = socketPlans.get(systemName) || {
-      anchors: new Map(),
+      connectionClusters: new Map(),
+      clusters: [],
       openingDirections: [],
-      positiveSolids: [],
       negativeSolids: []
     };
     const holeDirs = socketPlan.openingDirections;
@@ -1013,10 +1187,9 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     // Find best direction for engraved rank number (away from holes)
     const engravingDir = findFeatureDirection(holeDirs);
 
-    // Build sphere plus any merged-socket Y manifold solids.
+    // Build sphere with only the actual printable hole positions cut into it.
     const positiveSolids = [
-      CSG.fromTriangles(buildSphereTriangles(0, 0, 0, radius, 32, 32)),
-      ...socketPlan.positiveSolids
+      CSG.fromTriangles(buildSphereTriangles(0, 0, 0, radius, 32, 32))
     ];
     const cutSolids = [];
 
@@ -1030,7 +1203,7 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     }
 
     // Socket cutters are planned from the same overlap-merge logic used for
-    // the tube anchors, so star and tube exports stay aligned.
+    // the branched tube parts, so stars and removable parts stay aligned.
     cutSolids.push(...socketPlan.negativeSolids);
 
     let csg = unionAllCSG(positiveSolids);
@@ -1048,67 +1221,16 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   }
 
   // ── Tubes ────────────────────────────────────────────────────────────
-  for (const conn of allConnections) {
-    const infoA = systemInfo.get(conn.sysA);
-    const infoB = systemInfo.get(conn.sysB);
-    const planA = socketPlans.get(conn.sysA);
-    const planB = socketPlans.get(conn.sysB);
-    const rankA = infoA.rank;
-    const rankB = infoB.rank;
+  for (const component of tubeComponents) {
+    const built = buildTubeComponentCSG(component);
+    if (!built) continue;
 
-    // Skip if either star has no rank (not in the global dataset)
-    if (!Number.isFinite(rankA) || !Number.isFinite(rankB)) continue;
-
-    // Label text: lower rank first (e.g. "1-2", "4-17")
-    const labelRankA = Math.min(rankA, rankB);
-    const labelRankB = Math.max(rankA, rankB);
-    const labelText = `${labelRankA}-${labelRankB}`;
-
-    const anchorA = getConnectionAnchorWorld(
-      infoA,
-      conn.id,
-      planA,
-      vecScale(conn.dirA, infoA.radius - TUBE_INSERTION_DEPTH)
-    );
-    const anchorB = getConnectionAnchorWorld(
-      infoB,
-      conn.id,
-      planB,
-      vecScale(conn.dirB, infoB.radius - TUBE_INSERTION_DEPTH)
-    );
-    const tubeLength = vecDistance(anchorA, anchorB);
-    if (tubeLength < MIN_TUBE_LENGTH) continue;
-
-    const halfLen = tubeLength / 2;
-
-    // Build tube in canonical orientation: along X, centred at origin
-    let csg = CSG.fromTriangles(
-      buildTubeTriangles(-halfLen, 0, 0, halfLen, 0, 0, KIT_TUBE_RADIUS, KIT_TUBE_SEGMENTS)
-    );
-
-    // Shave an integrated crown into the tube, then engrave the label into it.
-    const cutSolids = [];
-    const flatLayout = getTubeFlatLayout(tubeLength);
-    if (flatLayout) {
-      cutSolids.push(buildTubeFlatTrimCSG(flatLayout));
-
-      const labelLayout = computeLabelLayout(labelText, flatLayout);
-      if (labelLayout) {
-        cutSolids.push(buildLabelTextCSG(labelText, labelLayout));
-      }
-    }
-
-    if (cutSolids.length) {
-      csg = csg.subtract(unionAllCSG(cutSolids));
-    }
-
-    // Already in print orientation (tube along X, label faces +Z up)
-    const triangles = placeTrianglesOnBuildPlate(csg.toTriangles());
+    const triangles = placeTrianglesOnBuildPlate(built.csg.toTriangles());
     const stlBuffer = trianglesToBinarySTL(triangles);
+    const fileLabel = built.labelRanks.map(rank => padRank(rank)).join('-');
+    if (!fileLabel) continue;
 
-    const fileRankA = padRank(labelRankA);
-    const fileRankB = padRank(labelRankB);
-    tubesFolder.file(`${fileRankA}-${fileRankB}.stl`, stlBuffer);
+    tubesFolder.file(`${fileLabel}.stl`, stlBuffer);
     tubeCount += 1;
   }
 
