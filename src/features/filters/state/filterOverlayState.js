@@ -68,10 +68,9 @@ const DENSITY_MESH_CONFIG = {
   cubes: [
     { prop: 'tcMesh', scene: 'tc' }
   ],
-  lines: [
-    { prop: 'line', scene: 'globe' }
-  ],
+  lines: [],
   extra: [
+    { prop: 'globeLines', scene: 'globe' },
     { prop: 'textureMesh', scene: 'moll' }
   ]
 };
@@ -116,9 +115,7 @@ function addDensityToScenes(overlay, scenes) {
   overlay.cubesData.forEach(cell => {
     normalizedScenes.tc?.add(cell.tcMesh);
   });
-  overlay.adjacentLines.forEach(obj => {
-    normalizedScenes.globe?.add(obj.line);
-  });
+  if (overlay.globeLines) normalizedScenes.globe?.add(overlay.globeLines);
   normalizedScenes.moll?.add(overlay.textureMesh);
 }
 
