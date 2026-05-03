@@ -3,7 +3,7 @@
  * Provides updateDerivedOverlays() as the main entry point called each filter cycle.
  */
 import { initIsolationFilter, updateIsolationFilter } from '../../isolation/isolationOverlay.js';
-import { initDensityFilter, updateDensityFilter, getEffectiveDensityGridSize } from '../../density/densityOverlay.js';
+import { initDensityFilter, updateDensityFilter } from '../../density/densityOverlay.js';
 import { disposeObject3D } from '../../../render/engine/renderUtils.js';
 
 let isolationOverlay = null;
@@ -68,9 +68,10 @@ const DENSITY_MESH_CONFIG = {
   cubes: [
     { prop: 'tcMesh', scene: 'tc' }
   ],
-  lines: [],
+  lines: [
+    { prop: 'line', scene: 'globe' }
+  ],
   extra: [
-    { prop: 'globeLines', scene: 'globe' },
     { prop: 'textureMesh', scene: 'moll' }
   ]
 };
@@ -115,7 +116,9 @@ function addDensityToScenes(overlay, scenes) {
   overlay.cubesData.forEach(cell => {
     normalizedScenes.tc?.add(cell.tcMesh);
   });
-  if (overlay.globeLines) normalizedScenes.globe?.add(overlay.globeLines);
+  overlay.adjacentLines.forEach(obj => {
+    normalizedScenes.globe?.add(obj.line);
+  });
   normalizedScenes.moll?.add(overlay.textureMesh);
 }
 
@@ -148,11 +151,7 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
 
   // --- Density overlay ---
   if (filters.enableDensityFilter) {
-    // Apply the same safety clamp the overlay constructor uses, otherwise
-    // a clamped gridSize would mismatch every frame and trigger an infinite
-    // rebuild loop (which is what historically caused WebGL CONTEXT_LOST).
-    const requestedGridSize = computeAdaptiveGridSize(filters.densityGridSize);
-    const gridSize = getEffectiveDensityGridSize(requestedGridSize, filters.maxDistance);
+    const gridSize = computeAdaptiveGridSize(filters.densityGridSize);
 
     if (needsRebuild(densityOverlay, filters, gridSize)) {
       removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG, normalizedScenes);

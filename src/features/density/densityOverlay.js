@@ -2,83 +2,36 @@
 import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import {
   getGreatCirclePoints,
-  getMollweideLambda0
+  cachedRadToMollweide,
+  getMollweideLambda0,
+  splitMollweideWrap,
+  vectorToRaDecRad,
+  radToMollweide
 } from '../../shared/geometryUtils.js';
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { lightenColor } from './densityColorScale.js';
+import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../../render/engine/renderUtils.js';
 import { populateCellDistanceCaches, sumWeightedDistancesWithinRadius } from '../../shared/cellDistanceCache.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
 
-// Pre-allocated reusable objects to avoid per-cell allocations in hot loops.
+// Pre-allocated reusable objects to avoid per-cell allocations in hot loops
 const _tempColor = new THREE.Color();
 const _tempColorA = new THREE.Color();
-const _lineColor = new THREE.Color();
-
-// Hard upper bound on the number of grid cells the density overlay may build.
-// Guards against pathological combinations of maxDistance and tiny gridSize.
-const DENSITY_MAX_CELLS = 4000;
-const DENSITY_MIN_GRID_SIZE = 0.1;
-
-// The previous implementation created one THREE.Line + geometry + material per
-// adjacent cell pair. At default settings that was ~13k WebGL objects in one
-// toggle, enough to trigger CONTEXT_LOST on Intel/ANGLE. The replacement below
-// keeps adjacent pairs as plain JS data and renders all visible globe lines as
-// one merged LineSegments object.
-const DENSITY_MAX_ADJACENT_PAIRS = 30000;
-const DENSITY_MAX_RENDERED_LINE_PAIRS = 8000;
-const DENSITY_GLOBE_LINE_SEGMENTS = 8;
-
-function clampGridSizeForBounds(gridSize, maxDistance) {
-  const safeMax = Math.max(0, parseFloat(maxDistance) || 0);
-  let safeGrid = Math.max(DENSITY_MIN_GRID_SIZE, parseFloat(gridSize) || DENSITY_MIN_GRID_SIZE);
-  if (safeMax <= 0) return safeGrid;
-
-  let cellsPerAxis = Math.floor((2 * safeMax) / safeGrid) + 1;
-  let estimated = cellsPerAxis * cellsPerAxis * cellsPerAxis;
-  while (estimated > DENSITY_MAX_CELLS && safeGrid < safeMax) {
-    safeGrid *= 1.25;
-    cellsPerAxis = Math.floor((2 * safeMax) / safeGrid) + 1;
-    estimated = cellsPerAxis * cellsPerAxis * cellsPerAxis;
-  }
-  return safeGrid;
-}
 
 class DensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2) {
     this.minDistance = parseFloat(minDistance);
     this.maxDistance = parseFloat(maxDistance);
-    const clampedGrid = clampGridSizeForBounds(gridSize, this.maxDistance);
-    if (clampedGrid !== gridSize) {
-      console.warn(
-        `[DensityGridOverlay] gridSize ${gridSize} would produce too many cells for maxDistance ${this.maxDistance}; clamped to ${clampedGrid.toFixed(3)} (cap: ${DENSITY_MAX_CELLS} cells).`
-      );
-    }
-
-    this.gridSize = clampedGrid;
+    this.gridSize = gridSize;
     this.cubesData = [];
-    this.adjacentLines = []; // data only: { cell1, cell2, points }
+    this.adjacentLines = [];
     this.maxDensity = 0;
-    this.mollLineWidth = 30;
+    this.mollLineWidth = 30; // width of connection lines on the Mollweide map
     this.opacityFactor = 1.0;
     this.fadePower = 1.0;
     this.revision = 0;
 
-    this.cellGeometry = new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize);
-
-    this.globeLines = new THREE.LineSegments(
-      new THREE.BufferGeometry(),
-      new THREE.LineBasicMaterial({
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.3,
-        depthWrite: false,
-        linewidth: 1
-      })
-    );
-    this.globeLines.renderOrder = 2;
-    this.globeLines.visible = false;
-
-    // Off-screen canvas for smooth Mollweide heatmap.
+    // Off-screen canvas for smooth Mollweide heatmap
     this.canvasWidth = HEATMAP_CANVAS_WIDTH;
     this.canvasHeight = HEATMAP_CANVAS_HEIGHT;
     this.canvas = document.createElement('canvas');
@@ -86,7 +39,6 @@ class DensityGridOverlay {
     this.canvas.height = this.canvasHeight;
     this.ctx = this.canvas.getContext('2d');
     if (!this.ctx) throw new Error('2D canvas context unavailable');
-
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.minFilter = THREE.LinearFilter;
     this.texture.magFilter = THREE.LinearFilter;
@@ -100,13 +52,12 @@ class DensityGridOverlay {
       mat
     );
     this.textureMesh.renderOrder = 2;
-    this._heatmapRevision = -1;
+    this._heatmapRevision = -1; // tracks last drawn revision to avoid redundant redraws
   }
 
   createGrid(stars) {
     const halfExt = Math.ceil(this.maxDistance / this.gridSize) * this.gridSize;
     this.cubesData = [];
-
     for (let x = -halfExt; x <= halfExt; x += this.gridSize) {
       for (let y = -halfExt; y <= halfExt; y += this.gridSize) {
         for (let z = -halfExt; z <= halfExt; z += this.gridSize) {
@@ -118,33 +69,41 @@ class DensityGridOverlay {
           const distFromCenter = posTC.length();
           if (distFromCenter < this.minDistance || distFromCenter > this.maxDistance) continue;
 
+          const geometry = new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize);
           const material = new THREE.MeshBasicMaterial({
             color: 0xff0000,
             transparent: true,
             opacity: 0.0,
             depthWrite: false
           });
-          const cubeTC = new THREE.Mesh(this.cellGeometry, material);
+          const cubeTC = new THREE.Mesh(geometry, material);
           cubeTC.position.copy(posTC);
-          cubeTC.visible = false;
 
-          let globePos;
-          let ra;
-          let dec;
+          const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
+          const circleGeom = new THREE.CircleGeometry(this.gridSize / 2, 32);
+          const planeMat = material.clone();
+          planeMat.side = THREE.DoubleSide;
+          const squareGlobe = new THREE.Mesh(planeGeom, planeMat.clone());
+          const circleMoll = new THREE.Mesh(circleGeom, planeMat.clone());
+
+          let projectedPos;
+          let ra, dec;
           if (distFromCenter < 1e-6) {
-            globePos = new THREE.Vector3(0, 0, 0);
-            ra = 0;
-            dec = 0;
+            projectedPos = new THREE.Vector3(0, 0, 0);
+            circleMoll.position.set(0, 0, 0);
+            ra = 0; dec = 0;
           } else {
             ra = Math.atan2(-posTC.z, -posTC.x);
             dec = Math.asin(posTC.y / distFromCenter);
-            globePos = new THREE.Vector3(
-              -GLOBE_RADIUS * Math.cos(dec) * Math.cos(ra),
-               GLOBE_RADIUS * Math.sin(dec),
-              -GLOBE_RADIUS * Math.cos(dec) * Math.sin(ra)
+            const radius = GLOBE_RADIUS;
+            projectedPos = new THREE.Vector3(
+              -radius * Math.cos(dec) * Math.cos(ra),
+               radius * Math.sin(dec),
+              -radius * Math.cos(dec) * Math.sin(ra)
             );
+            const projMoll = cachedRadToMollweide(ra, dec, GLOBE_RADIUS, getMollweideLambda0());
+            circleMoll.position.copy(projMoll);
           }
-
           let theta = dec;
           for (let i = 0; i < MOLLWEIDE_MAX_ITERATIONS; i++) {
             const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
@@ -152,23 +111,34 @@ class DensityGridOverlay {
             theta -= delta;
             if (Math.abs(delta) < EPSILON) break;
           }
+          const cosT = Math.cos(theta);
+          const sinT = Math.sin(theta);
+          const mollXFactor = (2 * 100 / Math.PI) * cosT;
+          const mollY = 100 * sinT;
+          squareGlobe.position.copy(projectedPos);
+          const nrm = projectedPos.clone().normalize();
+          let right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), nrm);
+          if (right.lengthSq() < 1e-6) right.set(1,0,0);
+          right.normalize();
+          const upVec = new THREE.Vector3().crossVectors(nrm, right).normalize();
+          const mat4 = new THREE.Matrix4().makeBasis(right, upVec, nrm);
+          squareGlobe.setRotationFromMatrix(mat4);
 
           const cell = {
             tcMesh: cubeTC,
+            globeMesh: squareGlobe,
+            mollweideMesh: circleMoll,
             tcPos: posTC,
-            globePos,
             grid: {
               ix: Math.round(x / this.gridSize),
               iy: Math.round(y / this.gridSize),
               iz: Math.round(z / this.gridSize)
             },
             active: false,
-            color: new THREE.Color(0xffffff),
-            opacity: 0,
             raRad: ra,
             decRad: dec,
-            mollXFactor: (2 * 100 / Math.PI) * Math.cos(theta),
-            mollY: 100 * Math.sin(theta),
+            mollXFactor: mollXFactor,
+            mollY: mollY,
             density: 0
           };
           cell.id = this.cubesData.length;
@@ -196,9 +166,9 @@ class DensityGridOverlay {
     this.adjacentLines = [];
     const cellMap = new Map();
     this.cubesData.forEach(cell => {
-      cellMap.set(`${cell.grid.ix},${cell.grid.iy},${cell.grid.iz}`, cell);
+      const key = `${cell.grid.ix},${cell.grid.iy},${cell.grid.iz}`;
+      cellMap.set(key, cell);
     });
-
     const directions = [];
     for (let dx = -1; dx <= 1; dx++) {
       for (let dy = -1; dy <= 1; dy++) {
@@ -210,55 +180,44 @@ class DensityGridOverlay {
         }
       }
     }
-
-    const estimatedPairs = directions.length * this.cubesData.length;
-    if (estimatedPairs > DENSITY_MAX_ADJACENT_PAIRS) {
-      console.warn(
-        `[DensityGridOverlay] Skipping adjacent-line generation: estimated ${estimatedPairs} pair lines exceeds cap ${DENSITY_MAX_ADJACENT_PAIRS}.`
-      );
-      return;
-    }
-
-    for (const dir of directions) {
-      for (const cell of this.cubesData) {
-        const neighbor = cellMap.get(`${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`);
-        if (!neighbor) continue;
-        const points = getGreatCirclePoints(cell.globePos, neighbor.globePos, GLOBE_RADIUS, DENSITY_GLOBE_LINE_SEGMENTS);
-        this.adjacentLines.push({ cell1: cell, cell2: neighbor, points });
-      }
-    }
-  }
-
-  updateGlobeLines() {
-    const positions = [];
-    const colors = [];
-    let renderedPairs = 0;
-
-    for (const obj of this.adjacentLines) {
-      const { cell1, cell2, points } = obj;
-      if (!cell1.active || !cell2.active) continue;
-      if (renderedPairs >= DENSITY_MAX_RENDERED_LINE_PAIRS) break;
-
-      _lineColor.copy(cell1.color).lerp(cell2.color, 0.5);
-      for (let i = 0; i < points.length - 1; i++) {
-        const a = points[i];
-        const b = points[i + 1];
-        positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
-        colors.push(_lineColor.r, _lineColor.g, _lineColor.b, _lineColor.r, _lineColor.g, _lineColor.b);
-      }
-      renderedPairs += 1;
-    }
-
-    const oldGeometry = this.globeLines.geometry;
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    this.globeLines.geometry = geometry;
-    oldGeometry?.dispose?.();
-
-    this.globeLines.material.opacity = 0.3 * this.opacityFactor;
-    this.globeLines.material.linewidth = Math.max(1, this.mollLineWidth / 15);
-    this.globeLines.visible = positions.length > 0;
+    directions.forEach(dir => {
+      this.cubesData.forEach(cell => {
+        const neighborKey = `${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`;
+        if (cellMap.has(neighborKey)) {
+          const neighbor = cellMap.get(neighborKey);
+          const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
+          const positions = [];
+          const mollPts = getGreatCirclePoints(cell.globeMesh.position,
+            neighbor.globeMesh.position, 100, 16).map(v => {
+              const { ra, dec } = vectorToRaDecRad(v, 100);
+              return radToMollweide(ra, dec, 100, getMollweideLambda0());
+            });
+          const pointsM = [];
+          for (let m = 0; m < mollPts.length - 1; m++) {
+            const segsM = splitMollweideWrap(mollPts[m], mollPts[m + 1]);
+            segsM.forEach(([s,e]) => { pointsM.push(s, e); });
+          }
+          const geomM = buildWideLineGeometry(pointsM, this.mollLineWidth);
+          for (let i = 0; i < points.length; i++) {
+            positions.push(points[i].x, points[i].y, points[i].z);
+          }
+          const geom = new THREE.BufferGeometry();
+          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+          const mat = new THREE.LineBasicMaterial({
+            color: 0xff0000,
+            transparent: true,
+            opacity: 0.3,
+            linewidth: 2
+          });
+          const line = new THREE.Line(geom, mat);
+          line.renderOrder = 2;
+          const mollMat = createWideLineMaterial(0xff0000, { fadePower: this.fadePower });
+          const lineM = new THREE.Mesh(geomM, mollMat);
+          lineM.renderOrder = 2;
+          this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
+        }
+      });
+    });
   }
 
   drawHeatmap(lambda0 = getMollweideLambda0(), force = false) {
@@ -266,24 +225,21 @@ class DensityGridOverlay {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
     ctx.filter = 'blur(8px)';
-
     const xScale = this.canvasWidth / 400;
     const yScale = this.canvasHeight / 200;
-    const safeMaxDistance = Math.max(EPSILON, this.maxDistance);
-
     this.cubesData.forEach(cell => {
       if (!cell.active) return;
       const lambda = minimalRADifference(cell.raRad - lambda0);
       const x = cell.mollXFactor * lambda;
       const y = cell.mollY;
-      const ratio = cell.tcPos.length() / safeMaxDistance;
+      const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       const width = this.gridSize * scale * xScale;
       const height = this.gridSize * scale * yScale;
       const px = (x + 200) * xScale;
       const py = (100 - y) * yScale;
-      const col = cell.color;
-      const alpha = cell.opacity;
+      const col = cell.mollweideMesh.material.color;
+      const alpha = cell.mollweideMesh.material.opacity;
       const r = Math.round(col.r * 255);
       const g = Math.round(col.g * 255);
       const b = Math.round(col.b * 255);
@@ -297,7 +253,6 @@ class DensityGridOverlay {
       ctx.arc(px, py, radius, 0, Math.PI * 2);
       ctx.fill();
     });
-
     ctx.filter = 'none';
     this.texture.needsUpdate = true;
     this._heatmapRevision = this.revision;
@@ -311,40 +266,40 @@ class DensityGridOverlay {
     const opacitySlider = document.getElementById('density-opacity-slider');
     const widthSlider = document.getElementById('density-line-width-slider');
     const fadeSlider = document.getElementById('density-fade-slider');
-
     const radius = radiusSlider ? parseFloat(radiusSlider.value) : 10;
     const tolerance = tolSlider ? parseInt(tolSlider.value) : 0;
     const bottomPct = bottomSlider ? parseFloat(bottomSlider.value) : 10;
     const topPct = topSlider ? parseFloat(topSlider.value) : 10;
     this.opacityFactor = opacitySlider ? parseFloat(opacitySlider.value) / 100 : 1.0;
-    if (widthSlider) this.mollLineWidth = parseFloat(widthSlider.value);
+    let newWidth = this.mollLineWidth;
+    if (widthSlider) newWidth = parseFloat(widthSlider.value);
     if (fadeSlider) this.fadePower = parseFloat(fadeSlider.value);
 
-    if (this.cubesData.length === 0) {
-      this.updateGlobeLines();
-      this.drawHeatmap(getMollweideLambda0(), true);
-      return;
+    if (newWidth !== this.mollLineWidth) {
+      this.mollLineWidth = newWidth;
+      this.refreshMollweide();
     }
 
     this.cubesData.forEach(cell => {
       this.computeCellDensity(cell, radius, tolerance);
     });
 
-    const sorted = this.cubesData.map(c => c.density).sort((a, b) => a - b);
+    const densities = this.cubesData.map(c => c.density);
+    const sorted = densities.slice().sort((a, b) => a - b);
     const bottomIdx = Math.floor(sorted.length * (bottomPct / 100));
     const topIdx = Math.floor(sorted.length * (1 - topPct / 100));
     const minD = sorted[0];
     const maxD = sorted[sorted.length - 1];
     const bottomThr = sorted[Math.min(bottomIdx, sorted.length - 1)];
     const topThr = sorted[Math.max(topIdx, 0)];
-    const safeMaxDistance = Math.max(EPSILON, this.maxDistance);
-    const lightRedBase = lightenColor(new THREE.Color(0xff0000), 0.4);
+
+    // Pre-compute the lightened red color once for the top-density branch
+    const _lightRedBase = lightenColor(new THREE.Color(0xff0000), 0.4);
 
     this.cubesData.forEach(cell => {
-      const ratio = cell.tcPos.length() / safeMaxDistance;
+      const ratio = cell.tcPos.length() / this.maxDistance;
       const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       let alpha = 0;
-
       if (cell.density <= bottomThr) {
         const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
         _tempColor.set(0x0000ff).lerp(_tempColorA.set(0xffffff), t);
@@ -352,7 +307,7 @@ class DensityGridOverlay {
         cell.active = true;
       } else if (cell.density >= topThr) {
         const t = topThr === maxD ? 0 : (cell.density - topThr) / (maxD - topThr);
-        _tempColor.copy(lightRedBase).lerp(_tempColorA.set(0xff0000), t);
+        _tempColor.copy(_lightRedBase).lerp(_tempColorA.set(0xff0000), t);
         alpha = 0.5 * t;
         cell.active = true;
       } else {
@@ -361,22 +316,66 @@ class DensityGridOverlay {
       }
 
       const finalAlpha = alpha * this.opacityFactor;
-      cell.color.copy(_tempColor);
-      cell.opacity = finalAlpha;
       cell.tcMesh.material.opacity = finalAlpha;
+      cell.globeMesh.material.opacity = finalAlpha;
+      cell.mollweideMesh.material.opacity = finalAlpha;
       cell.tcMesh.material.color.copy(_tempColor);
+      cell.globeMesh.material.color.copy(_tempColor);
+      cell.mollweideMesh.material.color.copy(_tempColor);
       cell.tcMesh.visible = cell.active;
-      cell.tcMesh.scale.set(scale, scale, scale);
+      cell.globeMesh.scale.set(scale, scale, 1);
+      cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
     });
-
-    this.updateGlobeLines();
+    this.adjacentLines.forEach(obj => {
+      const { line, lineM, cell1, cell2 } = obj;
+      const visible = cell1.active && cell2.active;
+      line.visible = visible;
+      lineM.visible = visible;
+      if (visible) {
+        _tempColor.copy(cell1.tcMesh.material.color).lerp(cell2.tcMesh.material.color, 0.5);
+        const avgOpacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
+        line.material.color.copy(_tempColor);
+        line.material.opacity = avgOpacity;
+        line.material.vertexColors = false;
+        line.material.needsUpdate = true;
+        lineM.material.uniforms.color.value.copy(_tempColor);
+        lineM.material.uniforms.opacityFactor.value = avgOpacity;
+        lineM.material.uniforms.fadePower.value = this.fadePower;
+        lineM.material.needsUpdate = true;
+      }
+    });
     this.revision += 1;
     this.drawHeatmap(getMollweideLambda0());
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
+    this.cubesData.forEach(cell => {
+      const lambda = minimalRADifference(cell.raRad - lambda0);
+      cell.mollweideMesh.position.set(
+        cell.mollXFactor * lambda,
+        cell.mollY,
+        0
+      );
+    });
+    this.adjacentLines.forEach(obj => {
+      const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
+        obj.cell2.globeMesh.position, 100, 16).map(v => {
+          const { ra, dec } = vectorToRaDecRad(v, 100);
+          return radToMollweide(ra, dec, 100, lambda0);
+        });
+      const pts = [];
+      for (let i = 0; i < gcPts.length - 1; i++) {
+        const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
+        segs.forEach(([s,e]) => { pts.push(s, e); });
+      }
+      obj.lineM.geometry.dispose();
+      obj.lineM.geometry = buildWideLineGeometry(pts, this.mollLineWidth);
+      if (obj.lineM.material.uniforms.fadePower) {
+        obj.lineM.material.uniforms.fadePower.value = this.fadePower;
+      }
+    });
     this.revision += 1;
-    this.drawHeatmap(lambda0, true);
+    this.drawHeatmap(lambda0, true); // force redraw since Mollweide positions changed
   }
 }
 
@@ -384,10 +383,6 @@ export function initDensityFilter(minDistance, maxDistance, starArray, gridSize 
   const overlay = new DensityGridOverlay(minDistance, maxDistance, gridSize);
   overlay.createGrid(starArray);
   return overlay;
-}
-
-export function getEffectiveDensityGridSize(gridSize, maxDistance) {
-  return clampGridSizeForBounds(gridSize, maxDistance);
 }
 
 export function updateDensityFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll) {
