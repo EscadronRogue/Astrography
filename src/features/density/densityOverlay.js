@@ -3,14 +3,10 @@ import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/thr
 import {
   getGreatCirclePoints,
   cachedRadToMollweide,
-  getMollweideLambda0,
-  splitMollweideWrap,
-  vectorToRaDecRad,
-  radToMollweide
+  getMollweideLambda0
 } from '../../shared/geometryUtils.js';
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { lightenColor } from './densityColorScale.js';
-import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../../render/engine/renderUtils.js';
 import { populateCellDistanceCaches, sumWeightedDistancesWithinRadius } from '../../shared/cellDistanceCache.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
 
@@ -22,7 +18,19 @@ const _tempColorA = new THREE.Color();
 // Guards against pathological combinations of maxDistance and a tiny gridSize,
 // which would otherwise allocate millions of THREE meshes/materials/geometries
 // and cause WebGL CONTEXT_LOST from GPU memory exhaustion.
-const DENSITY_MAX_CELLS = 20000;
+//
+// The real bottleneck is the adjacent-line meshes built in
+// computeAdjacentLines(): each cell pairs with up to 13 neighbors, producing
+// one THREE.Line per pair on the globe scene. So total globe-line draw calls
+// grow as ~13 * cells, and combined with the per-cell box meshes on the True
+// Coordinates scene, total geometry/material allocations explode quickly. We
+// cap the (estimated) bounding-box cell count so the spherical-volume fraction
+// (~52%) stays in the safe range even in worst cases.
+const DENSITY_MAX_CELLS = 4000;
+// Independent hard cap on adjacent-line objects. If the projected line count
+// would exceed this, line generation is skipped entirely (cells still render).
+// 13 directions * cells. Default settings (~1240 cells) produce ~16k lines.
+const DENSITY_MAX_ADJACENT_LINES = 30000;
 const DENSITY_MIN_GRID_SIZE = 0.1;
 
 function clampGridSizeForBounds(gridSize, maxDistance) {
@@ -209,26 +217,29 @@ class DensityGridOverlay {
         }
       }
     }
+
+    // Estimate worst-case pair count and bail out before allocating a single
+    // THREE object if it would exceed the safety cap. Each pair produces one
+    // THREE.Line on the globe scene.
+    const estimatedPairs = directions.length * this.cubesData.length;
+    if (estimatedPairs > DENSITY_MAX_ADJACENT_LINES) {
+      console.warn(
+        `[DensityGridOverlay] Skipping adjacent-line generation: estimated ${estimatedPairs} pair lines exceeds cap ${DENSITY_MAX_ADJACENT_LINES}. Increase Grid Subdivision or reduce Maximum Distance to enable connection lines.`
+      );
+      return;
+    }
+
     directions.forEach(dir => {
       this.cubesData.forEach(cell => {
         const neighborKey = `${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`;
         if (cellMap.has(neighborKey)) {
           const neighbor = cellMap.get(neighborKey);
           const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
-          const positions = [];
-          const mollPts = getGreatCirclePoints(cell.globeMesh.position,
-            neighbor.globeMesh.position, 100, 16).map(v => {
-              const { ra, dec } = vectorToRaDecRad(v, 100);
-              return radToMollweide(ra, dec, 100, getMollweideLambda0());
-            });
-          const pointsM = [];
-          for (let m = 0; m < mollPts.length - 1; m++) {
-            const segsM = splitMollweideWrap(mollPts[m], mollPts[m + 1]);
-            segsM.forEach(([s,e]) => { pointsM.push(s, e); });
-          }
-          const geomM = buildWideLineGeometry(pointsM, this.mollLineWidth);
+          const positions = new Array(points.length * 3);
           for (let i = 0; i < points.length; i++) {
-            positions.push(points[i].x, points[i].y, points[i].z);
+            positions[i * 3] = points[i].x;
+            positions[i * 3 + 1] = points[i].y;
+            positions[i * 3 + 2] = points[i].z;
           }
           const geom = new THREE.BufferGeometry();
           geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -240,10 +251,14 @@ class DensityGridOverlay {
           });
           const line = new THREE.Line(geom, mat);
           line.renderOrder = 2;
-          const mollMat = createWideLineMaterial(0xff0000, { fadePower: this.fadePower });
-          const lineM = new THREE.Mesh(geomM, mollMat);
-          lineM.renderOrder = 2;
-          this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
+          // NOTE: the Mollweide wide-line mesh (`lineM`) is intentionally not
+          // built here. addDensityToScenes() never adds it to any scene (only
+          // `line` goes into the globe scene, and `textureMesh` is the heatmap
+          // canvas plane on Mollweide). Allocating thousands of orphan
+          // ShaderMaterials + BufferGeometries was the dominant memory hog
+          // and contributed to WebGL CONTEXT_LOST. update()/refreshMollweide()
+          // still iterate adjacentLines but now skip the lineM branches.
+          this.adjacentLines.push({ line, cell1: cell, cell2: neighbor });
         }
       });
     });
@@ -356,10 +371,9 @@ class DensityGridOverlay {
       cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
     });
     this.adjacentLines.forEach(obj => {
-      const { line, lineM, cell1, cell2 } = obj;
+      const { line, cell1, cell2 } = obj;
       const visible = cell1.active && cell2.active;
       line.visible = visible;
-      lineM.visible = visible;
       if (visible) {
         _tempColor.copy(cell1.tcMesh.material.color).lerp(cell2.tcMesh.material.color, 0.5);
         const avgOpacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
@@ -367,10 +381,6 @@ class DensityGridOverlay {
         line.material.opacity = avgOpacity;
         line.material.vertexColors = false;
         line.material.needsUpdate = true;
-        lineM.material.uniforms.color.value.copy(_tempColor);
-        lineM.material.uniforms.opacityFactor.value = avgOpacity;
-        lineM.material.uniforms.fadePower.value = this.fadePower;
-        lineM.material.needsUpdate = true;
       }
     });
     this.revision += 1;
@@ -386,23 +396,9 @@ class DensityGridOverlay {
         0
       );
     });
-    this.adjacentLines.forEach(obj => {
-      const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
-        obj.cell2.globeMesh.position, 100, 16).map(v => {
-          const { ra, dec } = vectorToRaDecRad(v, 100);
-          return radToMollweide(ra, dec, 100, lambda0);
-        });
-      const pts = [];
-      for (let i = 0; i < gcPts.length - 1; i++) {
-        const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
-        segs.forEach(([s,e]) => { pts.push(s, e); });
-      }
-      obj.lineM.geometry.dispose();
-      obj.lineM.geometry = buildWideLineGeometry(pts, this.mollLineWidth);
-      if (obj.lineM.material.uniforms.fadePower) {
-        obj.lineM.material.uniforms.fadePower.value = this.fadePower;
-      }
-    });
+    // Mollweide wide-line meshes (`lineM`) are no longer constructed; the
+    // heatmap canvas plane (`textureMesh`) is the only Mollweide artefact
+    // that needs refreshing here, and it is regenerated by drawHeatmap().
     this.revision += 1;
     this.drawHeatmap(lambda0, true); // force redraw since Mollweide positions changed
   }
