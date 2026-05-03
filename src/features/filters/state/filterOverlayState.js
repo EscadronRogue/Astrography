@@ -3,7 +3,7 @@
  * Provides updateDerivedOverlays() as the main entry point called each filter cycle.
  */
 import { initIsolationFilter, updateIsolationFilter } from '../../isolation/isolationOverlay.js';
-import { initDensityFilter, updateDensityFilter } from '../../density/densityOverlay.js';
+import { initDensityFilter, updateDensityFilter, getEffectiveDensityGridSize } from '../../density/densityOverlay.js';
 import { disposeObject3D } from '../../../render/engine/renderUtils.js';
 
 let isolationOverlay = null;
@@ -151,7 +151,11 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
 
   // --- Density overlay ---
   if (filters.enableDensityFilter) {
-    const gridSize = computeAdaptiveGridSize(filters.densityGridSize);
+    // Apply the same safety clamp the overlay constructor uses, otherwise
+    // a clamped gridSize would mismatch every frame and trigger an infinite
+    // rebuild loop (which is what historically caused WebGL CONTEXT_LOST).
+    const requestedGridSize = computeAdaptiveGridSize(filters.densityGridSize);
+    const gridSize = getEffectiveDensityGridSize(requestedGridSize, filters.maxDistance);
 
     if (needsRebuild(densityOverlay, filters, gridSize)) {
       removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG, normalizedScenes);

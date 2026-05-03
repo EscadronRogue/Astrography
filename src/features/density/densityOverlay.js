@@ -18,11 +18,40 @@ import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLAN
 const _tempColor = new THREE.Color();
 const _tempColorA = new THREE.Color();
 
+// Hard upper bound on the number of grid cells the density overlay may build.
+// Guards against pathological combinations of maxDistance and a tiny gridSize,
+// which would otherwise allocate millions of THREE meshes/materials/geometries
+// and cause WebGL CONTEXT_LOST from GPU memory exhaustion.
+const DENSITY_MAX_CELLS = 20000;
+const DENSITY_MIN_GRID_SIZE = 0.1;
+
+function clampGridSizeForBounds(gridSize, maxDistance) {
+  const safeMax = Math.max(0, parseFloat(maxDistance) || 0);
+  let safeGrid = Math.max(DENSITY_MIN_GRID_SIZE, parseFloat(gridSize) || DENSITY_MIN_GRID_SIZE);
+  if (safeMax <= 0) return safeGrid;
+  // Estimate cell count from a cubic bounding region of side 2*halfExt.
+  // We progressively double gridSize until the estimated total fits the cap.
+  let cellsPerAxis = Math.floor((2 * safeMax) / safeGrid) + 1;
+  let estimated = cellsPerAxis * cellsPerAxis * cellsPerAxis;
+  while (estimated > DENSITY_MAX_CELLS && safeGrid < safeMax) {
+    safeGrid *= 1.25;
+    cellsPerAxis = Math.floor((2 * safeMax) / safeGrid) + 1;
+    estimated = cellsPerAxis * cellsPerAxis * cellsPerAxis;
+  }
+  return safeGrid;
+}
+
 class DensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2) {
     this.minDistance = parseFloat(minDistance);
     this.maxDistance = parseFloat(maxDistance);
-    this.gridSize = gridSize;
+    const clampedGrid = clampGridSizeForBounds(gridSize, this.maxDistance);
+    if (clampedGrid !== gridSize) {
+      console.warn(
+        `[DensityGridOverlay] gridSize ${gridSize} would produce too many cells for maxDistance ${this.maxDistance}; clamped to ${clampedGrid.toFixed(3)} (cap: ${DENSITY_MAX_CELLS} cells).`
+      );
+    }
+    this.gridSize = clampedGrid;
     this.cubesData = [];
     this.adjacentLines = [];
     this.maxDensity = 0;
@@ -383,6 +412,16 @@ export function initDensityFilter(minDistance, maxDistance, starArray, gridSize 
   const overlay = new DensityGridOverlay(minDistance, maxDistance, gridSize);
   overlay.createGrid(starArray);
   return overlay;
+}
+
+/**
+ * Returns the gridSize the DensityGridOverlay would actually use given the
+ * requested gridSize and maxDistance, after applying the cell-count safety cap.
+ * Callers (e.g. needsRebuild) can use this to compare apples-to-apples and
+ * avoid triggering perpetual rebuilds when the constructor clamps the value.
+ */
+export function getEffectiveDensityGridSize(gridSize, maxDistance) {
+  return clampGridSizeForBounds(gridSize, maxDistance);
 }
 
 export function updateDensityFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll) {
