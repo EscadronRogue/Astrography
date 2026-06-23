@@ -1,4 +1,5 @@
 export const DEFAULT_OVERLAY_MAX_CELLS = 75000;
+export const CONSTRAINED_OVERLAY_MAX_CELLS = 16000;
 
 function normalizePositiveNumber(value, fallback) {
   const numeric = Number(value);
@@ -12,6 +13,36 @@ export function estimateOverlayGridCells(maxDistance, gridSize) {
   const halfExtent = Math.ceil(safeMaxDistance / safeGridSize) * safeGridSize;
   const axisCells = Math.floor((2 * halfExtent) / safeGridSize) + 1;
   return axisCells ** 3;
+}
+
+export function getRuntimeOverlayMaxCells(options = {}) {
+  const defaultMaxCells = Math.floor(normalizePositiveNumber(
+    options.defaultMaxCells,
+    DEFAULT_OVERLAY_MAX_CELLS
+  ));
+  const constrainedMaxCells = Math.floor(normalizePositiveNumber(
+    options.constrainedMaxCells,
+    CONSTRAINED_OVERLAY_MAX_CELLS
+  ));
+  const navigatorRef = options.navigatorRef ?? globalThis.navigator;
+  const windowRef = options.windowRef ?? globalThis.window;
+  const deviceMemory = Number(navigatorRef?.deviceMemory);
+  const hardwareConcurrency = Number(navigatorRef?.hardwareConcurrency);
+  const maxTouchPoints = Number(navigatorRef?.maxTouchPoints);
+  const viewportWidth = Number(windowRef?.innerWidth);
+  const isMobileUserAgentData = navigatorRef?.userAgentData?.mobile === true;
+
+  const isLowMemory = Number.isFinite(deviceMemory) && deviceMemory <= 4;
+  const isLowCore = Number.isFinite(hardwareConcurrency) && hardwareConcurrency <= 4;
+  const isNarrowTouch =
+    Number.isFinite(maxTouchPoints) &&
+    maxTouchPoints > 0 &&
+    Number.isFinite(viewportWidth) &&
+    viewportWidth <= 900;
+
+  return (isLowMemory || isLowCore || isNarrowTouch || isMobileUserAgentData)
+    ? Math.min(defaultMaxCells, constrainedMaxCells)
+    : defaultMaxCells;
 }
 
 export function getBudgetedOverlayGridSettings(minDistance, maxDistance, requestedGridSize, options = {}) {

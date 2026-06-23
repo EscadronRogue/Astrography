@@ -323,9 +323,7 @@ function initSliderSync() {
     'density-bottom-slider', 'density-bottom-number',
     'density-top-slider', 'density-top-number',
     'density-grid-slider', 'density-grid-number',
-    'density-opacity-slider', 'density-opacity-number',
-    'density-line-width-slider', 'density-line-width-number',
-    'density-fade-slider', 'density-fade-number'
+    'density-opacity-slider', 'density-opacity-number'
   ]);
   syncSliderPair('density-slider', 'density-number', 'density-value');
   bindDisplayOnlySlider('density-tolerance-slider', 'density-tolerance-value');
@@ -333,8 +331,6 @@ function initSliderSync() {
   syncSliderPair('density-top-slider', 'density-top-number', 'density-top-value');
   syncSliderPair('density-grid-slider', 'density-grid-number');
   syncSliderPair('density-opacity-slider', 'density-opacity-number', 'density-opacity-value');
-  syncSliderPair('density-line-width-slider', 'density-line-width-number');
-  syncSliderPair('density-fade-slider', 'density-fade-number');
 
   syncSliderPair('star-opacity-slider', 'star-opacity-number', 'star-opacity-value');
   syncSliderPair('star-name-opacity-slider', 'star-name-opacity-number', 'star-name-opacity-value');

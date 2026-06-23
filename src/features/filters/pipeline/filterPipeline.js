@@ -14,7 +14,7 @@ import { rebuildConstellationVisuals, refreshMollweideConstellationVisuals } fro
 import { getStarId } from '../../../shared/starUtils.js';
 import { getStarEquirectangularPosition } from '../../../shared/uvUtils.js';
 import { clamp01 } from '../../../shared/colorParsing.js';
-import { getBudgetedOverlayGridSettings } from '../../overlays/gridBudget.js';
+import { getBudgetedOverlayGridSettings, getRuntimeOverlayMaxCells } from '../../overlays/gridBudget.js';
 import {
   getFilterForm,
   getSelectedDustCloudFiles,
@@ -238,7 +238,12 @@ async function refreshCloudDensityOverlays(ctx, options) {
   }
 
   const files = getSelectedDustCloudFiles(options);
-  const gridSettings = getBudgetedOverlayGridSettings(options.minDistance, options.maxDistance, 2);
+  const gridSettings = getBudgetedOverlayGridSettings(
+    options.minDistance,
+    options.maxDistance,
+    2,
+    { maxCells: getRuntimeOverlayMaxCells() }
+  );
   const topologySignature = buildCloudDensitySignature(files, options, gridSettings);
   const renderSignature = buildCloudDensityRenderSignature(options);
   const canReuseOverlays =

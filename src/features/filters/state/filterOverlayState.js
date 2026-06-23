@@ -4,7 +4,7 @@
  */
 import { initIsolationFilter, updateIsolationFilter } from '../../isolation/isolationOverlay.js';
 import { initDensityFilter, updateDensityFilter } from '../../density/densityOverlay.js';
-import { getBudgetedOverlayGridSettings } from '../../overlays/gridBudget.js';
+import { getBudgetedOverlayGridSettings, getRuntimeOverlayMaxCells } from '../../overlays/gridBudget.js';
 import { disposeObject3D } from '../../../render/engine/renderUtils.js';
 
 function normalizeScenes(scenes = {}) {
@@ -160,13 +160,15 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
   const normalizedScenes = normalizeScenes(scenes);
   let isolationOverlay = overlayState.isolationOverlay ?? null;
   let densityOverlay = overlayState.densityOverlay ?? null;
+  const overlayBudgetOptions = { maxCells: getRuntimeOverlayMaxCells() };
 
   // --- Isolation overlay ---
   if (filters.enableIsolationFilter) {
     const gridSettings = getBudgetedOverlayGridSettings(
       filters.minDistance,
       filters.maxDistance,
-      computeAdaptiveGridSize(filters.isolationGridSize)
+      computeAdaptiveGridSize(filters.isolationGridSize),
+      overlayBudgetOptions
     );
     const { gridSize } = gridSettings;
 
@@ -188,7 +190,8 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
     const gridSettings = getBudgetedOverlayGridSettings(
       filters.minDistance,
       filters.maxDistance,
-      computeAdaptiveGridSize(filters.densityGridSize)
+      computeAdaptiveGridSize(filters.densityGridSize),
+      overlayBudgetOptions
     );
     const { gridSize } = gridSettings;
 

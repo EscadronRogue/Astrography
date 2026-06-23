@@ -41,7 +41,13 @@ import {
   getDustCloudSignature
 } from '../src/app/uvLayerSignatures.js';
 import { clamp01 as clampUvAlpha, createLayerCanvas as createUvLayerCanvas, rgbaFromHex as uvRgbaFromHex } from '../src/app/uvCanvasLayers.js';
-import { DEFAULT_OVERLAY_MAX_CELLS, estimateOverlayGridCells, getBudgetedOverlayGridSettings } from '../src/features/overlays/gridBudget.js';
+import {
+  CONSTRAINED_OVERLAY_MAX_CELLS,
+  DEFAULT_OVERLAY_MAX_CELLS,
+  estimateOverlayGridCells,
+  getBudgetedOverlayGridSettings,
+  getRuntimeOverlayMaxCells
+} from '../src/features/overlays/gridBudget.js';
 import {
   buildDistanceQueryIndex,
   getNearestCellDistance,
@@ -2889,6 +2895,22 @@ async function checkBehavioralInvariants() {
   assert(
     budgetedGrid.estimatedCellCount <= DEFAULT_OVERLAY_MAX_CELLS,
     'Overlay grid budget should keep estimated cells within the default budget'
+  );
+  assertEqual(
+    getRuntimeOverlayMaxCells({
+      navigatorRef: { deviceMemory: 4, hardwareConcurrency: 4, maxTouchPoints: 5 },
+      windowRef: { innerWidth: 390 }
+    }),
+    CONSTRAINED_OVERLAY_MAX_CELLS,
+    'Runtime overlay budget should lower the cell cap on constrained touch devices'
+  );
+  assertEqual(
+    getRuntimeOverlayMaxCells({
+      navigatorRef: { deviceMemory: 16, hardwareConcurrency: 12, maxTouchPoints: 0 },
+      windowRef: { innerWidth: 1440 }
+    }),
+    DEFAULT_OVERLAY_MAX_CELLS,
+    'Runtime overlay budget should preserve the desktop cell cap'
   );
 
   const cacheCell = { tcPos: { x: 0, y: 0, z: 0 } };
