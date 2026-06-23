@@ -1,11 +1,17 @@
+import { getViewpointStarId } from '../../../shared/viewpoint.js';
+import { getAngularProjectionStars } from './filterProjectionStars.js';
+
 export function createDefaultFilterResult(allStars) {
+  const safeStars = Array.isArray(allStars) ? allStars : [];
+  const angularProjectionStars = getAngularProjectionStars(safeStars, getViewpointStarId());
+
   return {
-    currentFilteredStars: allStars,
-    stellarClassCandidates: allStars,
+    currentFilteredStars: safeStars,
+    stellarClassCandidates: safeStars,
     currentConnections: [],
-    currentGlobeFilteredStars: allStars,
+    currentGlobeFilteredStars: angularProjectionStars,
     currentGlobeConnections: [],
-    currentMollweideFilteredStars: allStars,
+    currentMollweideFilteredStars: angularProjectionStars,
     currentMollweideConnections: [],
     showConstellationBoundaries: false,
     showConstellationNames: false,
@@ -44,6 +50,7 @@ export function createDefaultFilterResult(allStars) {
     mollweideBorderWidth: 1,
     mollweideBorderOpacity: 1.0,
     planeOpacity: 0.5,
+    selectedDustClouds: [],
     enableIsolationLabeling: false,
     enableDensityLabeling: false,
     minDistance: 0,
@@ -65,6 +72,8 @@ export function createDefaultFilterResult(allStars) {
     stellarClassLabelSizes: {},
     isolationOverlay: null,
     densityOverlay: null,
-    cloudDensityOverlays: []
+    cloudDensityOverlays: [],
+    cloudDensitySignature: '',
+    cloudDensityRenderSignature: ''
   };
 }

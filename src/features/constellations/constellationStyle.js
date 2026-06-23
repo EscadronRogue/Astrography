@@ -1,4 +1,5 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
+import { clamp01, hexToRgbaString } from '../../shared/colorParsing.js';
 
 export const CONSTELLATION_LINE_COLOR = 0x5e98ff;
 export const CONSTELLATION_LINE_RGBA = { r: 94, g: 152, b: 255 };
@@ -12,12 +13,12 @@ export function makeConstellationLineColor() {
 }
 
 export function constellationLineCss(opacity = 1) {
-  const a = Math.max(0, Math.min(1, opacity));
+  const a = clamp01(opacity);
   return `rgba(${CONSTELLATION_LINE_RGBA.r}, ${CONSTELLATION_LINE_RGBA.g}, ${CONSTELLATION_LINE_RGBA.b}, ${a})`;
 }
 
 export function applyCanvasConstellationLabelStyle(ctx, opacity = 1) {
-  const a = Math.max(0, Math.min(1, opacity));
+  const a = clamp01(opacity);
   ctx.font = '300 18px "Cormorant Garamond", "Times New Roman", serif';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'center';
@@ -26,11 +27,12 @@ export function applyCanvasConstellationLabelStyle(ctx, opacity = 1) {
   ctx.lineWidth = 1.2;
   ctx.strokeStyle = withAlpha(CONSTELLATION_LABEL_STROKE, Math.min(1, a * 0.95));
   ctx.fillStyle = withAlpha(CONSTELLATION_LABEL_FILL, a);
-  ctx.shadowColor = `rgba(${CONSTELLATION_LINE_RGBA.r}, ${CONSTELLATION_LINE_RGBA.g}, ${CONSTELLATION_LINE_RGBA.b}, ${Math.min(1, a * 0.65)})`;
+  ctx.shadowColor = `rgba(${CONSTELLATION_LINE_RGBA.r}, ${CONSTELLATION_LINE_RGBA.g}, ${CONSTELLATION_LINE_RGBA.b}, ${clamp01(a * 0.65)})`;
   ctx.shadowBlur = 2;
 }
 
 export function createConstellationLabelCanvas(text, opacity = 1, fontSize = 300) {
+  const a = clamp01(opacity);
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2D canvas context unavailable');
@@ -46,9 +48,9 @@ export function createConstellationLabelCanvas(text, opacity = 1, fontSize = 300
   ctx.lineJoin = 'round';
   ctx.miterLimit = 2;
   ctx.lineWidth = Math.max(1, Math.ceil(fontSize * 0.028));
-  ctx.strokeStyle = withAlpha(CONSTELLATION_LABEL_STROKE, Math.min(1, opacity * 0.95));
-  ctx.fillStyle = withAlpha(CONSTELLATION_LABEL_FILL, opacity);
-  ctx.shadowColor = `rgba(${CONSTELLATION_LINE_RGBA.r}, ${CONSTELLATION_LINE_RGBA.g}, ${CONSTELLATION_LINE_RGBA.b}, ${Math.min(1, opacity * 0.65)})`;
+  ctx.strokeStyle = withAlpha(CONSTELLATION_LABEL_STROKE, clamp01(a * 0.95));
+  ctx.fillStyle = withAlpha(CONSTELLATION_LABEL_FILL, a);
+  ctx.shadowColor = `rgba(${CONSTELLATION_LINE_RGBA.r}, ${CONSTELLATION_LINE_RGBA.g}, ${CONSTELLATION_LINE_RGBA.b}, ${clamp01(a * 0.65)})`;
   ctx.shadowBlur = Math.ceil(fontSize * 0.02);
 
   const x = canvas.width / 2;
@@ -89,18 +91,5 @@ function measureConstellationLabelCanvasBox(text, fontSize) {
 }
 
 function withAlpha(hexColor, opacity) {
-  const { r, g, b } = hexToRgb(hexColor);
-  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, opacity))})`;
-}
-
-function hexToRgb(hexColor) {
-  const normalized = String(hexColor).replace('#', '');
-  const value = normalized.length === 3
-    ? normalized.split('').map(c => c + c).join('')
-    : normalized.padEnd(6, '0').slice(0, 6);
-  return {
-    r: parseInt(value.slice(0, 2), 16),
-    g: parseInt(value.slice(2, 4), 16),
-    b: parseInt(value.slice(4, 6), 16)
-  };
+  return hexToRgbaString(hexColor, opacity);
 }

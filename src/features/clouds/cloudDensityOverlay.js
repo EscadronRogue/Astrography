@@ -1,5 +1,5 @@
 // Cloud-density overlay rendering migrated from the legacy cloud-density filter module.
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { cachedRadToMollweide, getMollweideLambda0 } from '../../shared/geometryUtils.js';
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { lightenColor } from '../density/densityColorScale.js';
@@ -7,9 +7,60 @@ import { getDustCloudColor } from './dustCloudColors.js';
 import { loadCachedCloudData } from './cloudDataCache.js';
 import { uniqueColorFromName, getCloudNameFromFileUrl } from '../../shared/colorUtils.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
+import { disposeObject3D } from '../../render/engine/renderUtils.js';
+import { InstancedCellLayer, createCellVisualState } from '../overlays/instancedCellLayer.js';
+import { normalizeCloudStarName } from './cloudNameUtils.js';
 
 // Pre-allocated reusable color to avoid per-cell allocations
 const _tempCloudColor = new THREE.Color();
+
+function getBucketKey(x, y, z) {
+  return `${x}|${y}|${z}`;
+}
+
+function buildPositionBuckets(positions, bucketSize) {
+  const buckets = new Map();
+  positions.forEach(pos => {
+    const bx = Math.floor(pos.x / bucketSize);
+    const by = Math.floor(pos.y / bucketSize);
+    const bz = Math.floor(pos.z / bucketSize);
+    const key = getBucketKey(bx, by, bz);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = [];
+      buckets.set(key, bucket);
+    }
+    bucket.push(pos);
+  });
+  return buckets;
+}
+
+function findNearestDistanceSquaredFromBuckets(pos, buckets, radius, bucketSize) {
+  const centerX = Math.floor(pos.x / bucketSize);
+  const centerY = Math.floor(pos.y / bucketSize);
+  const centerZ = Math.floor(pos.z / bucketSize);
+  const bucketRange = Math.ceil(radius / bucketSize);
+  let minD2 = Infinity;
+
+  for (let bx = centerX - bucketRange; bx <= centerX + bucketRange; bx += 1) {
+    for (let by = centerY - bucketRange; by <= centerY + bucketRange; by += 1) {
+      for (let bz = centerZ - bucketRange; bz <= centerZ + bucketRange; bz += 1) {
+        const bucket = buckets.get(getBucketKey(bx, by, bz));
+        if (!bucket) continue;
+        for (let i = 0; i < bucket.length; i++) {
+          const cloudPos = bucket[i];
+          const dx = pos.x - cloudPos.x;
+          const dy = pos.y - cloudPos.y;
+          const dz = pos.z - cloudPos.z;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < minD2) minD2 = d2;
+        }
+      }
+    }
+  }
+
+  return minD2;
+}
 
 class CloudDensityGridOverlay {
   constructor(minDistance, maxDistance, gridSize = 2, cloudName = '') {
@@ -19,6 +70,9 @@ class CloudDensityGridOverlay {
     this.cubesData = [];
     this.color = uniqueColorFromName(cloudName);
     this.opacityFactor = 1.0;
+    this.tcCellLayer = null;
+    this.globeCellLayer = null;
+    this.mollweideCellLayer = null;
 
     this.canvasWidth = HEATMAP_CANVAS_WIDTH;
     this.canvasHeight = HEATMAP_CANVAS_HEIGHT;
@@ -42,17 +96,6 @@ class CloudDensityGridOverlay {
   createGrid() {
     const halfExt = Math.ceil(this.maxDistance / this.gridSize) * this.gridSize;
     this.cubesData = [];
-    const cubeGeometry = new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize);
-    const planeGeometry = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
-    const circleGeometry = new THREE.CircleGeometry(this.gridSize / 2, 32);
-    const baseMaterial = new THREE.MeshBasicMaterial({
-      color: this.color,
-      transparent: true,
-      opacity: 0.0,
-      depthWrite: false
-    });
-    const planeBase = baseMaterial.clone();
-    planeBase.side = THREE.DoubleSide;
     for (let x = -halfExt; x <= halfExt; x += this.gridSize) {
       for (let y = -halfExt; y <= halfExt; y += this.gridSize) {
         for (let z = -halfExt; z <= halfExt; z += this.gridSize) {
@@ -64,11 +107,9 @@ class CloudDensityGridOverlay {
           const distFromCenter = posTC.length();
           if (distFromCenter < this.minDistance || distFromCenter > this.maxDistance) continue;
 
-          const cubeTC = new THREE.Mesh(cubeGeometry, baseMaterial.clone());
-          cubeTC.position.copy(posTC);
-
-          const squareGlobe = new THREE.Mesh(planeGeometry, planeBase.clone());
-          const circleMoll = new THREE.Mesh(circleGeometry, planeBase.clone());
+          const cubeTC = createCellVisualState(posTC, this.color, 0);
+          const squareGlobe = createCellVisualState(null, this.color, 0);
+          const circleMoll = createCellVisualState(null, this.color, 0);
           let projectedPos;
           let ra, dec;
           if (distFromCenter < 1e-6) {
@@ -121,20 +162,47 @@ class CloudDensityGridOverlay {
         }
       }
     }
+
+    this.tcCellLayer = new InstancedCellLayer({
+      geometry: new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize),
+      count: this.cubesData.length
+    });
+    this.globeCellLayer = new InstancedCellLayer({
+      geometry: new THREE.PlaneGeometry(this.gridSize, this.gridSize),
+      count: this.cubesData.length,
+      side: THREE.DoubleSide
+    });
+    this.mollweideCellLayer = new InstancedCellLayer({
+      geometry: new THREE.CircleGeometry(this.gridSize / 2, 32),
+      count: this.cubesData.length,
+      side: THREE.DoubleSide
+    });
+  }
+
+  getSceneObjects() {
+    return {
+      tc: this.tcCellLayer ? [this.tcCellLayer.mesh] : [],
+      globe: this.globeCellLayer ? [this.globeCellLayer.mesh] : [],
+      moll: [
+        ...(this.mollweideCellLayer ? [this.mollweideCellLayer.mesh] : []),
+        this.textureMesh
+      ]
+    };
+  }
+
+  dispose() {
+    this.tcCellLayer?.dispose();
+    this.globeCellLayer?.dispose();
+    this.mollweideCellLayer?.dispose();
+    disposeObject3D(this.textureMesh);
   }
 
   update(positions, sceneTC, sceneGlobe, sceneMoll, radius) {
     const rad2 = radius * radius;
+    const bucketSize = Math.max(radius, this.gridSize, 1);
+    const buckets = buildPositionBuckets(positions, bucketSize);
     this.cubesData.forEach(cell => {
-      let minD2 = Infinity;
-      for (let i = 0; i < positions.length; i++) {
-        const pos = positions[i];
-        const dx = cell.tcPos.x - pos.x;
-        const dy = cell.tcPos.y - pos.y;
-        const dz = cell.tcPos.z - pos.z;
-        const d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 < minD2) minD2 = d2;
-      }
+      const minD2 = findNearestDistanceSquaredFromBuckets(cell.tcPos, buckets, radius, bucketSize);
       if (minD2 <= rad2) {
         const minD = Math.sqrt(minD2);
         const t = minD / radius;
@@ -160,11 +228,21 @@ class CloudDensityGridOverlay {
         cell.mollweideMesh.visible = false;
         cell.active = false;
       }
-      if (sceneTC && !cell.tcMesh.parent) sceneTC.add(cell.tcMesh);
-      if (sceneGlobe && !cell.globeMesh.parent) sceneGlobe.add(cell.globeMesh);
-      if (sceneMoll && !cell.mollweideMesh.parent) sceneMoll.add(cell.mollweideMesh);
     });
-    if (sceneMoll && !sceneMoll.children.includes(this.textureMesh)) {
+    this.tcCellLayer?.update(this.cubesData, cell => cell.tcMesh);
+    this.globeCellLayer?.update(this.cubesData, cell => cell.globeMesh);
+    this.mollweideCellLayer?.update(this.cubesData, cell => cell.mollweideMesh);
+
+    if (sceneTC && this.tcCellLayer && !this.tcCellLayer.mesh.parent) {
+      sceneTC.add(this.tcCellLayer.mesh);
+    }
+    if (sceneGlobe && this.globeCellLayer && !this.globeCellLayer.mesh.parent) {
+      sceneGlobe.add(this.globeCellLayer.mesh);
+    }
+    if (sceneMoll && this.mollweideCellLayer && !this.mollweideCellLayer.mesh.parent) {
+      sceneMoll.add(this.mollweideCellLayer.mesh);
+    }
+    if (sceneMoll && !this.textureMesh.parent) {
       sceneMoll.add(this.textureMesh);
     }
     this.drawHeatmap(getMollweideLambda0());
@@ -221,10 +299,10 @@ class CloudDensityGridOverlay {
 
 export async function createCloudDensityOverlay(minD, maxD, gridSize, cloudFile, allStars) {
   const data = await loadCachedCloudData(cloudFile);
-  const names = new Set(data.map(d => d['Star Name']));
+  const names = new Set(data.map(d => normalizeCloudStarName(d['Star Name'] || d.starName || d.name)));
   const positions = [];
   allStars.forEach(star => {
-    if (names.has(star.Common_name_of_the_star)) {
+    if (names.has(normalizeCloudStarName(star.Common_name_of_the_star))) {
       const pos = star.truePosition ? star.truePosition : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate);
       positions.push(pos.clone());
     }

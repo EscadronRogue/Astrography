@@ -1,11 +1,13 @@
 // Isolation overlay implementation migrated from the legacy isolation filter module.
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from '../density/densityColorScale.js';
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, vectorToRaDec } from '../../shared/geometryUtils.js';
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries, loadConstellationFullNames } from '../constellations/constellationRenderer.js';
 import { populateCellDistanceCaches } from '../../shared/cellDistanceCache.js';
+import { disposeObject3D } from '../../render/engine/renderUtils.js';
+import { InstancedCellLayer, createCellVisualState } from '../overlays/instancedCellLayer.js';
 
 // Helper to create line materials that support color and opacity gradients.
 function createGradientLineMaterial() {
@@ -48,11 +50,14 @@ class IsolationGridOverlay {
     this.regionLabelsGroupGlobe = new THREE.Group();
     this.regionLabelsGroupMoll = new THREE.Group();
     this.revision = 0;
+    this.tcCellLayer = null;
+    this.mollweideCellLayer = null;
   }
 
   createGrid(stars) {
     const halfExt = Math.ceil(this.maxDistance / this.gridSize) * this.gridSize;
     this.cubesData = [];
+
     for (let x = -halfExt; x <= halfExt; x += this.gridSize) {
       for (let y = -halfExt; y <= halfExt; y += this.gridSize) {
         for (let z = -halfExt; z <= halfExt; z += this.gridSize) {
@@ -65,22 +70,9 @@ class IsolationGridOverlay {
           // Only include cells within the specified distance range.
           if (distFromCenter < this.minDistance || distFromCenter > this.maxDistance) continue;
           
-          // Create the True Coordinates mesh (cube)
-          const geometry = new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize);
-          const material = new THREE.MeshBasicMaterial({
-            color: 0x0000ff, // Blue color for Isolation Filter
-            transparent: true,
-            opacity: 1.0,
-            depthWrite: false
-          });
-          const cubeTC = new THREE.Mesh(geometry, material);
-          cubeTC.position.copy(posTC);
-
-          const planeGeom = new THREE.PlaneGeometry(this.gridSize, this.gridSize);
-          const planeMat = material.clone();
-          planeMat.side = THREE.DoubleSide;
-          const squareGlobe = new THREE.Mesh(planeGeom, planeMat.clone());
-          const squareMoll = new THREE.Mesh(planeGeom.clone(), planeMat.clone());
+          const cubeTC = createCellVisualState(posTC, 0x0000ff, 1);
+          const squareGlobe = createCellVisualState(null, 0x0000ff, 1);
+          const squareMoll = createCellVisualState(null, 0x0000ff, 1);
           let projectedPos;
           let ra, dec;
           if (distFromCenter < 1e-6) {
@@ -141,8 +133,40 @@ class IsolationGridOverlay {
         }
       }
     }
+    this.tcCellLayer = new InstancedCellLayer({
+      geometry: new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize),
+      count: this.cubesData.length
+    });
+    this.mollweideCellLayer = new InstancedCellLayer({
+      geometry: new THREE.PlaneGeometry(this.gridSize, this.gridSize),
+      count: this.cubesData.length,
+      side: THREE.DoubleSide
+    });
     populateCellDistanceCaches(this.cubesData, this.getExtendedStars(stars));
     this.computeAdjacentLines();
+  }
+
+  getSceneObjects() {
+    return {
+      tc: this.tcCellLayer ? [this.tcCellLayer.mesh] : [],
+      globe: this.adjacentLines.map(obj => obj.line),
+      moll: [
+        ...(this.mollweideCellLayer ? [this.mollweideCellLayer.mesh] : []),
+        ...this.adjacentLines.map(obj => obj.lineM)
+      ]
+    };
+  }
+
+  dispose() {
+    this.tcCellLayer?.dispose();
+    this.mollweideCellLayer?.dispose();
+    this.adjacentLines.forEach(obj => {
+      disposeObject3D(obj.line);
+      disposeObject3D(obj.lineM);
+    });
+    disposeObject3D(this.regionLabelsGroupTC);
+    disposeObject3D(this.regionLabelsGroupGlobe);
+    disposeObject3D(this.regionLabelsGroupMoll);
   }
 
   getExtendedStars(stars) {
@@ -239,12 +263,9 @@ class IsolationGridOverlay {
   }
 
   // Updated update() method now accepts sceneTC, sceneGlobe, and sceneMoll to re-add new meshes.
-  update(stars, sceneTC, sceneGlobe, sceneMoll) {
-    // Safely obtain slider values: if not found, use defaults.
-    const isolationSlider = document.getElementById('isolation-slider');
-    const toleranceSlider = document.getElementById('isolation-tolerance-slider');
-    const isolationVal = isolationSlider ? parseFloat(isolationSlider.value) : 7;
-    const toleranceVal = toleranceSlider ? parseInt(toleranceSlider.value) : 0;
+  update(stars, sceneTC, sceneGlobe, sceneMoll, options = {}) {
+    const isolationVal = Number.isFinite(options.isolation) ? options.isolation : 7;
+    const toleranceVal = Number.isFinite(options.isolationTolerance) ? options.isolationTolerance : 0;
 
     // Compute isolation distances and min/max for color/opacity scaling
     const isoDistances = [];
@@ -297,6 +318,8 @@ class IsolationGridOverlay {
         0
       );
     });
+    this.tcCellLayer?.update(this.cubesData, cell => cell.tcMesh);
+    this.mollweideCellLayer?.update(this.cubesData, cell => cell.mollweideMesh);
 
     // Update the adjacent lines.
     this.adjacentLines.forEach(obj => {
@@ -415,6 +438,7 @@ class IsolationGridOverlay {
       obj.lineM.geometry.attributes.color.needsUpdate = true;
       obj.lineM.geometry.attributes.alpha.needsUpdate = true;
     });
+    this.mollweideCellLayer?.update(this.cubesData, cell => cell.mollweideMesh);
     this.revision += 1;
   }
 
@@ -515,8 +539,7 @@ export function initIsolationFilter(minDistance, maxDistance, starArray, gridSiz
   return overlay;
 }
 
-export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll) {
+export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll, options = {}) {
   if (!overlay) return;
-  overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll);
+  overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll, options);
 }
-

@@ -88,7 +88,7 @@ export function handleEditPointerUp(manager) {
 export function setupLabelEditor(manager) {
   const button = document.getElementById('toggle-label-editor');
   if (!button) return;
-  button.addEventListener('click', () => {
+  manager.addManagedEventListener(button, 'click', () => {
     manager.labelEditMode = !manager.labelEditMode;
     button.classList.toggle('active', manager.labelEditMode);
     if (manager.labelEditMode) {
@@ -105,7 +105,7 @@ export function setupLabelEditor(manager) {
     }
     manager.requestRender();
   });
-  manager.mollweideMap.canvas.addEventListener('pointerdown', manager.onEditPointerDown);
-  manager.mollweideMap.canvas.addEventListener('pointermove', manager.onEditPointerMove);
-  window.addEventListener('pointerup', manager.onEditPointerUp);
+  manager.addManagedEventListener(manager.mollweideMap.canvas, 'pointerdown', manager.onEditPointerDown);
+  manager.addManagedEventListener(manager.mollweideMap.canvas, 'pointermove', manager.onEditPointerMove);
+  manager.addManagedEventListener(window, 'pointerup', manager.onEditPointerUp);
 }

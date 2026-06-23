@@ -2,6 +2,8 @@
  * @file Caching layer for dust cloud data files.
  * Provides bounded LRU cache with response validation.
  */
+import { fetchWithTimeout } from '../../data/fetchWithTimeout.js';
+import { validateCloudData } from '../../data/dataValidation.js';
 
 /** Maximum number of cloud data files to cache. */
 const MAX_CACHE_SIZE = 50;
@@ -25,17 +27,12 @@ export async function loadCachedCloudData(fileUrl) {
     return cached;
   }
 
-  const response = await fetch(fileUrl);
+  const response = await fetchWithTimeout(fileUrl);
   if (!response.ok) {
     throw new Error(`Failed to load cloud data from ${fileUrl}: ${response.status} ${response.statusText}`);
   }
 
-  const data = await response.json();
-
-  // Validate response shape
-  if (!Array.isArray(data)) {
-    throw new Error(`Invalid cloud data from ${fileUrl}: expected an array, got ${typeof data}`);
-  }
+  const data = validateCloudData(await response.json(), fileUrl);
 
   // Evict least-recently-used entry if cache is full
   if (dataCache.size >= MAX_CACHE_SIZE) {

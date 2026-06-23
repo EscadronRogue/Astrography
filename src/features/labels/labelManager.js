@@ -1,5 +1,6 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { interpolateColor } from '../../shared/colorUtils.js';
+import { clamp01, normalizeHexColor } from '../../shared/colorParsing.js';
 import { getDoubleSidedLabelMaterial } from '../density/densityColorScale.js';
 import { disposeObject3D, stableAngleFromString } from '../../render/engine/renderUtils.js';
 import { getStarEquirectangularPosition } from '../../shared/uvUtils.js';
@@ -164,7 +165,7 @@ export class LabelManager {
 
   createOrUpdateLabel(star) {
     const cacheKey = getStarCacheKey(star);
-    const starColor = star.displayColor || '#888888';
+    const starColor = normalizeHexColor(star.displayColor, '#888888');
     const displayName = star.displayName || '';
     const cached = this.labelCache.get(cacheKey) || {};
     const labelSize = star.displayLabelSize !== undefined ? star.displayLabelSize : star.displaySize;
@@ -276,7 +277,7 @@ export class LabelManager {
     }
 
     this.updateLineGeometry(star, starPos, labelPos, offset, labelObj, lineObj);
-    lineObj.material.color.set(star.displayColor || '#888888');
+    lineObj.material.color.set(starColor);
     this.markTrueCoordinateLayoutDirty();
   }
 
@@ -390,10 +391,11 @@ export class LabelManager {
   }
 
   setLabelOpacity(opacity) {
-    this.labelOpacity = opacity;
+    const safeOpacity = clamp01(opacity);
+    this.labelOpacity = safeOpacity;
     this.sprites.forEach(sprite => {
-      if (sprite.material.uniforms?.opacity) sprite.material.uniforms.opacity.value = opacity;
-      else if (sprite.material.opacity !== undefined) sprite.material.opacity = opacity;
+      if (sprite.material.uniforms?.opacity) sprite.material.uniforms.opacity.value = safeOpacity;
+      else if (sprite.material.opacity !== undefined) sprite.material.opacity = safeOpacity;
       sprite.material.needsUpdate = true;
     });
   }

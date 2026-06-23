@@ -1,10 +1,12 @@
 // Connection-pair computation migrated from the legacy connections filter module.
 
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { splitMollweideWrap, greatCircleToMollweide, getMollweideLambda0 } from '../../shared/geometryUtils.js';
 import { createWideLineMaterial, buildWideLineGeometry } from '../../render/engine/renderUtils.js';
 import { getStarId, getStarTruePosition } from '../../shared/starUtils.js';
 import { GLOBE_RADIUS, DEFAULT_STAR_COLOR, CIRCLE_SEGMENTS } from '../../shared/constants.js';
+import { createMeasuredTextCanvas } from '../../shared/textCanvas.js';
+import { clamp01, normalizeHexColor } from '../../shared/colorParsing.js';
 import { getConnectionLineParams } from './connectionSettings.js';
 
 const GC_SEGMENTS = CIRCLE_SEGMENTS;
@@ -17,6 +19,10 @@ function getPosition(star) {
   const position = getStarTruePosition(star);
   star[STAR_POSITION_CACHE_KEY] = position;
   return position;
+}
+
+function getStarThreeColor(star, fallback = DEFAULT_STAR_COLOR) {
+  return new THREE.Color(normalizeHexColor(star?.displayColor, fallback));
 }
 
 /**
@@ -211,8 +217,8 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
       );
       segments.forEach(([s1, s2]) => {
         positions.push(s1.x, s1.y, s1.z, s2.x, s2.y, s2.z);
-        const cA = new THREE.Color(starA.displayColor || DEFAULT_STAR_COLOR);
-        const cB = new THREE.Color(starB.displayColor || DEFAULT_STAR_COLOR);
+        const cA = getStarThreeColor(starA);
+        const cB = getStarThreeColor(starB);
         colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
       });
       return;
@@ -224,8 +230,8 @@ export function mergeConnectionLines(connectionObjs, mapType = 'TrueCoordinates'
     positions.push(posA.x, posA.y, posA.z);
     positions.push(posB.x, posB.y, posB.z);
 
-    const cA = new THREE.Color(starA.displayColor || DEFAULT_STAR_COLOR);
-    const cB = new THREE.Color(starB.displayColor || DEFAULT_STAR_COLOR);
+    const cA = getStarThreeColor(starA);
+    const cB = getStarThreeColor(starB);
     colors.push(cA.r, cA.g, cA.b, cB.r, cB.g, cB.b);
   });
 
@@ -275,8 +281,8 @@ export function updateMollweideConnectionSegments(lineSegs) {
     const p2 = pair.starB.spherePosition;
     if (!p1 || !p2) return;
     const pts = greatCircleToMollweide(p1, p2, GLOBE_RADIUS, segsCount, getMollweideLambda0());
-    const cA = new THREE.Color(pair.starA.displayColor || DEFAULT_STAR_COLOR);
-    const cB = new THREE.Color(pair.starB.displayColor || DEFAULT_STAR_COLOR);
+    const cA = getStarThreeColor(pair.starA);
+    const cB = getStarThreeColor(pair.starB);
     for (let j = 0; j < pts.length - 1; j++) {
       const segs = splitMollweideWrap(pts[j], pts[j + 1]);
       segs.forEach(([s, e]) => {
@@ -309,19 +315,12 @@ function createDistanceLabelSprite(distance, color, opacity, scaleFactor = 1) {
   const baseFontSize = 72;
   const { connectionLabelSize } = getConnectionLineParams();
   const fontSize = baseFontSize * connectionLabelSize;
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  ctx.font = `${fontSize}px Oswald`;
-  const metrics = ctx.measureText(distanceText);
-  const padX = 10;
-  const padY = 5;
-  canvas.width = metrics.width + padX * 2;
-  canvas.height = fontSize + padY * 2;
-  ctx.font = `${fontSize}px Oswald`;
-  ctx.fillStyle = `#${color.getHexString()}`;
-  ctx.textBaseline = 'middle';
-  ctx.fillText(distanceText, padX, canvas.height / 2);
+  const { canvas } = createMeasuredTextCanvas(distanceText, {
+    font: `${fontSize}px Oswald`,
+    paddingX: 10,
+    paddingY: 5,
+    fillStyle: `#${color.getHexString()}`
+  });
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
   const spriteMat = new THREE.SpriteMaterial({
@@ -340,6 +339,7 @@ function createDistanceLabelSprite(distance, color, opacity, scaleFactor = 1) {
 
 export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5) {
   if (!pairs || pairs.length === 0) return [];
+  const safeOpacityFactor = clamp01(opacityFactor);
 
   const distances = pairs.map(p => p.distance);
   const largestPairDistance = Math.max(...distances);
@@ -349,8 +349,8 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
   pairs.forEach(pair => {
     const { starA, starB, distance } = pair;
     let posA, posB;
-    const c1 = new THREE.Color(starA.displayColor || DEFAULT_STAR_COLOR);
-    const c2 = new THREE.Color(starB.displayColor || DEFAULT_STAR_COLOR);
+    const c1 = getStarThreeColor(starA);
+    const c2 = getStarThreeColor(starB);
     if (mapType === 'Globe') {
       if (!starA.spherePosition || !starB.spherePosition) return;
       posA = starA.spherePosition.clone();
@@ -359,7 +359,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
       if (!starA.mollweidePosition || !starB.mollweidePosition) return;
       const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
       const width = THREE.MathUtils.lerp(getConnectionLineParams().connectionMaxWidth, 1, normDist);
-      const opacity = THREE.MathUtils.lerp(1.0, 0.3, normDist) * opacityFactor;
+      const opacity = clamp01(THREE.MathUtils.lerp(1.0, 0.3, normDist) * safeOpacityFactor);
       const segments = splitMollweideWrap(
         starA.mollweidePosition,
         starB.mollweidePosition
@@ -431,7 +431,7 @@ export function createConnectionLines(stars, pairs, mapType, opacityFactor = 0.5
     const normDist = (distance - smallestPairDistance) / (largestPairDistance - smallestPairDistance || 1);
     const lineThickness = THREE.MathUtils.lerp(getConnectionLineParams().connectionMaxWidth, 1, normDist);
     const lineOpacityScale = THREE.MathUtils.lerp(1.0, 0.3, normDist);
-    const lineOpacity = lineOpacityScale * opacityFactor;
+      const lineOpacity = clamp01(lineOpacityScale * safeOpacityFactor);
 
     let points;
     if (mapType === 'Globe') {

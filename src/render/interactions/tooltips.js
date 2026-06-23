@@ -91,8 +91,7 @@ function populateTooltip(tooltip, star) {
     link.href = safeUrl;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    link.style.color = '#ff6f61';
-    link.style.textDecoration = 'underline';
+    link.className = 'tooltip-catalog-link';
     link.textContent = 'Catalog';
     catalogRow.appendChild(link);
   } else {
@@ -103,12 +102,11 @@ function populateTooltip(tooltip, star) {
   // --- Viewpoint button ---
   const vpRow = document.createElement('div');
   vpRow.id = 'tooltip-viewpoint';
-  vpRow.style.marginTop = '6px';
-  vpRow.style.textAlign = 'center';
+  vpRow.className = 'tooltip-action-row';
 
   const vpBtn = document.createElement('button');
   vpBtn.type = 'button';
-  vpBtn.style.cssText = 'background:#ff6f61;color:#fff;border:none;border-radius:3px;padding:4px 10px;cursor:pointer;font-size:12px;font-family:inherit;width:100%;';
+  vpBtn.className = 'tooltip-action tooltip-action-primary';
 
   const currentVpId = getViewpointStarId();
   const thisStarId = getStarId(star);
@@ -119,8 +117,6 @@ function populateTooltip(tooltip, star) {
   if (isThisStar || isSolAndDefault) {
     vpBtn.textContent = 'Currently viewing from here';
     vpBtn.disabled = true;
-    vpBtn.style.opacity = '0.5';
-    vpBtn.style.cursor = 'default';
   } else {
     vpBtn.textContent = isSolTarget ? 'View from Sol' : 'View from here';
     vpBtn.addEventListener('click', (e) => {
@@ -139,7 +135,7 @@ function populateTooltip(tooltip, star) {
   if (!isDefaultViewpoint() && !isSolTarget) {
     const solBtn = document.createElement('button');
     solBtn.type = 'button';
-    solBtn.style.cssText = 'background:#444;color:#ccc;border:1px solid #666;border-radius:3px;padding:3px 8px;cursor:pointer;font-size:11px;font-family:inherit;width:100%;margin-top:4px;';
+    solBtn.className = 'tooltip-action tooltip-action-secondary';
     solBtn.textContent = 'Return to Sol';
     solBtn.addEventListener('click', (e) => {
       e.stopPropagation();

@@ -1,8 +1,12 @@
 import { parseRA, parseDec, degToRad } from '../../shared/geometryUtils.js';
+import { fetchWithTimeout } from '../../data/fetchWithTimeout.js';
+import { validateConstellationCenters, validateConstellationFullNames } from '../../data/dataValidation.js';
 
 let boundaryData = [];
 let centerData = [];
 let fullNameData = null;
+let boundaryDataPromise = null;
+let centerDataPromise = null;
 
 function parseBoundaryRA(value) {
   if (typeof value === 'string' && value.includes(':')) {
@@ -21,61 +25,71 @@ function parseBoundaryDec(value) {
 }
 
 export async function loadConstellationBoundaries() {
-  try {
-    const resp = await fetch('constellation_boundaries.txt');
-    if (!resp.ok) throw new Error(`Failed to load constellation_boundaries.txt: ${resp.status}`);
-    const raw = await resp.text();
-    const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    boundaryData = [];
-    for (const line of lines) {
-      const parts = line.split(/\s+/);
-      if (parts.length < 8) continue;
-      const ra1 = parseBoundaryRA(parts[2]);
-      const dec1 = parseBoundaryDec(parts[3]);
-      const ra2 = parseBoundaryRA(parts[4]);
-      const dec2 = parseBoundaryDec(parts[5]);
-      if (![ra1, dec1, ra2, dec2].every(Number.isFinite)) continue;
-      boundaryData.push({
-        ra1,
-        dec1,
-        ra2,
-        dec2,
-        const1: parts[6],
-        const2: parts[7],
-        key1: `${parts[2]}|${parts[3]}`,
-        key2: `${parts[4]}|${parts[5]}`
-      });
+  if (boundaryDataPromise) return boundaryDataPromise;
+  boundaryDataPromise = (async () => {
+    try {
+      const resp = await fetchWithTimeout('constellation_boundaries.txt');
+      if (!resp.ok) throw new Error(`Failed to load constellation_boundaries.txt: ${resp.status}`);
+      const raw = await resp.text();
+      const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      boundaryData = [];
+      for (const line of lines) {
+        const parts = line.split(/\s+/);
+        if (parts.length < 8) continue;
+        const ra1 = parseBoundaryRA(parts[2]);
+        const dec1 = parseBoundaryDec(parts[3]);
+        const ra2 = parseBoundaryRA(parts[4]);
+        const dec2 = parseBoundaryDec(parts[5]);
+        if (![ra1, dec1, ra2, dec2].every(Number.isFinite)) continue;
+        boundaryData.push({
+          ra1,
+          dec1,
+          ra2,
+          dec2,
+          const1: parts[6],
+          const2: parts[7],
+          key1: `${parts[2]}|${parts[3]}`,
+          key2: `${parts[4]}|${parts[5]}`
+        });
+      }
+    } catch (err) {
+      console.error('Error loading constellation boundaries:', err);
+      boundaryData = [];
     }
-  } catch (err) {
-    console.error('Error loading constellation boundaries:', err);
-    boundaryData = [];
-  }
+    return boundaryData;
+  })();
+  return boundaryDataPromise;
 }
 
 export async function loadConstellationCenters() {
-  try {
-    const resp = await fetch('constellation_center.json');
-    if (!resp.ok) throw new Error(`Failed to load constellation_center.json: ${resp.status}`);
-    const raw = await resp.json();
-    centerData = raw.map(entry => ({
-      ra: degToRad(entry.raDeg),
-      dec: degToRad(entry.decDeg),
-      name: entry.name,
-      abbrev: entry.abbrev || null,
-      epoch: entry.epoch || null
-    }));
-  } catch (err) {
-    console.error('Error loading constellation centers:', err);
-    centerData = [];
-  }
+  if (centerDataPromise) return centerDataPromise;
+  centerDataPromise = (async () => {
+    try {
+      const resp = await fetchWithTimeout('constellation_center.json');
+      if (!resp.ok) throw new Error(`Failed to load constellation_center.json: ${resp.status}`);
+      const raw = validateConstellationCenters(await resp.json(), 'constellation_center.json');
+      centerData = raw.map(entry => ({
+        ra: degToRad(entry.raDeg),
+        dec: degToRad(entry.decDeg),
+        name: entry.name,
+        abbrev: entry.abbrev || null,
+        epoch: entry.epoch || null
+      }));
+    } catch (err) {
+      console.error('Error loading constellation centers:', err);
+      centerData = [];
+    }
+    return centerData;
+  })();
+  return centerDataPromise;
 }
 
 export async function loadConstellationFullNames() {
   if (fullNameData) return fullNameData;
   try {
-    const resp = await fetch('constellation_full_names.json');
+    const resp = await fetchWithTimeout('constellation_full_names.json');
     if (!resp.ok) throw new Error(`Failed to load constellation full names: ${resp.status}`);
-    fullNameData = await resp.json();
+    fullNameData = validateConstellationFullNames(await resp.json(), 'constellation_full_names.json');
   } catch (err) {
     console.error('Error loading constellation full names:', err);
     fullNameData = {};

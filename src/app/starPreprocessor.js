@@ -4,7 +4,7 @@
  * Also handles reprojection when the viewpoint star changes.
  * Extracted from createApp.js bootstrapApp() to keep bootstrap thin.
  */
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../vendor/three.js';
 import { getStarId, getStarCoordinates, getStarTruePosition, getStarGlobePosition, precalcMollweideData } from '../shared/starUtils.js';
 import { updateMollweidePosition } from './mollweideUpdater.js';
 import { cachedRadToSphere } from '../shared/geometryUtils.js';

@@ -1,69 +1,24 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../vendor/three.js';
 import { createConnectionLines, createWideLineMaterial, mergeConnectionLines } from '../features/connections/connectionPairs.js';
-import { buildWideLineGeometry, disposeObject3D } from '../render/engine/renderUtils.js';
+import { buildWideLineGeometry, clearObject3DChildren, disposeObject3D } from '../render/engine/renderUtils.js';
 import { getConnectionLineParams } from '../features/connections/connectionSettings.js';
 import { ThreeDControls, TwoDControls } from '../render/interactions/cameraControls.js';
 import { LabelManager } from '../features/labels/labelManager.js';
 import { getMollweideLambda0, setMollweideLambda0, splitMollweideWrap } from '../shared/geometryUtils.js';
 import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { createMollweideBackground, createMollweideBorder, createMollweideMask, debounce } from './mapDecorations.js';
-import { hashString, mixHash } from '../shared/hashUtils.js';
 import { STAR_TEXTURE_SIZE, CONNECTION_LABEL_BASE_FONT } from '../shared/constants.js';
 import { getViewpointStarId } from '../shared/viewpoint.js';
-
-function getConnectionPairKey(pair) {
-  return pair?.pairKey || `${pair?.starA?.starId || 'a'}|${pair?.starB?.starId || 'b'}`;
-}
-
-function haveSameKeys(left, right) {
-  if (left.length !== right.length) return false;
-  for (let index = 0; index < left.length; index++) {
-    if (left[index] !== right[index]) return false;
-  }
-  return true;
-}
-
-function buildConnectionVisualSignature(connectionObjs) {
-  let hash = 2166136261;
-  // Include viewpoint in signature so connections rebuild on viewpoint change
-  hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
-  connectionObjs.forEach(pair => {
-    hash = mixHash(hash, hashString(getConnectionPairKey(pair)));
-    hash = mixHash(hash, hashString(pair.starA?.displayColor || ''));
-    hash = mixHash(hash, hashString(pair.starB?.displayColor || ''));
-  });
-  return `${connectionObjs.length}:${hash}`;
-}
-
-let _cachedBounds = null;
-let _cachedBoundsLength = -1;
-
-function getConnectionDistanceBounds(connectionObjs) {
-  if (!connectionObjs.length) {
-    return { largestDistance: 0, smallestDistance: 0 };
-  }
-
-  // Return cached result if connection count hasn't changed
-  if (_cachedBounds && _cachedBoundsLength === connectionObjs.length) {
-    return _cachedBounds;
-  }
-
-  let largest = -Infinity;
-  let smallest = Infinity;
-  for (let i = 0; i < connectionObjs.length; i++) {
-    const d = connectionObjs[i].distance;
-    if (d > largest) largest = d;
-    if (d < smallest) smallest = d;
-  }
-  _cachedBounds = { largestDistance: largest, smallestDistance: smallest };
-  _cachedBoundsLength = connectionObjs.length;
-  return _cachedBounds;
-}
-
-function invalidateConnectionBoundsCache() {
-  _cachedBounds = null;
-  _cachedBoundsLength = -1;
-}
+import { configureRendererForCanvas } from '../shared/canvasSizing.js';
+import { createMeasuredTextCanvas } from '../shared/textCanvas.js';
+import { clamp01, normalizeHexColor, writeUnitRgb } from '../shared/colorParsing.js';
+import {
+  buildConnectionVisualSignature,
+  getConnectionDistanceBounds,
+  getConnectionPairKey,
+  haveSameKeys,
+  resetConnectionDistanceBoundsCache
+} from '../features/connections/connectionRenderState.js';
 
 function createStarTexture() {
   const size = STAR_TEXTURE_SIZE;
@@ -128,8 +83,8 @@ export class MapManager {
       canvas: this.canvas,
       antialias: true
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+    const initialSize = configureRendererForCanvas(this.renderer, this.canvas);
+    const initialAspect = initialSize.width / initialSize.height;
     this.starOpacity = 1.0;
     this.connectionOpacity = 0.5;
     this.labelOpacity = 1.0;
@@ -139,13 +94,14 @@ export class MapManager {
     this.connectionPairKeys = [];
     this.connectionParamSignature = '';
     this.connectionVisualSignature = '';
+    this.connectionObjects = [];
+    this.renderDirty = true;
 
     if (mapType === 'Mollweide') {
-      const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
       this.frustumSize = 400;
       this.camera = new THREE.OrthographicCamera(
-        (-this.frustumSize * aspect) / 2,
-        (this.frustumSize * aspect) / 2,
+        (-this.frustumSize * initialAspect) / 2,
+        (this.frustumSize * initialAspect) / 2,
         this.frustumSize / 2,
         -this.frustumSize / 2,
         -1000,
@@ -153,7 +109,7 @@ export class MapManager {
       );
       this.camera.position.set(0, 0, 10);
     } else {
-      this.camera = new THREE.PerspectiveCamera(75, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 10000);
+      this.camera = new THREE.PerspectiveCamera(75, initialAspect, 0.1, 10000);
       this.camera.position.set(0, 0, mapType === 'TrueCoordinates' ? 70 : 200);
     }
 
@@ -164,6 +120,7 @@ export class MapManager {
 
     if (mapType === 'Mollweide') {
       this.controls = new TwoDControls(this.camera, this.renderer.domElement, {
+        requestRender: () => requestRenderIfAvailable(this),
         rightCallback: dx => {
           let lambda0 = getMollweideLambda0() - dx * 0.002;
           const twoPi = Math.PI * 2;
@@ -184,7 +141,9 @@ export class MapManager {
       this.mollweideBorder = createMollweideBorder(100);
       this.scene.add(this.mollweideBorder);
     } else {
-      this.controls = new ThreeDControls(this.camera, this.renderer.domElement);
+      this.controls = new ThreeDControls(this.camera, this.renderer.domElement, {
+        requestRender: () => requestRenderIfAvailable(this)
+      });
     }
 
     this.labelManager = new LabelManager(mapType, this.scene);
@@ -195,18 +154,18 @@ export class MapManager {
     window.addEventListener('resize', this.debouncedResize, false);
   }
 
+  clearStarGroup() {
+    clearObject3DChildren(this.starGroup);
+    this.points = null;
+    this.instancedMesh = null;
+  }
+
   addStars(stars) {
     const count = stars.length;
     if (this.mapType === 'Mollweide') {
       if (!this.points || this.points.geometry.getAttribute('position').count !== count) {
-        while (this.starGroup.children.length > 0) {
-          const child = this.starGroup.children[0];
-          this.starGroup.remove(child);
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) child.material.dispose();
-        }
+        this.clearStarGroup();
         if (count === 0) {
-          this.points = null;
           return;
         }
         const positions = new Float32Array(count * 3);
@@ -225,14 +184,8 @@ export class MapManager {
       }
     } else {
       if (!this.instancedMesh || this.instancedMesh.count !== count) {
-        while (this.starGroup.children.length > 0) {
-          const child = this.starGroup.children[0];
-          this.starGroup.remove(child);
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) child.material.dispose();
-        }
+        this.clearStarGroup();
         if (count === 0) {
-          this.instancedMesh = null;
           return;
         }
         const baseGeometry = new THREE.SphereGeometry(1, 12, 12);
@@ -260,9 +213,6 @@ export class MapManager {
   }
 
   updateStarPositions(stars) {
-    // Reusable objects to avoid per-star allocations
-    const _color = new THREE.Color();
-
     if (this.mapType === 'Mollweide') {
       if (!this.points) return;
       const positions = this.points.geometry.attributes.position.array;
@@ -276,10 +226,7 @@ export class MapManager {
         positions[i * 3 + 2] = pos ? pos.z : 0;
         const size = star.displaySize !== undefined ? star.displaySize : 1;
         sizes[i] = size * 0.4 * 25.0;
-        _color.set(star.displayColor || '#ffffff');
-        colors[i * 3]     = _color.r;
-        colors[i * 3 + 1] = _color.g;
-        colors[i * 3 + 2] = _color.b;
+        writeUnitRgb(colors, i * 3, star.displayColor, '#ffffff');
       }
       this.points.geometry.attributes.position.needsUpdate = true;
       this.points.geometry.attributes.customColor.needsUpdate = true;
@@ -312,16 +259,13 @@ export class MapManager {
         dummy.scale.set(scale, scale, scale);
         dummy.updateMatrix();
         this.instancedMesh.setMatrixAt(i, dummy.matrix);
-        _color.set(star.displayColor || '#ffffff');
-        colors[i * 3]     = _color.r;
-        colors[i * 3 + 1] = _color.g;
-        colors[i * 3 + 2] = _color.b;
+        writeUnitRgb(colors, i * 3, star.displayColor, '#ffffff');
       }
       this.instancedMesh.instanceMatrix.needsUpdate = true;
       this.instancedMesh.instanceColor.needsUpdate = true;
     }
     this.starObjects = stars;
-    requestRenderIfAvailable();
+    requestRenderIfAvailable(this);
   }
 
   getConnectionParamSignature() {
@@ -337,42 +281,45 @@ export class MapManager {
     this.connectionPairKeys = [];
     this.connectionParamSignature = '';
     this.connectionVisualSignature = '';
-    invalidateConnectionBoundsCache();
+    this.connectionObjects = [];
+    resetConnectionDistanceBoundsCache();
   }
 
   storeConnectionState(connectionObjs) {
     this.connectionPairKeys = connectionObjs.map(getConnectionPairKey);
     this.connectionParamSignature = this.getConnectionParamSignature();
-    this.connectionVisualSignature = buildConnectionVisualSignature(connectionObjs);
+    this.connectionVisualSignature = buildConnectionVisualSignature(connectionObjs, getViewpointStarId());
   }
 
   captureConnectionOpacityScales(globalOpacity) {
     if (!this.connectionGroup) return;
-    const safeOpacity = globalOpacity > 0 ? globalOpacity : 1;
+    const safeOpacity = clamp01(globalOpacity);
+    const opacityDivisor = safeOpacity > 0 ? safeOpacity : 1;
     this.connectionGroup.traverse(obj => {
       if (Number.isFinite(obj.userData?.connectionOpacityScale)) {
         return;
       }
       const uniformOpacity = obj.material?.uniforms?.opacityFactor?.value;
       if (Number.isFinite(uniformOpacity)) {
-        obj.userData.connectionOpacityScale = uniformOpacity / safeOpacity;
+        obj.userData.connectionOpacityScale = uniformOpacity / opacityDivisor;
         return;
       }
       if (obj.material && Number.isFinite(obj.material.opacity)) {
-        obj.userData.connectionOpacityScale = obj.material.opacity / safeOpacity;
+        obj.userData.connectionOpacityScale = obj.material.opacity / opacityDivisor;
       }
     });
   }
 
   applyConnectionOpacity(opacity) {
-    this.connectionOpacity = opacity;
+    const safeOpacity = clamp01(opacity);
+    this.connectionOpacity = safeOpacity;
     if (!this.connectionGroup) return;
 
     this.connectionGroup.traverse(obj => {
       const opacityScale = obj.userData?.connectionOpacityScale;
       if (!Number.isFinite(opacityScale) || !obj.material) return;
 
-      const nextOpacity = opacityScale * opacity;
+      const nextOpacity = clamp01(opacityScale * safeOpacity);
       if (obj.material.uniforms?.opacityFactor) {
         obj.material.uniforms.opacityFactor.value = nextOpacity;
         obj.material.needsUpdate = true;
@@ -386,22 +333,23 @@ export class MapManager {
   rebuildConnectionLayer(stars, connectionObjs, opacity) {
     this.clearConnectionGroup();
     if (!connectionObjs || connectionObjs.length === 0) return false;
+    const safeOpacity = clamp01(opacity);
 
     this.connectionGroup = new THREE.Group();
     if (this.mapType === 'Globe') {
-      createConnectionLines(stars, connectionObjs, 'Globe', opacity).forEach(line => this.connectionGroup.add(line));
+      createConnectionLines(stars, connectionObjs, 'Globe', safeOpacity).forEach(line => this.connectionGroup.add(line));
     } else if (this.mapType === 'Mollweide') {
-      createConnectionLines(stars, connectionObjs, 'Mollweide', opacity).forEach(line => this.connectionGroup.add(line));
+      createConnectionLines(stars, connectionObjs, 'Mollweide', safeOpacity).forEach(line => this.connectionGroup.add(line));
     } else {
-      this.connectionGroup.add(mergeConnectionLines(connectionObjs, this.mapType, opacity));
+      this.connectionGroup.add(mergeConnectionLines(connectionObjs, this.mapType, safeOpacity));
       if (this.mapType === 'TrueCoordinates') {
-        this.addTCDistanceLabels(connectionObjs, opacity);
+        this.addTCDistanceLabels(connectionObjs, safeOpacity);
       }
     }
 
     this.scene.add(this.connectionGroup);
     this.storeConnectionState(connectionObjs);
-    this.captureConnectionOpacityScales(opacity);
+    this.captureConnectionOpacityScales(safeOpacity);
 
     const editManager = this.getEditManager();
     if (editManager) editManager.applyStoredLineEdits(this.connectionGroup);
@@ -411,7 +359,7 @@ export class MapManager {
   createMollweideConnectionSegment(points, color, width, opacity, opacityScale = 1) {
     const geometry = buildWideLineGeometry(points, width);
     const material = createWideLineMaterial(color);
-    material.uniforms.opacityFactor.value = opacity;
+    material.uniforms.opacityFactor.value = clamp01(opacity);
     material.uniforms.fadePower.value = getConnectionLineParams().connectionFadePower;
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = 3;
@@ -431,12 +379,12 @@ export class MapManager {
       return;
     }
 
-    const blendColor = new THREE.Color(starA.displayColor || '#ffffff')
-      .lerp(new THREE.Color(starB.displayColor || '#ffffff'), 0.5);
+    const blendColor = new THREE.Color(normalizeHexColor(starA.displayColor, '#ffffff'))
+      .lerp(new THREE.Color(normalizeHexColor(starB.displayColor, '#ffffff')), 0.5);
     const normDist = (distance - bounds.smallestDistance) / (bounds.largestDistance - bounds.smallestDistance || 1);
     const width = THREE.MathUtils.lerp(getConnectionLineParams().connectionMaxWidth, 1, normDist);
     const relativeOpacity = THREE.MathUtils.lerp(1.0, 0.3, normDist);
-    const opacity = relativeOpacity * opacityFactor;
+    const opacity = clamp01(relativeOpacity * opacityFactor);
     const segments = splitMollweideWrap(starA.mollweidePosition, starB.mollweidePosition);
 
     const segmentMeshes = group.children.filter(child => child.userData?.isMollweideConnectionSegment);
@@ -522,14 +470,16 @@ export class MapManager {
   }
 
   updateConnections(stars, connectionObjs, opacity = 0.5) {
+    const safeOpacity = clamp01(opacity);
     const safeConnections = Array.isArray(connectionObjs) ? connectionObjs : [];
+    this.connectionObjects = safeConnections;
     const nextPairKeys = safeConnections.map(getConnectionPairKey);
     const nextParamSignature = this.getConnectionParamSignature();
-    const nextVisualSignature = buildConnectionVisualSignature(safeConnections);
+    const nextVisualSignature = buildConnectionVisualSignature(safeConnections, getViewpointStarId());
 
     if (safeConnections.length === 0) {
       this.clearConnectionGroup();
-      requestRenderIfAvailable();
+      requestRenderIfAvailable(this);
       return;
     }
 
@@ -540,17 +490,18 @@ export class MapManager {
       this.connectionVisualSignature === nextVisualSignature;
 
     if (!canReuseLayer) {
-      if (this.rebuildConnectionLayer(stars, safeConnections, opacity)) {
-        requestRenderIfAvailable();
+      if (this.rebuildConnectionLayer(stars, safeConnections, safeOpacity)) {
+        requestRenderIfAvailable(this);
       }
       return;
     }
 
-    this.applyConnectionOpacity(opacity);
-    requestRenderIfAvailable();
+    this.applyConnectionOpacity(safeOpacity);
+    requestRenderIfAvailable(this);
   }
 
   addTCDistanceLabels(connectionObjs, opacityFactor) {
+    const safeOpacityFactor = clamp01(opacityFactor);
     const { connectionLabelSize } = getConnectionLineParams();
     if (connectionLabelSize <= 0.01) return;
     const bounds = getConnectionDistanceBounds(connectionObjs);
@@ -563,26 +514,21 @@ export class MapManager {
       if (!posA || !posB) return;
       const normDist = (distance - smallest) / (largest - smallest || 1);
       const lineOpacityScale = THREE.MathUtils.lerp(1.0, 0.3, normDist);
-      const lineOpacity = lineOpacityScale * opacityFactor;
+      const lineOpacity = clamp01(lineOpacityScale * safeOpacityFactor);
       const mid = posA.clone().lerp(posB, 0.5);
       const distText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
       const baseFontSize = CONNECTION_LABEL_BASE_FONT;
       const fontSize = baseFontSize * connectionLabelSize;
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      ctx.font = `${fontSize}px Oswald`;
-      const metrics = ctx.measureText(distText);
-      const padX = 10;
-      canvas.width = metrics.width + padX * 2;
-      canvas.height = fontSize + 10;
-      ctx.font = `${fontSize}px Oswald`;
-      const c1 = new THREE.Color(starA.displayColor || '#ffffff');
-      const c2 = new THREE.Color(starB.displayColor || '#ffffff');
+      const c1 = new THREE.Color(normalizeHexColor(starA.displayColor, '#ffffff'));
+      const c2 = new THREE.Color(normalizeHexColor(starB.displayColor, '#ffffff'));
       const labelColor = c1.clone().lerp(c2, 0.5);
-      ctx.fillStyle = `#${labelColor.getHexString()}`;
-      ctx.textBaseline = 'middle';
-      ctx.fillText(distText, padX, canvas.height / 2);
+      const { canvas } = createMeasuredTextCanvas(distText, {
+        font: `${fontSize}px Oswald`,
+        paddingX: 10,
+        paddingY: 5,
+        height: fontSize + 10,
+        fillStyle: `#${labelColor.getHexString()}`
+      });
       const texture = new THREE.CanvasTexture(canvas);
       texture.needsUpdate = true;
       const spriteMat = new THREE.SpriteMaterial({
@@ -605,14 +551,15 @@ export class MapManager {
   updateConnectionPositions(stars, connectionObjs) {
     if (this.mapType !== 'Mollweide' || !this.connectionGroup) {
       this.updateConnections(stars, connectionObjs, this.connectionOpacity);
-      requestRenderIfAvailable();
+      requestRenderIfAvailable(this);
       return;
     }
 
     const safeConnections = Array.isArray(connectionObjs) ? connectionObjs : [];
+    this.connectionObjects = safeConnections;
     const nextPairKeys = safeConnections.map(getConnectionPairKey);
     const nextParamSignature = this.getConnectionParamSignature();
-    const nextVisualSignature = buildConnectionVisualSignature(safeConnections);
+    const nextVisualSignature = buildConnectionVisualSignature(safeConnections, getViewpointStarId());
 
     const canUpdateInPlace =
       safeConnections.length > 0 &&
@@ -622,44 +569,46 @@ export class MapManager {
 
     if (!canUpdateInPlace || !this.updateMollweideConnectionPositionsInPlace(safeConnections)) {
       this.updateConnections(stars, safeConnections, this.connectionOpacity);
-      requestRenderIfAvailable();
+      requestRenderIfAvailable(this);
       return;
     }
 
     const editManager = this.getEditManager();
     if (editManager) editManager.applyStoredLineEdits(this.connectionGroup);
     this.applyConnectionOpacity(this.connectionOpacity);
-    requestRenderIfAvailable();
+    requestRenderIfAvailable(this);
   }
 
   setStarOpacity(opacity) {
-    this.starOpacity = opacity;
+    const safeOpacity = clamp01(opacity);
+    this.starOpacity = safeOpacity;
     if (this.mapType === 'Mollweide') {
       if (this.points) {
-        this.points.material.uniforms.opacity.value = opacity;
+        this.points.material.uniforms.opacity.value = safeOpacity;
         this.points.material.needsUpdate = true;
       }
     } else if (this.instancedMesh) {
-      this.instancedMesh.material.opacity = opacity;
+      this.instancedMesh.material.opacity = safeOpacity;
       this.instancedMesh.material.needsUpdate = true;
     }
   }
 
   setConnectionOpacity(opacity) {
     this.applyConnectionOpacity(opacity);
-    requestRenderIfAvailable();
+    requestRenderIfAvailable(this);
   }
 
   setLabelOpacity(opacity) {
-    this.labelOpacity = opacity;
-    this.labelManager.setLabelOpacity(opacity);
+    const safeOpacity = clamp01(opacity);
+    this.labelOpacity = safeOpacity;
+    this.labelManager.setLabelOpacity(safeOpacity);
   }
 
   setMollweideBorderAppearance(width, opacity) {
     if (this.mapType !== 'Mollweide' || !this.mollweideBorder) return;
     const border = this.mollweideBorder;
     const sanitizedWidth = Math.max(0.1, width || 0);
-    const sanitizedOpacity = Math.max(0, Math.min(1, opacity !== undefined ? opacity : border.material.opacity));
+    const sanitizedOpacity = clamp01(opacity !== undefined ? opacity : border.material.opacity);
     if (Math.abs((border.userData.baseWidth || 0) - sanitizedWidth) > 1e-4) {
       border.geometry.dispose();
       border.geometry = buildWideLineGeometry(border.userData.points, sanitizedWidth);
@@ -671,7 +620,7 @@ export class MapManager {
       border.material.needsUpdate = true;
     }
     border.userData.baseOpacity = sanitizedOpacity;
-    requestRenderIfAvailable();
+    requestRenderIfAvailable(this);
   }
 
   updateMap(stars, connectionObjs) {
@@ -680,8 +629,7 @@ export class MapManager {
   }
 
   onResize() {
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
+    const { width, height } = configureRendererForCanvas(this.renderer, this.canvas);
     if (this.camera.isOrthographicCamera) {
       const aspect = width / height;
       this.camera.left = (-this.frustumSize * aspect) / 2;
@@ -695,8 +643,7 @@ export class MapManager {
     if (this.points && this.points.material.uniforms.cameraZoom) {
       this.points.material.uniforms.cameraZoom.value = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
     }
-    this.renderer.setSize(width, height);
-    requestRenderIfAvailable();
+    requestRenderIfAvailable(this);
   }
 
   render() {
@@ -706,5 +653,26 @@ export class MapManager {
     }
     this.labelManager.render?.(this.camera);
     this.renderer.render(this.scene, this.camera);
+  }
+
+  dispose() {
+    window.removeEventListener('resize', this.debouncedResize, false);
+    this.starInteractionDisposer?.();
+    this.controls?.dispose?.();
+    this.labelManager?.removeAllLabels?.();
+    this.clearConnectionGroup();
+
+    if (this.starGroup) {
+      this.scene.remove(this.starGroup);
+      disposeObject3D(this.starGroup);
+      this.starGroup = null;
+    }
+
+    this.scene.children.slice().forEach(child => {
+      this.scene.remove(child);
+      disposeObject3D(child);
+    });
+
+    this.renderer.dispose();
   }
 }

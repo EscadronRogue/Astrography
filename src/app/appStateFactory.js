@@ -6,7 +6,6 @@
  * Exports a factory that builds a state proxy via createAppState(),
  * plus direct accessors for state that other modules need.
  */
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
 import { createAppState } from './appState.js';
 
 // ---------------------------------------------------------------------------
@@ -52,6 +51,8 @@ const filterRuntimeState = {
   currentMollweideConnections: [],
   isolationOverlay: null,
   densityOverlay: null,
+  cloudDensitySignature: '',
+  cloudDensityRenderSignature: '',
   showConstellationBoundariesFlag: false,
   showConstellationNamesFlag: false,
   showConstellationOverlayFlag: false,

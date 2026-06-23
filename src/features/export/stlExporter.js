@@ -13,49 +13,37 @@
  */
 
 import { getPrimaryClass } from '../../shared/stellarClassUtils.js';
+import { downloadBlob } from './downloadUtils.js';
+import {
+  STL_MM_PER_LY,
+  STL_STANDARD_STAR_DIAMETER_MM,
+  STL_STANDARD_STAR_RADIUS_MM,
+  STL_TUBE_RADIUS_MM,
+  getSTLStarRadius
+} from './stlScale.js';
 
 // ---------------------------------------------------------------------------
 // Physical scale constants  (all in export-units where 1 LY = 5 mm)
 // ---------------------------------------------------------------------------
 
 /** mm per light-year in the exported STL. */
-export const MM_PER_LY = 5;
+export const MM_PER_LY = STL_MM_PER_LY;
 
 /** Standard star (G-class) diameter in mm. */
-const STANDARD_DIAMETER_MM = 8;
+const STANDARD_DIAMETER_MM = STL_STANDARD_STAR_DIAMETER_MM;
 
 /** Standard star radius in mm (all geometry is built in mm). */
-export const STANDARD_RADIUS = STANDARD_DIAMETER_MM / 2; // 4 mm
-
-/** Connection tube diameter in mm. */
-const TUBE_DIAMETER_MM = 2;
+export const STANDARD_RADIUS = STL_STANDARD_STAR_RADIUS_MM;
 
 /** Connection tube radius in mm. */
-export const TUBE_RADIUS = TUBE_DIAMETER_MM / 2; // 1 mm
+export const TUBE_RADIUS = STL_TUBE_RADIUS_MM;
 
 // ---------------------------------------------------------------------------
 // Stellar class → size multiplier (relative to standard G-class star)
 // ---------------------------------------------------------------------------
 
-const CLASS_SIZE_MULTIPLIER = {
-  O: 1.15,
-  B: 1.15,
-  A: 1.15,
-  F: 1.00,
-  G: 1.00,
-  K: 0.85,
-  M: 0.65,
-  D: 0.50,
-  L: 0.50,
-  T: 0.50,
-  Y: 0.50,
-  Other: 0.50
-};
-
 export function getExportRadius(star) {
-  const cls = getPrimaryClass(star);
-  const multiplier = CLASS_SIZE_MULTIPLIER[cls] ?? CLASS_SIZE_MULTIPLIER.Other;
-  return STANDARD_RADIUS * multiplier;
+  return getSTLStarRadius(star);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,18 +339,12 @@ export function exportTrueCoordinatesSTL(stars, connections) {
   // ── Encode & download ────────────────────────────────────────────────
   const stlBuffer = trianglesToBinarySTL(allTriangles);
   const blob = new Blob([stlBuffer], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'true_coordinates_stars.stl';
-  link.click();
-
-  URL.revokeObjectURL(url);
+  downloadBlob(blob, 'true_coordinates_stars.stl');
 
   const connCount = Array.isArray(connections) ? connections.length : 0;
   console.log(
     `STL export complete – ${mainStars.length} systems (from ${stars.length} stars), ` +
-    `${connCount} connections, ${allTriangles.length} triangles.`
+    `${connCount} connections, ${allTriangles.length} triangles ` +
+    `(scale: 1 LY = ${MM_PER_LY} mm, standard star diameter = ${STANDARD_DIAMETER_MM} mm).`
   );
 }

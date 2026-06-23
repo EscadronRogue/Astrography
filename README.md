@@ -1,214 +1,21 @@
 # Astrography
 
-Astrography is a browser-based stellar cartography application for exploring nearby stars across multiple synchronized views. The primary presentation now uses a UV-first pipeline:
+Astrography is a browser-based stellar cartography app for exploring nearby stars across synchronized projections:
 
-- **Map** — equirectangular UV source map
-- **Globe** — the UV map projected onto a sphere
-- **True Coordinates** — 3D spatial layout of nearby stars
+- **True Coordinates**: primary 3D cartesian star layout.
+- **Map**: primary UV/equirectangular source map.
+- **Globe**: primary globe projected from the UV atlas.
+- **Legacy Globe**: older scene-based spherical plotting workflow.
+- **Legacy Mollweide**: older flat-sky projection used for label/line editing and vector-style export.
 
-Legacy views are still available on demand:
+The app supports distance, stellar class, color, size, opacity, cloud, density, isolation, constellation, and plane controls. It also supports editable labels/lines, local presets, PNG/PDF picture exports, Mollweide SVG export, simple STL export, and a 3D-printable STL kit export.
 
-- **Legacy Globe** — older scene-based spherical plotting
-- **Legacy Mollweide** — older full-sky equal-area projection for editing and export
+## Running Locally
 
-The application supports filtering, constellation rendering, density and isolation overlays, interstellar cloud overlays, editable labels and line visibility, preset persistence, and PNG/PDF export.
-
----
-
-## What the project does
-
-Astrography loads nearby-star data from JSON buckets, normalizes the records at runtime, and renders the same filtered star set in three different map representations. The app is designed for interactive visual analysis rather than static display.
-
-Core capabilities include:
-
-- synchronized rendering across the three map views
-- star filtering by distance, size, opacity, color, visibility, and stellar class
-- constellation boundaries, labels, and overlay regions
-- galactic plane, ecliptic plane, and celestial equator overlays
-- density and isolation analysis overlays
-- interstellar cloud overlays and cloud-density overlays
-- editable label positions, label transforms, and hidden line segments
-- local preset persistence for filters and edits
-- export of the Mollweide map to PNG and PDF
-
----
-
-## Current architecture
-
-The application is a client-side ES module app with no build step in the repository.
-It runs directly in the browser and expects to be served from a local web server because it fetches JSON assets at runtime.
-
-### Runtime entry point
-
-The actual entry point is:
-
-- `src/main.js`
-
-That file waits for `DOMContentLoaded` and calls:
-
-- `bootstrapApp()` in `src/app/createApp.js`
-
-### Bootstrap flow
-
-At startup, the app currently does the following:
-
-1. shows the loader
-2. loads star data from `data/manifest.json`
-3. normalizes star records for downstream use
-4. initializes filter UI
-5. creates the three map managers
-6. constructs the editing manager
-7. loads saved presets from local storage
-8. preprocesses star positions and applies stored edits
-9. creates shared scene decorations such as the globe grid
-10. runs the initial filter/render pipeline
-11. wires star interactions, projection toggles, export, and editing controls
-12. triggers the first render
-
-The bootstrap coordinator is:
-
-- `src/app/createApp.js`
-
----
-
-## Project structure
-
-### Top-level files
-
-- `index.html` — application shell, filter form, canvas containers, export and editing controls
-- `README.md` — project documentation
-- `MANUAL_VERIFICATION_CHECKLIST.md` — manual QA checklist
-- `REORGANIZATION_NOTES.md` — notes from the refactor/reorganization work
-
-### Source tree
-
-- `src/main.js` — browser entry point
-- `src/app/` — bootstrap, app state, map manager wiring, projection visibility, presets, per-frame render coordination
-- `src/data/` — star data loading and normalization entry points
-- `src/domain/` — domain-facing re-export layer for coordinates and star metadata
-- `src/features/` — feature modules such as clouds, constellations, filters, density, isolation, editing, export, labels, and planes
-- `src/render/` — rendering and interaction helpers
-- `src/shared/` — shared utilities, constants, geometry helpers, and form helpers
-- `src/ui/` — sidebar and UI wiring
-- `styles/` — CSS for layout, sidebar, overlays, export, and responsiveness
-- `data/` — runtime JSON assets for stars and cloud data
-
----
-
-## Data sources
-
-### Star data
-
-Star data is loaded through:
-
-- `data/manifest.json`
-
-The manifest lists the JSON buckets that are fetched from `data/`.
-Examples include:
-
-- `data/stars_0_20_LY.json`
-- `data/stars_20_30_LY.json`
-- `data/stars_90_100_LY.json`
-
-The loader normalizes records at runtime so downstream modules can rely on consistent derived fields such as:
-
-- `distance`
-- `apparentMagnitude`
-- `absoluteMagnitude`
-- `starId`
-
-Original source fields are still preserved for compatibility with existing code paths.
-
-### Cloud data
-
-Cloud overlays are loaded on demand from `data/*cloud*.json`.
-These records are not globally normalized up front in the same way as the star buckets; feature modules normalize what they need when overlay matching or rendering occurs.
-
-### Constellation and classification data
-
-The repository includes constellation and stellar classification reference files, including:
-
-- `constellation_boundaries.txt`
-- `constellation_center.json`
-- `constellation_full_names.json`
-- `stellar_class.json`
-
-At present, the runtime uses a mix of JSON and text-backed sources depending on the feature.
-That is functional, but it is important to know that the data layer is not fully standardized yet.
-The checked-in constellation boundary and center files are intended to be J2000-aligned display data; they can be regenerated from the authoritative J2000-derived Delporte data via `scripts/generateConstellationJ2000Data.mjs`.
-
----
-
-## Main modules by responsibility
-
-### Application bootstrap and shared state
-
-- `src/app/createApp.js` — bootstraps the entire application
-- `src/app/appStateFactory.js` — central mutable application state and state accessors
-- `src/app/appState.js` — application state domains and state factory helpers
-- `src/app/renderFrame.js` — render request coordination
-- `src/app/presets.js` — save/load/clear preset persistence
-
-### Map construction and projection coordination
-
-- `src/app/mapManager.js` — creates and manages each rendered map
-- `src/app/globeSurface.js` — globe surface behavior
-- `src/app/mollweideUpdater.js` — deferred Mollweide update scheduling
-- `src/app/projectionVisibility.js` — view toggling between map representations
-- `src/app/mapDecorations.js` — shared map decorations and helper utilities
-- `src/app/starPreprocessor.js` — precomputes star positions used during rendering/editing
-
-### Filters and rendering pipeline
-
-- `src/features/filters/pipeline/filterPipeline.js` — main render/filter orchestration
-- `src/features/filters/pipeline/index.js` — filter UI setup and pipeline entry points
-- `src/features/filters/state/` — reading and storing filter state
-- `src/features/filters/logic/` — filtering rules and stellar-class support
-
-### Feature modules
-
-- `src/features/constellations/` — constellation lines, labels, overlays, and data services
-- `src/features/clouds/` — cloud overlays, cloud-density overlays, geometry helpers
-- `src/features/density/` — density analysis and overlay rendering
-- `src/features/isolation/` — isolation analysis and overlay rendering
-- `src/features/planes/` — plane definitions and plane rendering
-- `src/features/labels/` — label generation and placement
-- `src/features/editing/` — label editing, line editing, persistence, and undo-related behavior
-- `src/features/export/` — Mollweide export workflow
-- `src/features/connections/` — star connection building and line rendering
-
-### Rendering and interactions
-
-- `src/render/engine/renderUtils.js` — Three.js-related rendering/disposal helpers
-- `src/render/interactions/cameraControls.js` — camera interaction logic
-- `src/render/interactions/starInteractions.js` — hover/select behavior for stars
-- `src/render/interactions/tooltips.js` — tooltip DOM behavior
-
-### Shared utilities
-
-- `src/shared/constants.js` — shared constants
-- `src/shared/starUtils.js` — star ID and position helpers
-- `src/shared/geometryUtils.js` — geometry and projection helpers
-- `src/shared/colorUtils.js` — color mapping utilities
-- `src/shared/formUtils.js` — form persistence helpers
-- `src/shared/renderScheduler.js` — shared render-request hooks
-- `src/shared/uiFactory.js` — reusable UI element helpers
-- `src/shared/stellarClassUtils.js` — stellar class helpers
-
----
-
-## How to run the project
-
-Because the app fetches JSON files at runtime, it must be served through HTTP.
-Opening `index.html` directly from disk may fail due to browser restrictions on module and fetch behavior.
-
-### Simple local server options
-
-From the repository root, any basic static server is sufficient.
-Examples:
+The app fetches JSON/text assets at runtime, so serve it over HTTP from the repository root:
 
 ```bash
-python3 -m http.server 8000
+python -m http.server 8000
 ```
 
 Then open:
@@ -217,139 +24,145 @@ Then open:
 http://localhost:8000
 ```
 
-If you use another static server, make sure it serves:
-
-- `index.html`
-- `src/`
-- `styles/`
-- `data/`
-- top-level JSON and text data files
-
----
-
-## Runtime dependencies
-
-This repository is structured as a browser app without an included package manifest or build pipeline in the root inspected here.
-The application relies on browser ES modules and external/browser-available libraries referenced by the HTML runtime.
-
-In particular, the current code assumes:
-
-- Three.js is available to the browser runtime
-- jsPDF is available as `window.jspdf` for PDF export
-
-If either dependency is missing from the runtime page, rendering or export features will fail.
-
----
-
-## Editing and persistence
-
-Astrography supports editing of:
-
-- star label offsets
-- star label rotation
-- star label scale
-- constellation label offsets
-- galactic label offsets
-- removed or hidden line segments
-
-Persistence currently happens in two forms:
-
-1. **local preset persistence** through browser storage
-2. **manual edit import/export** through JSON download/upload controls
-
-Relevant modules:
-
-- `src/app/presets.js`
-- `src/features/editing/editPersistence.js`
-- `src/features/editing/editIOControls.js`
-- `src/features/editing/editManager.js`
-
----
-
-## Export behavior
-
-The main export workflow is centered on the Mollweide map.
-The export controls support:
-
-- PNG export
-- PDF export
-
-Relevant module:
-
-- `src/features/export/exportManager.js`
-
-Because export depends on DOM state, rendered labels, and runtime libraries, it should be verified after any UI or rendering refactor.
-
----
-
-## Development notes
-
-### What is accurate right now
-
-- The app boots from `src/main.js`, not from a legacy `script.js`
-- Shared render helpers live in `src/render/engine/renderUtils.js`
-- The project is partially reorganized into `app`, `data`, `domain`, `features`, `render`, `shared`, and `ui`
-- The feature structure is real, but several modules are still thin facades or re-export layers
-
-### Important implementation realities
-
-- the app is heavily driven by DOM IDs in `index.html`
-- several large feature modules still combine state, rendering, and UI concerns
-- runtime data sources are partially standardized but not fully unified
-- local persistence and edit import/export are already present and operational
-- some feature modules are large enough that they should be treated as active refactor targets rather than stable end-state architecture
-
----
+On Windows PowerShell, the npm wrapper may be blocked by execution policy. Use `npm.cmd test` for the local verifier.
 
 ## Verification
 
-Use:
+Run:
 
-- `MANUAL_VERIFICATION_CHECKLIST.md`
+```bash
+npm.cmd test
+```
 
-That file should be treated as a manual test aid, not as exhaustive regression coverage.
-For meaningful refactors, priority areas to verify are:
+The verifier checks:
 
-- startup with valid data
-- filter changes across all three map views
-- projection toggles
-- constellation visibility and overlays
-- cloud and density overlays
-- isolation overlay behavior
-- label editing and line editing
-- preset save/load behavior
-- PNG/PDF export
+- JavaScript syntax for all `src/**/*.js` files.
+- Relative ES module imports.
+- Centralized Three.js imports through `src/vendor/three.js`.
+- Centralized string hashing for render signatures and generated fallback colors.
+- CSS brace balance.
+- Required export controls in `index.html`.
+- Orphaned JavaScript source files.
+- Pure edit import/export schema content and behavior, including hidden line round-trips and invalid import rejection.
+- Export renderer color/clear-setting propagation for raster exports.
+- Centralized PDF/ZIP runtime dependency and browser-download capability checks.
+- Centralized canvas PNG blob/download handling with no direct export `toBlob` callbacks outside the helper.
+- Mollweide SVG export preserves edited star-label position, rotation, and scale state.
+- Fullscreen controls use cross-browser API fallbacks and disable unsupported buttons.
+- The mobile sidebar toggle exposes and synchronizes its controlled/open state for assistive tech.
+- UV map rendering remains decoupled from direct filter-form reads.
+- UV layer signatures are extracted into a pure module and behavior-checked.
+- Density and isolation overlay updates remain decoupled from direct filter-form reads.
+- Range-dependent display filters use centralized stats.
+- Normal and fallback/default filter results share angular projection viewpoint-star exclusion so Globe/Mollweide/UV do not drift.
+- Connection render keys, visual signatures, and distance-bounds caching live in `src/features/connections/connectionRenderState.js`.
+- Runtime data loaders validate manifest, star, cloud, constellation, and stellar-class payloads.
+- Behavioral smoke checks for distance/visibility filters, filter-state parsing, cloud-name matching, connection cache signatures, STL kit metadata/glyph layout/feature directions, and edit import/export round-trips.
+- Export and edit-import failures use a shared non-blocking notification helper instead of direct browser alerts.
+- Star tooltip action/link styling lives in CSS classes rather than inline JS styles.
+- Form ID lookups use a shared scoped helper with a `CSS.escape` fallback for older browser/WebView compatibility.
+- Edit-file import uses a shared local text-file reader with a FileReader fallback for browsers without `File.text()`.
+- Preset persistence uses `src/shared/storageUtils.js`, and the single-theme boot path no longer depends on `localStorage`.
+- Edit UI controls register event listeners through the edit manager so button/overlay listeners are removed on disposal.
+- Map canvases use shared safe sizing and pixel-ratio clamping so hidden/mobile layout transitions do not create zero-size or infinite-aspect renderers.
+- Hot density/isolation/cloud-density overlays use shared instanced grid-cell rendering instead of one scene mesh per cell.
+- UV cloud-density rendering skips inactive cells so canvas/PDF/PNG output matches current filter state.
 
----
+Manual browser verification is still required after rendering or UI changes. Use `MANUAL_VERIFICATION_CHECKLIST.md` for scenario coverage.
 
-## Known limitations
+## Runtime Dependencies
 
-Based on the current repository state, these are important practical limitations to keep in mind:
+The repository is still a no-build browser ES module app. Runtime dependencies are loaded by the page:
 
-- no bundled build or package workflow is defined in the inspected root
-- runtime data normalization still happens in the browser instead of a preprocessing pipeline
-- some data sources still exist in both raw text and normalized JSON form
-- a number of modules act as compatibility facades rather than full abstractions
-- several rendering-heavy features are still concentrated in very large files
+- Three.js is centralized through `src/vendor/three.js`.
+- jsPDF and JSZip are provided by `index.html` for PDF and ZIP exports.
 
-These do not prevent use of the application, but they matter for maintainability and future refactoring.
+## Source Layout
 
----
+- `src/main.js`: browser entry point.
+- `src/app/`: bootstrap, app state, map managers, projection visibility, render coordination, presets.
+- `src/data/`: shared fetch timeout helper and star data loading/normalization.
+- `src/features/`: feature modules for filters, clouds, constellations, density, isolation, planes, labels, editing, export, and connections.
+- `src/render/`: Three.js disposal helpers plus camera, tooltip, and star interaction handling.
+- `src/shared/`: constants, geometry, star, color, form, UV, and UI helpers.
+- `src/ui/`: sidebar and UI enhancement wiring.
+- `styles/`: CSS for base layout, sidebar, panels, overlays, responsiveness, and theme.
+- `data/`: runtime star buckets and dust-cloud JSON assets.
 
-## Recommended next documentation updates
+## Export Behavior
 
-The next documentation improvements that would add the most value are:
+- True Coordinates, Map, Globe, and Legacy Globe have direct PNG/PDF snapshot exports.
+- Legacy Mollweide supports selection-based PNG/PDF export and SVG export.
+- True Coordinates supports STL export and a ZIP-based 3D-print kit.
+- STL scale is centralized in `src/features/export/stlScale.js`.
+- STL kit metadata, filename sanitation, rank maps, and README manifest text live in `src/features/export/stlKitMetadata.js`.
+- STL kit worker payload serialization and transferable-buffer selection live in `src/features/export/stlKitWorkerPayload.js`.
+- STL kit vector math lives in `src/features/export/stlVectorMath.js` and is shared by geometry generation and feature-direction selection.
+- STL kit vector glyph data and digit layout metrics live in `src/features/export/stlTextGlyphs.js`.
+- STL kit feature-direction selection lives in `src/features/export/stlFeatureDirections.js`.
+- STL kit tube-label flat-crown layout and label basis selection live in `src/features/export/stlTubeLabelLayout.js`.
+- STL kit print orientation and build-plate placement live in `src/features/export/stlPrintOrientation.js`.
+- STL kit star-facet depth, diameter, trim-box sizing, and local point projection live in `src/features/export/stlFacetGeometry.js`.
+- STL kit socket clustering, forced-merge planning, and tube-component graph assembly live in `src/features/export/stlSocketPlanning.js`.
+- The 3D-print kit includes `README.txt` in the ZIP with scale, counts, and skipped connection details.
+- The 3D-print kit builds CSG/STL buffers in a module worker when supported, then ZIPs/downloads on the main thread with a fallback path.
+- Mollweide SVG exports use live label sprite state so edited star-label transforms are reflected in vector output.
+- PDF and ZIP exports use shared runtime dependency checks before using CDN-provided libraries.
+- PNG exports use shared canvas-to-Blob handling so unsupported or failed image encoding surfaces as a normal export error.
+- Blob downloads use a shared defensive helper with URL revocation and legacy element-removal fallback.
+- PDF image embedding uses shared async canvas-to-Blob/data-URL conversion instead of direct per-export `toDataURL` calls.
+- Raster exports copy the source renderer's clear color, color space, tone mapping, and visible canvas background for closer on-screen fidelity.
+- Export background CSS color parsing lives in `src/shared/cssColorParsing.js` and handles modern computed color formats before raster export renderers choose a fallback background.
+- Snapshot and Mollweide crop/SVG export sizing use safe display dimensions and clamped crop pixels so high-DPI or hidden canvases do not skew export aspect or viewBox math.
 
-1. a dedicated architecture document with module ownership and data flow
-2. a data schema document for star records, cloud records, and edit export JSON
-3. a contributor guide covering how to add a feature safely without breaking the render pipeline
-4. a testing document with high-risk scenarios and regression checks
+## Important Architecture Notes
 
----
+- `src/app/createApp.js` remains the main bootstrap coordinator.
+- `src/features/filters/pipeline/filterPipeline.js` remains the main filter/render orchestration path.
+- `src/app/mapManager.js`, `src/app/uvMapManager.js`, and the planning/geometry sections of `src/features/export/stlKitExporter.js` are still large and should be treated as active refactor targets.
+- Connection render invalidation and bounds caching are isolated from `MapManager` so cache signatures can be tested directly.
+- User-facing error notifications live in `src/shared/userNotifications.js` so blocking alert behavior is centralized and verifier-guarded.
+- Form restoration and preset migration use `src/shared/formUtils.js` for scoped ID lookup instead of assuming `CSS.escape` is available.
+- Local preset storage goes through `src/shared/storageUtils.js` so browsers that block Web Storage fail gracefully.
+- Projection visibility uses safe optional DOM lookups so legacy/embedded map containers can be omitted without breaking app boot.
+- Local text-file reading lives in `src/shared/fileUtils.js` so edit import is not tied to only modern File APIs.
+- Repeated canvas text-label measurement lives in `src/shared/textCanvas.js` so distance and plane labels share sizing behavior.
+- UV atlas color conversion, alpha clamping, and layer canvas creation live in `src/app/uvCanvasLayers.js` so export-layer assumptions are directly testable.
+- Edit-manager UI listener lifecycle is centralized through `EditManager.addManagedEventListener`, including disposable document listeners for rotate/scale drags.
+- Dynamic map star layers clear children through `src/render/engine/renderUtils.js` so geometry, materials, texture maps, and shader-uniform textures are disposed consistently.
+- Canvas sizing and renderer pixel-ratio setup live in `src/shared/canvasSizing.js`.
+- Render-frame scheduling, after-paint yielding, and scheduled-frame cancellation live in `src/shared/renderScheduler.js` with timeout fallbacks for embedded or test runtimes without native animation frames.
+- UV atlas invalidation signatures live in `src/app/uvLayerSignatures.js` so redraw decisions can be tested without the renderer.
+- UV overlay-cell projection, alpha, color, and radius calculations live in `src/app/uvOverlayCells.js` so density/isolation/cloud-density atlas behavior can be tested directly.
+- STL kit metadata and manifest formatting are isolated from CSG generation so export naming and ranking can be tested directly.
+- STL kit worker payload serialization is isolated so structured-clone compatibility can be tested without spawning a Worker.
+- STL vector math is isolated from CSG generation so geometry basis calculations share one tested implementation.
+- STL text glyph/layout data is isolated from CSG generation so engraving behavior can be tested without running the full exporter.
+- STL feature-direction candidate selection is isolated from CSG generation so star engraving placement can be tested directly.
+- STL tube-label layout is isolated from CSG generation so tube engraving placement can be tested directly.
+- STL print orientation and build-plate placement are isolated from CSG generation so exported part orientation can be tested directly.
+- STL star-facet geometry is isolated from CSG generation so rank-engraving surface dimensions can be tested directly.
+- STL socket planning is isolated from CSG generation so overlapping holes, forced merges, and component graph assembly can be tested directly.
+- Runtime data fetching now uses an aborting timeout helper, but the app still normalizes data in the browser.
+- Runtime data payloads are validated before being normalized or cached.
+- Star buckets no longer include records with unknown distance/coordinates, which cannot be rendered.
+- Render signatures and generated fallback colors share `src/shared/hashUtils.js`.
+- Hex color parsing and alpha clamping for render buffers, labels, connection lines, constellation CSS colors, UV atlas CSS colors, and SVG export live in `src/shared/colorParsing.js`, so display colors normalize before reaching Three.js or exported markup.
+- Filter, map, label, connection, constellation, and export opacity entry points clamp non-finite/out-of-range values before updating WebGL materials or SVG opacity attributes.
+- The app state factory stays decoupled from the Three.js renderer stack.
+- Render scheduling has per-manager dirty state, but line-heavy overlay geometry still needs deeper incremental updates.
+- UV map layer signatures use the normalized filter snapshot rather than querying form controls directly.
+- Default/no-form filter results use the same angular projection star exclusion as the main filter pipeline.
+- Density, isolation, and cloud-density overlays use normalized state plus shared instanced grid-cell layers.
+- Size, color, and opacity filters share display statistics when their active modes need ranges.
+- Fullscreen buttons use browser-specific fallbacks where available and expose disabled/pressed state for unsupported or active cases.
+- The sidebar menu button controls `#filters-sidebar` and keeps `aria-expanded` aligned with the visible sidebar state.
+- The project has a lightweight verifier, not a complete unit/e2e test suite.
 
-## Summary
+## Current Known Work
 
-Astrography is a feature-rich client-side stellar cartography application with three synchronized views, substantial interactive analysis features, and a partially modernized source layout.
+The largest remaining engineering work is:
 
-The repository already has clear functional depth.
-The most important thing for a maintainer to understand is that the current source tree is meaningfully modularized, but the implementation is still in a transitional state between older monolithic behavior and cleaner feature boundaries.
+- Full browser smoke and visual tests across Chromium, Firefox, and WebKit/Safari-sized viewports.
+- Further decomposition of the large map/export managers.
+- Broader automated coverage for rendered output, editing, export downloads, and browser-only interactions.

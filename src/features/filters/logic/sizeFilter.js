@@ -26,22 +26,27 @@ function computeDistanceSize(distance, distMin, distMax) {
  * @param {Object} filters - The overall filter object.
  * @returns {Array} - The updated array of stars.
  */
-export function applySizeFilter(stars, filters) {
+export function applySizeFilter(stars, filters, displayStats = null) {
   const stellarClassData = getStellarClassData();
 
   // Pre-compute distance range if needed
   let distMin, distMax;
   if (filters.size === 'distance') {
-    distMin = Infinity;
-    distMax = -Infinity;
-    for (let i = 0; i < stars.length; i++) {
-      const d = stars[i].distance;
-      if (Number.isFinite(d)) {
-        if (d < distMin) distMin = d;
-        if (d > distMax) distMax = d;
+    if (displayStats) {
+      distMin = displayStats.distanceMin;
+      distMax = displayStats.distanceMax;
+    } else {
+      distMin = Infinity;
+      distMax = -Infinity;
+      for (let i = 0; i < stars.length; i++) {
+        const d = stars[i].distance;
+        if (Number.isFinite(d)) {
+          if (d < distMin) distMin = d;
+          if (d > distMax) distMax = d;
+        }
       }
+      if (distMin === Infinity) { distMin = 0; distMax = 0; }
     }
-    if (distMin === Infinity) { distMin = 0; distMax = 0; }
   }
 
   stars.forEach(star => {

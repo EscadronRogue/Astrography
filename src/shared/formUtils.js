@@ -3,6 +3,20 @@
  * Consolidates duplicated logic from app/presets.js and app/stellarClassState.js.
  */
 
+export function getElementByIdWithin(container, id) {
+  if (!container || !id) return null;
+
+  const doc = container.ownerDocument || globalThis.document;
+  const direct = doc?.getElementById?.(id);
+  if (direct && (direct === container || container.contains(direct))) {
+    return direct;
+  }
+
+  const escapeCss = globalThis.CSS?.escape;
+  if (!escapeCss || !container.querySelector) return null;
+  return container.querySelector(`#${escapeCss(id)}`);
+}
+
 /**
  * Captures the state of all form elements within a container.
  * @param {HTMLElement} container - The DOM container to scan.
@@ -39,7 +53,7 @@ export function restoreFormState(container, state, { dispatchEvents = false } = 
     return;
   }
   Object.entries(state).forEach(([id, value]) => {
-    const el = container.querySelector(`#${CSS.escape(id)}`);
+    const el = getElementByIdWithin(container, id);
     if (!el) return;
     if (el.type === 'checkbox' || el.type === 'radio') {
       el.checked = Boolean(value);

@@ -17,10 +17,12 @@ import { getStarTruePosition as getSharedStarTruePosition, getStarGlobePosition,
 import { buildAndApplyFilters as runFilterPipeline, updateMollweideView as refreshMollweideMap } from '../features/filters/pipeline/filterPipeline.js';
 import { initStarInteractions, setupStarInteractionToggle, updateSelectedStarHighlight } from '../render/interactions/starInteractions.js';
 import { setTooltipContext, invalidateTooltipCache } from '../render/interactions/tooltips.js';
-import { setRenderRequester, requestRenderIfAvailable } from '../shared/renderScheduler.js';
+import { setRenderRequester, requestRenderIfAvailable, scheduleAfterPaint } from '../shared/renderScheduler.js';
 import { ExportManager } from '../features/export/exportManager.js';
+import { exportSceneSnapshot } from '../features/export/sceneSnapshotExporter.js';
 import { exportTrueCoordinatesSTL } from '../features/export/stlExporter.js';
 import { exportPrintableSTLKit } from '../features/export/stlKitExporter.js';
+import { notifyError } from '../shared/userNotifications.js';
 import { EditManager } from '../features/editing/editManager.js';
 import { applyGlobeSurface } from './globeSurface.js';
 import { updateMollweidePosition, createMollweideScheduler } from './mollweideUpdater.js';
@@ -93,7 +95,9 @@ const appContext = {
     updateSelectedStarHighlight(appContext);
 
     // Re-run full filter + render pipeline
-    buildAndApplyFilters();
+    buildAndApplyFilters().catch(error => {
+      console.error('Viewpoint filter update failed:', error);
+    });
   }
 };
 
@@ -195,7 +199,21 @@ function hideProgress() {
 
 /** Yield to the browser so the UI can repaint between heavy phases. */
 function yieldToUI() {
-  return new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+  return new Promise(resolve => scheduleAfterPaint(resolve));
+}
+
+function bindSceneSnapshotExport(id, manager, format, filenameBase) {
+  const button = document.getElementById(id);
+  if (!button || !manager) return;
+
+  button.addEventListener('click', async () => {
+    try {
+      await exportSceneSnapshot(manager, format, filenameBase);
+    } catch (error) {
+      console.error(`${filenameBase} ${format.toUpperCase()} export failed:`, error);
+      notifyError(`${format.toUpperCase()} export failed`, error);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -274,7 +292,11 @@ export async function bootstrapApp() {
     });
 
     // Wire form change listeners
-    const debouncedApplyFilters = debounce(buildAndApplyFilters, 150);
+    const debouncedApplyFilters = debounce(() => {
+      buildAndApplyFilters().catch(error => {
+        console.error('Filter update failed:', error);
+      });
+    }, 150);
     if (form) {
       form.addEventListener('change', () => {
         debouncedApplyFilters();
@@ -314,7 +336,7 @@ export async function bootstrapApp() {
     const interBase = prepBase + PHASE_WEIGHTS.preprocessing;
     updateProgress(interBase, 'Rendering first frame…');
 
-    buildAndApplyFilters();
+    await buildAndApplyFilters();
     requestRender();
 
     await yieldToUI();
@@ -346,6 +368,14 @@ export async function bootstrapApp() {
 
     exportManager = new ExportManager(mollweideMap);
     exportManager.setup();
+    bindSceneSnapshotExport('export-true-png', trueCoordinatesMap, 'png', 'true_coordinates_map');
+    bindSceneSnapshotExport('export-true-pdf', trueCoordinatesMap, 'pdf', 'true_coordinates_map');
+    bindSceneSnapshotExport('export-uv-png', uvMap, 'png', 'uv_map');
+    bindSceneSnapshotExport('export-uv-pdf', uvMap, 'pdf', 'uv_map');
+    bindSceneSnapshotExport('export-globe-png', uvGlobeMap, 'png', 'globe_map');
+    bindSceneSnapshotExport('export-globe-pdf', uvGlobeMap, 'pdf', 'globe_map');
+    bindSceneSnapshotExport('export-legacy-globe-png', globeMap, 'png', 'legacy_globe_map');
+    bindSceneSnapshotExport('export-legacy-globe-pdf', globeMap, 'pdf', 'legacy_globe_map');
 
     // STL export for the True Coordinates map
     const stlBtn = document.getElementById('export-stl');
@@ -374,7 +404,7 @@ export async function bootstrapApp() {
             })
             .catch(err => {
               console.error('STL kit export failed:', err);
-              alert(`STL kit export failed: ${err.message}`);
+              notifyError('STL kit export failed', err);
               stlKitBtn.disabled = false;
               stlKitBtn.textContent = 'STL for 3D Printing';
             });

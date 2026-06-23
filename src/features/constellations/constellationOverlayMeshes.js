@@ -1,5 +1,5 @@
 // Constellation overlay mesh builders migrated from the legacy overlay filter module.
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { cachedRadToSphere, cachedRadToMollweide, getGreatCirclePoints, subdivideGeometry, getMollweideLambda0, adjustMollweideWrap } from '../../shared/geometryUtils.js';
 import { getConstellationBoundaries } from './constellationDataService.js';
 

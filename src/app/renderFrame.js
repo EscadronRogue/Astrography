@@ -1,17 +1,39 @@
+import { scheduleAnimationFrame } from '../shared/renderScheduler.js';
+
 export function createRenderRequester(mapManagers, getEditManager) {
   let renderRequested = false;
-  return function requestRender() {
+
+  function markDirty(targets) {
+    if (!targets) {
+      for (let i = 0; i < mapManagers.length; i++) {
+        mapManagers[i].renderDirty = true;
+      }
+      return;
+    }
+
+    const list = Array.isArray(targets) ? targets : [targets];
+    list.forEach(manager => {
+      if (manager) manager.renderDirty = true;
+    });
+  }
+
+  return function requestRender(targets) {
+    markDirty(targets);
     if (renderRequested) return;
     renderRequested = true;
-    requestAnimationFrame(() => {
+    scheduleAnimationFrame(() => {
       renderRequested = false;
+      let rendered = false;
       for (let i = 0; i < mapManagers.length; i++) {
         const manager = mapManagers[i];
         if (!manager.canvas.isConnected) continue;
+        if (manager.renderDirty === false) continue;
+        manager.renderDirty = false;
         manager.render();
+        rendered = true;
       }
       const editManager = getEditManager();
-      if (editManager) editManager.updateEditOverlay();
+      if (rendered && editManager) editManager.updateEditOverlay();
     });
   };
 }

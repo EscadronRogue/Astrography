@@ -4,6 +4,7 @@
  * class-scale controls render in Preferences / Stars.
  */
 import { getPrimaryClass, groupStarsByClass } from '../../../shared/stellarClassUtils.js';
+import { getStarId } from '../../../shared/starUtils.js';
 import {
   STELLAR_CLASSES,
   STELLAR_CLASS_NAMES,
@@ -58,13 +59,13 @@ export function applyStellarClassLogic(stars, form, filters = {}) {
 
   stars.forEach(star => {
     const primaryClass = getPrimaryClass(star);
-    const starName = star.Common_name_of_the_star || '';
+    const starKey = getStarId(star);
 
     const classShowStar = Object.hasOwn(stellarClassShowStar, primaryClass)
       ? stellarClassShowStar[primaryClass]
       : true;
-    const starShowStar = Object.hasOwn(individualShowStar, starName)
-      ? individualShowStar[starName]
+    const starShowStar = Object.hasOwn(individualShowStar, starKey)
+      ? individualShowStar[starKey]
       : true;
 
     star.displayVisible = classShowStar && starShowStar;
@@ -77,8 +78,8 @@ export function applyStellarClassLogic(stars, form, filters = {}) {
     const classShowName = Object.hasOwn(stellarClassShowName, primaryClass)
       ? stellarClassShowName[primaryClass]
       : true;
-    const starShowName = Object.hasOwn(individualShowName, starName)
-      ? individualShowName[starName]
+    const starShowName = Object.hasOwn(individualShowName, starKey)
+      ? individualShowName[starKey]
       : true;
 
     star.displayName = classShowName && starShowName
@@ -120,7 +121,7 @@ function createStarRow(starName, checkboxConfig) {
     checkboxConfig.name,
     checkboxConfig.label,
     true,
-    starName
+    checkboxConfig.value
   );
   checkboxRow.appendChild(container);
   starContainer.appendChild(checkboxRow);
@@ -151,12 +152,15 @@ function buildSelectionSubcategory(cls, commonName, starsInClass, container) {
   individualStars.classList.add('individual-stars');
 
   starsInClass.forEach(star => {
-    const safeName = sanitizeName(star.Common_name_of_the_star);
+    const starId = getStarId(star);
+    const starName = star.Common_name_of_the_star || star.Common_name_of_the_star_system || starId;
+    const safeName = sanitizeName(starId);
     individualStars.appendChild(
-      createStarRow(star.Common_name_of_the_star, {
+      createStarRow(starName, {
         id: `star-${safeName}-star`,
         name: 'star-show-star',
-        label: 'Show Star'
+        label: 'Show Star',
+        value: starId
       })
     );
   });
@@ -214,12 +218,15 @@ function buildPreferencesSubcategory(cls, commonName, starsInClass, defaultSize,
   individualStars.classList.add('individual-stars');
 
   starsInClass.forEach(star => {
-    const safeName = sanitizeName(star.Common_name_of_the_star);
+    const starId = getStarId(star);
+    const starName = star.Common_name_of_the_star || star.Common_name_of_the_star_system || starId;
+    const safeName = sanitizeName(starId);
     individualStars.appendChild(
-      createStarRow(star.Common_name_of_the_star, {
+      createStarRow(starName, {
         id: `star-${safeName}-name`,
         name: 'star-show-name',
-        label: 'Show Name'
+        label: 'Show Name',
+        value: starId
       })
     );
   });

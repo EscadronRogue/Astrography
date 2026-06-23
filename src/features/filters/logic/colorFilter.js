@@ -13,7 +13,7 @@ import { getPrimaryClass } from '../../../shared/stellarClassUtils.js';
  * @param {Object} filters - Filter state containing the selected color mode.
  * @returns {Array} The same stars array with displayColor set.
  */
-export function applyColorFilter(stars, filters) {
+export function applyColorFilter(stars, filters, displayStats = null) {
   const stellarClassData = getStellarClassData();
 
   if (filters.color === 'stellar-class') {
@@ -27,11 +27,10 @@ export function applyColorFilter(stars, filters) {
       star.displayColor = getStableConstellationColor((star.constellation || '').toUpperCase()) || DEFAULT_STAR_COLOR;
     });
   } else if (filters.color === 'galactic-plane') {
-    let maxZ = EPSILON;
-    for (let i = 0; i < stars.length; i++) {
-      const absZ = Math.abs(Number.isFinite(stars[i].z_coordinate) ? stars[i].z_coordinate : 0);
-      if (absZ > maxZ) maxZ = absZ;
-    }
+    const maxZ = displayStats?.maxAbsZ ?? stars.reduce((maxValue, star) => {
+      const absZ = Math.abs(Number.isFinite(star.z_coordinate) ? star.z_coordinate : 0);
+      return absZ > maxValue ? absZ : maxValue;
+    }, EPSILON);
     stars.forEach(star => {
       const z = Number.isFinite(star.z_coordinate) ? star.z_coordinate : 0;
       const factor = Math.abs(z) / maxZ;

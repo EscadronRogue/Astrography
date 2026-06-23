@@ -1,9 +1,10 @@
 // Constellation boundary and label rendering migrated from the legacy constellation filter module.
 
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { radToSphere, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, greatCircleToMollweide } from '../../shared/geometryUtils.js';
 import { buildWideLineGeometry, createWideLineMaterial } from '../../render/engine/renderUtils.js';
 import { getDoubleSidedLabelMaterial } from '../density/densityColorScale.js';
+import { clamp01 } from '../../shared/colorParsing.js';
 import {
   loadConstellationBoundaries,
   loadConstellationCenters,
@@ -126,7 +127,7 @@ export function rebuildConstellationMeshFromSegments(lineSegs, overrideWidth, ov
     }
     mesh.geometry = geometry;
   }
-  const clampedOpacity = Math.max(0, Math.min(1, baseOpacity));
+  const clampedOpacity = clamp01(baseOpacity);
   if (mesh.material && mesh.material.color) {
     mesh.material.color.setHex(CONSTELLATION_LINE_COLOR);
   }
@@ -146,7 +147,7 @@ export function rebuildConstellationMeshFromSegments(lineSegs, overrideWidth, ov
 export function createConstellationBoundariesForMollweide(opacity = 0.4, lineWidth = 1) {
   const R = 100;
   const sanitizedWidth = Math.max(0.1, lineWidth);
-  const sanitizedOpacity = Math.max(0, Math.min(1, opacity));
+  const sanitizedOpacity = clamp01(opacity);
   const material = new THREE.LineBasicMaterial({
     color: CONSTELLATION_LINE_COLOR,
     linewidth: sanitizedWidth,
@@ -270,4 +271,3 @@ export function createConstellationLabelsForMollweide(opacity = 0.8) {
   });
   return labels;
 }
-

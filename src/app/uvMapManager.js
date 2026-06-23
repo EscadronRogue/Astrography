@@ -1,6 +1,7 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+﻿import * as THREE from '../vendor/three.js';
 import { ThreeDControls, TwoDControls } from '../render/interactions/cameraControls.js';
 import { LabelManager } from '../features/labels/labelManager.js';
+import { clearObject3DChildren, disposeObject3D } from '../render/engine/renderUtils.js';
 import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { getStarCoordinates } from '../shared/starUtils.js';
 import {
@@ -25,9 +26,9 @@ import { getConstellationLabelAnchors } from '../features/constellations/constel
 import { applyCanvasConstellationLabelStyle, constellationLineCss } from '../features/constellations/constellationStyle.js';
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
 import { galacticToEquatorial, eclipticToEquatorial } from '../features/planes/planeDefinitions.js';
-import { hashString, mixHash } from '../shared/hashUtils.js';
 import { getViewpointStarId } from '../shared/viewpoint.js';
 import { GLOBE_RADIUS, ATLAS_WIDTH, ATLAS_HEIGHT } from '../shared/constants.js';
+import { configureRendererForCanvas } from '../shared/canvasSizing.js';
 import {
   drawWrappedCircle,
   strokeUvSegment,
@@ -36,6 +37,21 @@ import {
   fillWrappedTriangle
 } from './uvAtlasDrawing.js';
 import { getLabelPriority, computeUvLabelPlacement, LabelSpatialIndex } from './uvLabelPlacement.js';
+import {
+  buildFeatureLayerSignature,
+  buildLabelLayerSignature,
+  buildStarLayerSignature,
+  buildStarTopologySignature
+} from './uvLayerSignatures.js';
+import { clamp01, createLayerCanvas, rgbaFromHex } from './uvCanvasLayers.js';
+import {
+  getAverageOverlayAlpha,
+  getOverlayCellAlpha,
+  getOverlayCellAtlasPoint,
+  getOverlayCellColor,
+  getOverlayCellRaDec,
+  getScaledOverlayRadius
+} from './uvOverlayCells.js';
 
 const PLANE_WIDTH = EQUIRECT_WIDTH;
 const PLANE_HEIGHT = EQUIRECT_HEIGHT;
@@ -51,77 +67,6 @@ function createHiddenPointsMaterial() {
   });
 }
 
-const _rgbaColor = new THREE.Color();
-function rgbaFromHex(hex, alpha = 1) {
-  _rgbaColor.set(hex || '#ffffff');
-  return `rgba(${Math.round(_rgbaColor.r * 255)}, ${Math.round(_rgbaColor.g * 255)}, ${Math.round(_rgbaColor.b * 255)}, ${alpha})`;
-}
-
-// Cached DOM input values — updated on change/input events to avoid per-frame DOM reads
-const _inputCache = new Map();
-let _inputCacheInitialized = false;
-
-function _initInputCache() {
-  if (_inputCacheInitialized) return;
-  _inputCacheInitialized = true;
-  const form = document.getElementById('filters-form');
-  if (!form) return;
-  const handler = (e) => {
-    if (e.target && e.target.id) {
-      _inputCache.set(e.target.id, e.target.value);
-    }
-    if (e.target && e.target.name) {
-      _formDataCache.delete(e.target.name);
-    }
-  };
-  form.addEventListener('input', handler);
-  form.addEventListener('change', handler);
-}
-
-function readNumberInput(id, fallback) {
-  _initInputCache();
-  if (_inputCache.has(id)) {
-    const parsed = Number.parseFloat(_inputCache.get(id));
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  const el = document.getElementById(id);
-  if (!el) return fallback;
-  const parsed = Number.parseFloat(el.value);
-  if (Number.isFinite(parsed)) {
-    _inputCache.set(id, el.value);
-  }
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-const _formDataCache = new Map();
-
-function clamp01(value) {
-  return THREE.MathUtils.clamp(value, 0, 1);
-}
-
-function hashNumber(value, precision = 1000) {
-  return Number.isFinite(value) ? Math.round(value * precision) : 0;
-}
-
-function getStarRenderKey(star) {
-  return star?.starId || star?.Source_id || star?.HIP_number || `${star?.Common_name_of_the_star || 'star'}|${star?.RA_in_degrees}|${star?.DEC_in_degrees}`;
-}
-
-function getConnectionRenderKey(connection) {
-  return connection?.pairKey || `${getStarRenderKey(connection?.starA)}|${getStarRenderKey(connection?.starB)}`;
-}
-
-function createLayerCanvas() {
-  const canvas = document.createElement('canvas');
-  canvas.width = ATLAS_WIDTH;
-  canvas.height = ATLAS_HEIGHT;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('2D canvas context unavailable');
-  }
-  return { canvas, ctx };
-}
-
 export class UVMapManager {
   constructor({ canvasId, mapType, state }) {
     this.canvas = document.getElementById(canvasId);
@@ -129,16 +74,18 @@ export class UVMapManager {
     this.state = state;
     this.scene = new THREE.Scene();
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+    const initialSize = configureRendererForCanvas(this.renderer, this.canvas);
+    const initialAspect = initialSize.width / initialSize.height;
     this.starOpacity = 1;
     this.connectionOpacity = 0.5;
     this.labelOpacity = 1;
     this.starObjects = [];
+    this.renderDirty = true;
     this.starGroup = new THREE.Group();
     this.scene.add(this.starGroup);
     this.labelManager = new LabelManager(mapType, this.scene);
     this.labelManager.setLabelOpacity(this.labelOpacity);
+    this.filterOptions = {};
     this.boundariesPromise = null;
     this.boundaryData = null;
     this.constellationMetaPromise = null;
@@ -168,11 +115,10 @@ export class UVMapManager {
     this.redrawBaseLayer();
 
     if (mapType === 'Equirectangular') {
-      const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
       this.frustumSize = 130;
       this.camera = new THREE.OrthographicCamera(
-        (-this.frustumSize * aspect) / 2,
-        (this.frustumSize * aspect) / 2,
+        (-this.frustumSize * initialAspect) / 2,
+        (this.frustumSize * initialAspect) / 2,
         this.frustumSize / 2,
         -this.frustumSize / 2,
         -1000,
@@ -180,6 +126,7 @@ export class UVMapManager {
       );
       this.camera.position.set(0, 0, 10);
       this.controls = new TwoDControls(this.camera, this.renderer.domElement, {
+        requestRender: () => requestRenderIfAvailable(this),
         panSpeed: 0.3,
         minZoom: 0.5,
         maxZoom: 12
@@ -192,9 +139,10 @@ export class UVMapManager {
       this.surfaceMesh = plane;
       this.scene.add(plane);
     } else {
-      this.camera = new THREE.PerspectiveCamera(60, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 10000);
+      this.camera = new THREE.PerspectiveCamera(60, initialAspect, 0.1, 10000);
       this.camera.position.set(0, 0, 220);
       this.controls = new ThreeDControls(this.camera, this.renderer.domElement, {
+        requestRender: () => requestRenderIfAvailable(this),
         minDistance: 120,
         maxDistance: 700,
         target: new THREE.Vector3(0, 0, 0)
@@ -213,7 +161,8 @@ export class UVMapManager {
     }
 
     this.scene.add(this.camera);
-    window.addEventListener('resize', () => this.onResize(), false);
+    this.boundResize = () => this.onResize();
+    window.addEventListener('resize', this.boundResize, false);
   }
 
   setLegacySourceScene(scene) {
@@ -249,19 +198,28 @@ export class UVMapManager {
   }
 
   setStarOpacity(opacity) {
-    this.starOpacity = opacity;
+    this.starOpacity = clamp01(opacity);
     this.redrawLastState();
   }
 
   setConnectionOpacity(opacity) {
-    this.connectionOpacity = opacity;
+    this.connectionOpacity = clamp01(opacity);
     this.redrawLastState();
   }
 
   setLabelOpacity(opacity) {
-    this.labelOpacity = opacity;
-    this.labelManager.setLabelOpacity(opacity);
+    this.labelOpacity = clamp01(opacity);
+    this.labelManager.setLabelOpacity(this.labelOpacity);
     this.redrawLastState();
+  }
+
+  setFilterOptions(options = {}) {
+    this.filterOptions = options || {};
+  }
+
+  getFilterNumber(name, fallback) {
+    const value = this.filterOptions?.[name];
+    return Number.isFinite(value) ? value : fallback;
   }
 
   redrawBaseLayer() {
@@ -310,87 +268,15 @@ export class UVMapManager {
     this.atlasTexture.needsUpdate = true;
   }
 
-  getSelectedFormValues(name) {
-    if (_formDataCache.has(name)) return _formDataCache.get(name);
-    const form = document.getElementById('filters-form');
-    if (!form) return '';
-    const result = new FormData(form).getAll(name).join('|');
-    _formDataCache.set(name, result);
-    return result;
-  }
-
-  buildStarTopologySignature(stars) {
-    let hash = 2166136261;
-    hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
-    (stars || []).forEach(star => {
-      hash = mixHash(hash, hashString(getStarRenderKey(star)));
-    });
-    return `${stars?.length || 0}:${hash}`;
-  }
-
-  buildStarLayerSignature(stars) {
-    let hash = mixHash(2166136261, hashNumber(this.starOpacity));
-    hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
-    (stars || []).forEach(star => {
-      hash = mixHash(hash, hashString(getStarRenderKey(star)));
-      hash = mixHash(hash, hashString(star.displayColor || '#ffffff'));
-      hash = mixHash(hash, hashNumber(star.displaySize ?? 1, 100));
-    });
-    return `${stars?.length || 0}:${hash}`;
-  }
-
-  buildLabelLayerSignature(stars) {
-    let hash = mixHash(2166136261, hashNumber(this.labelOpacity));
-    hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
-    hash = mixHash(hash, this.state.showConstellationNamesFlag ? 1 : 0);
-    hash = mixHash(hash, hashNumber(readNumberInput('constellation-name-opacity-slider', 80), 10));
-    (stars || []).forEach(star => {
-      hash = mixHash(hash, hashString(getStarRenderKey(star)));
-      hash = mixHash(hash, hashString(star.displayName || ''));
-      hash = mixHash(hash, hashNumber(star.displayLabelSize ?? star.displaySize ?? 1, 100));
-    });
-    return `${stars?.length || 0}:${hash}`;
-  }
-
-  buildFeatureLayerSignature(connections) {
-    let hash = 2166136261;
-    hash = mixHash(hash, hashString(getViewpointStarId() || 'sol'));
-    hash = mixHash(hash, this.state.showConstellationOverlayFlag ? 1 : 0);
-    hash = mixHash(hash, this.state.showConstellationBoundariesFlag ? 1 : 0);
-    hash = mixHash(hash, this.state.enableDensityFilterFlag ? 1 : 0);
-    hash = mixHash(hash, this.state.enableIsolationFilterFlag ? 1 : 0);
-    hash = mixHash(hash, this.state.showCloudsFlag ? 1 : 0);
-    hash = mixHash(hash, this.state.showCloudDensityFlag ? 1 : 0);
-    hash = mixHash(hash, this.state.showGalacticPlaneFlag ? 1 : 0);
-    hash = mixHash(hash, this.state.showEclipticPlaneFlag ? 1 : 0);
-    hash = mixHash(hash, this.state.showCelestialEquatorFlag ? 1 : 0);
-    hash = mixHash(hash, hashNumber(this.connectionOpacity));
-    hash = mixHash(hash, hashNumber(readNumberInput('connection-width-slider', 5), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('connection-label-size-slider', 1), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('min-distance-slider', 0), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('max-distance-slider', 20), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('density-slider', 10), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('density-tolerance-slider', 0), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('density-bottom-slider', 10), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('density-top-slider', 10), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('isolation-slider', 5), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('isolation-tolerance-slider', 0), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('plane-opacity-slider', 50), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('constellation-line-opacity-slider', 40), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('constellation-line-width-slider', 1), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('cloud-opacity-slider', 100), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('cloud-density-radius-slider', 5), 10));
-    hash = mixHash(hash, hashNumber(readNumberInput('cloud-density-opacity-slider', 100), 10));
-    hash = mixHash(hash, hashNumber(this.state.densityOverlay?.revision ?? 0, 1));
-    hash = mixHash(hash, hashNumber(this.state.isolationOverlay?.revision ?? 0, 1));
-    hash = mixHash(hash, hashString(this.getSelectedFormValues('dust-cloud-mode') || 'density'));
-    hash = mixHash(hash, hashString(this.getSelectedFormValues('dust-clouds')));
-    (connections || []).forEach(connection => {
-      hash = mixHash(hash, hashString(getConnectionRenderKey(connection)));
-      hash = mixHash(hash, hashString(connection.starA?.displayColor || ''));
-      hash = mixHash(hash, hashString(connection.starB?.displayColor || ''));
-    });
-    return `${connections?.length || 0}:${hash}`;
+  getLayerSignatureContext() {
+    return {
+      state: this.state,
+      filterOptions: this.filterOptions,
+      starOpacity: this.starOpacity,
+      labelOpacity: this.labelOpacity,
+      connectionOpacity: this.connectionOpacity,
+      viewpointStarId: getViewpointStarId() || 'sol'
+    };
   }
 
   redrawLastState() {
@@ -399,16 +285,18 @@ export class UVMapManager {
     }
   }
 
-  async updateMap(stars, connectionObjs) {
+  async updateMap(stars, connectionObjs, filterOptions = this.filterOptions) {
+    this.setFilterOptions(filterOptions);
     this.lastStars = stars;
     this.lastConnections = connectionObjs;
     await Promise.all([this.ensureBoundaryData(), this.ensureConstellationMeta()]);
     const safeStars = stars || [];
     const safeConnections = connectionObjs || [];
-    const featureSignature = this.buildFeatureLayerSignature(safeConnections);
-    const starSignature = this.buildStarLayerSignature(safeStars);
-    const labelSignature = this.buildLabelLayerSignature(safeStars);
-    const interactionSignature = this.buildStarTopologySignature(safeStars);
+    const signatureContext = this.getLayerSignatureContext();
+    const featureSignature = buildFeatureLayerSignature(safeConnections, signatureContext);
+    const starSignature = buildStarLayerSignature(safeStars, signatureContext);
+    const labelSignature = buildLabelLayerSignature(safeStars, signatureContext);
+    const interactionSignature = buildStarTopologySignature(safeStars, signatureContext);
 
     let atlasDirty = false;
     if (this.layerSignatures.features !== featureSignature) {
@@ -434,10 +322,11 @@ export class UVMapManager {
       this.updateInteractionGeometry(safeStars);
       this.layerSignatures.interaction = interactionSignature;
     }
-    requestRenderIfAvailable();
+    requestRenderIfAvailable(this);
   }
 
-  drawAtlas(stars, connectionObjs) {
+  drawAtlas(stars, connectionObjs, filterOptions = this.filterOptions) {
+    this.setFilterOptions(filterOptions);
     const safeStars = stars || [];
     const safeConnections = connectionObjs || [];
     this.lastStars = safeStars;
@@ -448,10 +337,11 @@ export class UVMapManager {
     this.redrawLabelLayer(safeStars);
     this.composeAtlas();
     this.updateInteractionGeometry(safeStars);
-    this.layerSignatures.features = this.buildFeatureLayerSignature(safeConnections);
-    this.layerSignatures.stars = this.buildStarLayerSignature(safeStars);
-    this.layerSignatures.labels = this.buildLabelLayerSignature(safeStars);
-    this.layerSignatures.interaction = this.buildStarTopologySignature(safeStars);
+    const signatureContext = this.getLayerSignatureContext();
+    this.layerSignatures.features = buildFeatureLayerSignature(safeConnections, signatureContext);
+    this.layerSignatures.stars = buildStarLayerSignature(safeStars, signatureContext);
+    this.layerSignatures.labels = buildLabelLayerSignature(safeStars, signatureContext);
+    this.layerSignatures.interaction = buildStarTopologySignature(safeStars, signatureContext);
   }
 
   drawGraticule(ctx) {
@@ -477,8 +367,8 @@ export class UVMapManager {
 
   drawConnections(ctx, connections) {
     const opacity = clamp01(this.connectionOpacity);
-    const lineWidth = Math.max(1, readNumberInput('connection-width-slider', 5) * 0.45);
-    const labelSize = readNumberInput('connection-label-size-slider', 1);
+    const lineWidth = Math.max(1, this.getFilterNumber('connectionWidth', 5) * 0.45);
+    const labelSize = this.getFilterNumber('connectionLabelSize', 1);
     connections.forEach(connection => {
       if (!connection?.starA || !connection?.starB) return;
       const startVec = connection.starA.spherePosition;
@@ -621,7 +511,7 @@ export class UVMapManager {
 
   drawConstellationNames(ctx) {
     if (!this.state.showConstellationNamesFlag) return;
-    const opacity = clamp01(readNumberInput('constellation-name-opacity-slider', 80) / 100);
+    const opacity = clamp01(this.getFilterNumber('constellationNameOpacity', 0.8));
     if (opacity <= 0.001) return;
     const centers = getConstellationLabelAnchors();
     const fullNames = getConstellationFullNames();
@@ -645,8 +535,8 @@ export class UVMapManager {
   }
 
   drawConstellationBoundaries(ctx, boundaries) {
-    const opacity = clamp01(readNumberInput('constellation-line-opacity-slider', 40) / 100);
-    const lineWidth = Math.max(0.1, readNumberInput('constellation-line-width-slider', 1));
+    const opacity = clamp01(this.getFilterNumber('constellationLineOpacity', 0.4));
+    const lineWidth = Math.max(0.1, this.getFilterNumber('constellationLineWidth', 1));
     if (opacity <= 0.001) return;
     ctx.save();
     ctx.strokeStyle = constellationLineCss(opacity);
@@ -674,7 +564,7 @@ export class UVMapManager {
   drawDensityOverlay(ctx) {
     if (!this.state.enableDensityFilterFlag || !this.state.densityOverlay) return;
     const overlay = this.state.densityOverlay;
-    const opacityFactor = clamp01(readNumberInput('density-opacity-slider', 100) / 100);
+    const opacityFactor = clamp01(this.getFilterNumber('densityOpacity', 1));
     if (opacityFactor <= 0.001) return;
 
     // Smooth heatmap pass (inspired by Mollweide heatmap canvas approach)
@@ -682,44 +572,44 @@ export class UVMapManager {
     ctx.filter = 'blur(6px)';
     (overlay.cubesData || []).forEach(cell => {
       if (!cell?.active) return;
-      const uv = (cell.raRad != null && cell.decRad != null)
-        ? raDecToUV(cell.raRad, cell.decRad)
-        : spherePositionToUv(cell.globeMesh.position, 100);
-      const x = uv.u * ATLAS_WIDTH;
-      const y = uv.v * ATLAS_HEIGHT;
-      const color = cell.tcMesh?.material?.color ? `#${cell.tcMesh.material.color.getHexString()}` : '#ff8844';
-      const cellAlpha = cell.tcMesh?.material?.opacity ?? 0.15;
-      const alpha = clamp01(cellAlpha * opacityFactor);
-      const distRatio = cell.tcPos ? Math.min(1, cell.tcPos.length() / (overlay.maxDistance || 20)) : 0.5;
-      const scale = THREE.MathUtils.lerp(12, 1, distRatio);
-      const radius = Math.max(4, overlay.gridSize * scale * 0.6);
-      const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      const point = getOverlayCellAtlasPoint(cell, { raDecToUV, spherePositionToUv });
+      if (!point) return;
+      const color = getOverlayCellColor(cell, 'tcMesh', '#ff8844');
+      const alpha = getOverlayCellAlpha(cell, { meshKey: 'tcMesh', fallbackOpacity: 0.15, opacityFactor });
+      const radius = getScaledOverlayRadius(cell, overlay, { minRadius: 4, radiusFactor: 0.6 });
+      const grd = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
       grd.addColorStop(0, rgbaFromHex(color, alpha));
       grd.addColorStop(0.7, rgbaFromHex(color, alpha * 0.3));
       grd.addColorStop(1, rgbaFromHex(color, 0));
       ctx.fillStyle = grd;
-      drawWrappedCircle(ctx, x, y, radius);
+      drawWrappedCircle(ctx, point.x, point.y, radius);
     });
     ctx.filter = 'none';
 
     // Draw adjacent lines between active cells
     (overlay.adjacentLines || []).forEach(({ cell1, cell2 }) => {
       if (!cell1?.active || !cell2?.active) return;
-      const uv1 = (cell1.raRad != null) ? raDecToUV(cell1.raRad, cell1.decRad) : spherePositionToUv(cell1.globeMesh.position, 100);
-      const uv2 = (cell2.raRad != null) ? raDecToUV(cell2.raRad, cell2.decRad) : spherePositionToUv(cell2.globeMesh.position, 100);
       const c1 = cell1.tcMesh?.material?.color;
       const c2 = cell2.tcMesh?.material?.color;
       const avgColor = c1 ? `#${c1.clone().lerp(c2 || c1, 0.5).getHexString()}` : '#ff8844';
-      const avgAlpha = clamp01(((cell1.tcMesh?.material?.opacity ?? 0) + (cell2.tcMesh?.material?.opacity ?? 0)) / 2 * opacityFactor);
+      const avgAlpha = getAverageOverlayAlpha(cell1, cell2, { meshKey: 'tcMesh', opacityFactor });
       ctx.strokeStyle = rgbaFromHex(avgColor, avgAlpha);
       ctx.lineWidth = 1.5;
-      const segments = sampleGreatCircleUvFromRaDec(
-        cell1.raRad ?? 0, cell1.decRad ?? 0,
-        cell2.raRad ?? 0, cell2.decRad ?? 0,
-        100, 12
-      );
-      for (let j = 0; j < segments.length - 1; j++) {
-        splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
+      const raDec1 = getOverlayCellRaDec(cell1);
+      const raDec2 = getOverlayCellRaDec(cell2);
+      if (raDec1 && raDec2) {
+        const segments = sampleGreatCircleUvFromRaDec(
+          raDec1.ra, raDec1.dec,
+          raDec2.ra, raDec2.dec,
+          GLOBE_RADIUS, 12
+        );
+        for (let j = 0; j < segments.length - 1; j++) {
+          splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
+        }
+      } else {
+        const uv1 = getOverlayCellAtlasPoint(cell1, { raDecToUV, spherePositionToUv });
+        const uv2 = getOverlayCellAtlasPoint(cell2, { raDecToUV, spherePositionToUv });
+        if (uv1 && uv2) splitWrappedSegment(uv1, uv2).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
       }
     });
     ctx.restore();
@@ -733,65 +623,65 @@ export class UVMapManager {
     ctx.save();
     (overlay.adjacentLines || []).forEach(({ line, cell1, cell2 }) => {
       if (!cell1?.active || !cell2?.active) return;
-      const uv1 = (cell1.raRad != null) ? raDecToUV(cell1.raRad, cell1.decRad) : spherePositionToUv(cell1.globeMesh.position, 100);
-      const uv2 = (cell2.raRad != null) ? raDecToUV(cell2.raRad, cell2.decRad) : spherePositionToUv(cell2.globeMesh.position, 100);
       const c1 = cell1.tcMesh?.material?.color;
       const c2 = cell2.tcMesh?.material?.color;
       const avgColor = c1 ? `#${c1.clone().lerp(c2 || c1, 0.5).getHexString()}` : '#4f97ff';
-      const avgAlpha = clamp01(((cell1.tcMesh?.material?.opacity ?? 0) + (cell2.tcMesh?.material?.opacity ?? 0)) / 2);
+      const avgAlpha = getAverageOverlayAlpha(cell1, cell2, { meshKey: 'tcMesh' });
       ctx.strokeStyle = rgbaFromHex(avgColor, avgAlpha * 0.6);
       ctx.lineWidth = 1.2;
-      const segments = sampleGreatCircleUvFromRaDec(
-        cell1.raRad ?? 0, cell1.decRad ?? 0,
-        cell2.raRad ?? 0, cell2.decRad ?? 0,
-        100, 12
-      );
-      for (let j = 0; j < segments.length - 1; j++) {
-        splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
+      const raDec1 = getOverlayCellRaDec(cell1);
+      const raDec2 = getOverlayCellRaDec(cell2);
+      if (raDec1 && raDec2) {
+        const segments = sampleGreatCircleUvFromRaDec(
+          raDec1.ra, raDec1.dec,
+          raDec2.ra, raDec2.dec,
+          GLOBE_RADIUS, 12
+        );
+        for (let j = 0; j < segments.length - 1; j++) {
+          splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
+        }
+      } else {
+        const uv1 = getOverlayCellAtlasPoint(cell1, { raDecToUV, spherePositionToUv });
+        const uv2 = getOverlayCellAtlasPoint(cell2, { raDecToUV, spherePositionToUv });
+        if (uv1 && uv2) splitWrappedSegment(uv1, uv2).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
       }
     });
 
     // Draw cell indicators
     (overlay.cubesData || []).forEach(cell => {
       if (!cell?.active) return;
-      const uv = (cell.raRad != null && cell.decRad != null)
-        ? raDecToUV(cell.raRad, cell.decRad)
-        : spherePositionToUv(cell.globeMesh.position, 100);
-      const x = uv.u * ATLAS_WIDTH;
-      const y = uv.v * ATLAS_HEIGHT;
-      const color = cell.tcMesh?.material?.color ? `#${cell.tcMesh.material.color.getHexString()}` : '#4f97ff';
-      const alpha = clamp01(cell.tcMesh?.material?.opacity ?? 0.35);
-      const distRatio = cell.tcPos ? Math.min(1, cell.tcPos.length() / (overlay.maxDistance || 20)) : 0.5;
-      const scale = THREE.MathUtils.lerp(12, 1, distRatio);
-      const radius = Math.max(3, overlay.gridSize * scale * 0.5);
+      const point = getOverlayCellAtlasPoint(cell, { raDecToUV, spherePositionToUv });
+      if (!point) return;
+      const color = getOverlayCellColor(cell, 'tcMesh', '#4f97ff');
+      const alpha = getOverlayCellAlpha(cell, { meshKey: 'tcMesh', fallbackOpacity: 0.35 });
+      const radius = getScaledOverlayRadius(cell, overlay, { minRadius: 3, radiusFactor: 0.5 });
       ctx.fillStyle = rgbaFromHex(color, alpha);
-      drawWrappedCircle(ctx, x, y, radius);
+      drawWrappedCircle(ctx, point.x, point.y, radius);
     });
     ctx.restore();
   }
 
   drawCloudDensityOverlay(ctx) {
     if (!this.state.showCloudDensityFlag || !Array.isArray(this.state.cloudDensityOverlays)) return;
-    const cdOpacity = clamp01(readNumberInput('cloud-density-opacity-slider', 100) / 100);
+    const cdOpacity = clamp01(this.getFilterNumber('cloudDensityOpacity', 1));
     if (cdOpacity <= 0.001) return;
     ctx.save();
     ctx.filter = 'blur(4px)';
     this.state.cloudDensityOverlays.forEach(overlay => {
       (overlay?.cubesData || []).forEach(cell => {
-        if (!cell?.globeMesh) return;
-        const color = cell.globeMesh.material?.color ? `#${cell.globeMesh.material.color.getHexString()}` : '#ff6600';
-        const alpha = clamp01((cell.globeMesh.material?.opacity ?? 0.2) * cdOpacity);
+        if (!cell?.active || !cell?.globeMesh) return;
+        const color = getOverlayCellColor(cell, 'globeMesh', '#ff6600');
+        const alpha = getOverlayCellAlpha(cell, { meshKey: 'globeMesh', fallbackOpacity: 0.2, opacityFactor: cdOpacity });
         // Use native UV from globe position
-        const uv = spherePositionToUv(cell.globeMesh.position, 100);
-        const x = uv.u * ATLAS_WIDTH;
-        const y = uv.v * ATLAS_HEIGHT;
+        const point = getOverlayCellAtlasPoint(cell, { raDecToUV, spherePositionToUv });
+        if (!point) return;
         const radius = Math.max(6, 18);
-        const grd = ctx.createRadialGradient(x, y, 0, x, y, radius);
+        const grd = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
         grd.addColorStop(0, rgbaFromHex(color, alpha));
         grd.addColorStop(0.6, rgbaFromHex(color, alpha * 0.4));
         grd.addColorStop(1, rgbaFromHex(color, 0));
         ctx.fillStyle = grd;
-        drawWrappedCircle(ctx, x, y, radius);
+        drawWrappedCircle(ctx, point.x, point.y, radius);
       });
     });
     ctx.filter = 'none';
@@ -801,7 +691,7 @@ export class UVMapManager {
   drawCloudsOverlay(ctx) {
     const overlays = this.sourceGlobeScene?.userData?.cloudOverlays;
     if (!this.state.showCloudsFlag || !Array.isArray(overlays)) return;
-    const cloudOpacity = clamp01(readNumberInput('cloud-opacity-slider', 100) / 100);
+    const cloudOpacity = clamp01(this.getFilterNumber('cloudOpacity', 1));
     if (cloudOpacity <= 0.001) return;
     overlays.forEach(lineSegments => {
       const geometry = lineSegments?.geometry;
@@ -825,7 +715,7 @@ export class UVMapManager {
   }
 
   drawPlanes(ctx) {
-    const planeOpacity = clamp01(readNumberInput('plane-opacity-slider', 50) / 100);
+    const planeOpacity = clamp01(this.getFilterNumber('planeOpacity', 0.5));
     if (planeOpacity <= 0.001) return;
     if (this.state.showGalacticPlaneFlag) {
       this.drawEquatorialCurve(ctx, angle => galacticToEquatorial(angle, 0), '#7effb2', planeOpacity);
@@ -857,12 +747,7 @@ export class UVMapManager {
 
 
   updateInteractionGeometry(stars) {
-    while (this.starGroup.children.length) {
-      const child = this.starGroup.children[0];
-      this.starGroup.remove(child);
-      child.geometry?.dispose?.();
-      child.material?.dispose?.();
-    }
+    clearObject3DChildren(this.starGroup);
     if (!stars?.length) {
       this.starObjects = [];
       return;
@@ -887,8 +772,7 @@ export class UVMapManager {
   }
 
   onResize() {
-    const width = this.canvas.clientWidth;
-    const height = this.canvas.clientHeight;
+    const { width, height } = configureRendererForCanvas(this.renderer, this.canvas);
     if (this.camera.isOrthographicCamera) {
       const aspect = width / height;
       this.camera.left = (-this.frustumSize * aspect) / 2;
@@ -899,12 +783,32 @@ export class UVMapManager {
       this.camera.aspect = width / height;
     }
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(width, height);
-    requestRenderIfAvailable();
+    requestRenderIfAvailable(this);
   }
 
   render() {
     if (!this.canvas.isConnected) return;
     this.renderer.render(this.scene, this.camera);
+  }
+
+  dispose() {
+    if (this.boundResize) {
+      window.removeEventListener('resize', this.boundResize, false);
+    }
+    this.starInteractionDisposer?.();
+    this.controls?.dispose?.();
+    this.labelManager?.removeAllLabels?.();
+
+    if (this.atlasTexture) {
+      this.atlasTexture.dispose();
+      this.atlasTexture = null;
+    }
+
+    this.scene.children.slice().forEach(child => {
+      this.scene.remove(child);
+      disposeObject3D(child);
+    });
+
+    this.renderer.dispose();
   }
 }

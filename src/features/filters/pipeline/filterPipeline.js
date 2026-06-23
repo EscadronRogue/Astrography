@@ -1,5 +1,5 @@
 import { applyFilters, generateStellarClassFilters } from './index.js';
-import { isDefaultViewpoint } from '../../../shared/viewpoint.js';
+import { isDefaultViewpoint, getViewpointStarId } from '../../../shared/viewpoint.js';
 import { setConnectionLineParams } from '../../connections/connectionSettings.js';
 import { disposeObject3D } from '../../../render/engine/renderUtils.js';
 import {
@@ -13,6 +13,7 @@ import { applyPlanes, refreshMollweidePlanes } from '../../planes/planeManager.j
 import { rebuildConstellationVisuals, refreshMollweideConstellationVisuals } from '../../constellations/constellationManager.js';
 import { getStarId } from '../../../shared/starUtils.js';
 import { getStarEquirectangularPosition } from '../../../shared/uvUtils.js';
+import { clamp01 } from '../../../shared/colorParsing.js';
 
 function isMapVisible(map) {
   return Boolean(map?.canvas?.isConnected);
@@ -93,6 +94,9 @@ function updateProjectedPositions(ctx) {
 function updateMapDisplays(ctx, options) {
   const { trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap } = ctx.getMaps();
   const { state } = ctx;
+  uvMap?.setFilterOptions(options);
+  uvGlobeMap?.setFilterOptions(options);
+
   trueCoordinatesMap.setStarOpacity(options.starOpacity);
   globeMap.setStarOpacity(options.starOpacity);
   mollweideMap.setStarOpacity(options.starOpacity);
@@ -124,7 +128,6 @@ function updateMapDisplays(ctx, options) {
   }
   if (isMapVisible(mollweideMap)) {
     mollweideMap.addStars(state.currentMollweideFilteredStars);
-    mollweideMap.updateStarPositions(state.currentMollweideFilteredStars);
     mollweideMap.updateConnections(
       state.currentMollweideFilteredStars,
       state.currentMollweideConnections,
@@ -134,10 +137,10 @@ function updateMapDisplays(ctx, options) {
     if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
   }
   if (isMapVisible(uvMap)) {
-    uvMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+    uvMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections, options);
   }
   if (isMapVisible(uvGlobeMap)) {
-    uvGlobeMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
+    uvGlobeMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections, options);
   }
 }
 
@@ -162,6 +165,15 @@ function clearCloudDensityOverlays(ctx) {
   const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
   const { state } = ctx;
   state.cloudDensityOverlays.forEach(overlay => {
+    if (typeof overlay.getSceneObjects === 'function') {
+      const sceneObjects = overlay.getSceneObjects();
+      sceneObjects.tc?.forEach(object => trueCoordinatesMap.scene.remove(object));
+      sceneObjects.globe?.forEach(object => globeMap.scene.remove(object));
+      sceneObjects.moll?.forEach(object => mollweideMap.scene.remove(object));
+      overlay.dispose?.();
+      return;
+    }
+
     overlay.cubesData.forEach(cube => {
       trueCoordinatesMap.scene.remove(cube.tcMesh);
       disposeObject3D(cube.tcMesh);
@@ -174,19 +186,78 @@ function clearCloudDensityOverlays(ctx) {
     disposeObject3D(overlay.textureMesh);
   });
   state.cloudDensityOverlays = [];
+  state.cloudDensitySignature = '';
+  state.cloudDensityRenderSignature = '';
+}
+
+function buildCloudDensitySignature(files, options) {
+  return JSON.stringify({
+    files,
+    minDistance: options.minDistance,
+    maxDistance: options.maxDistance,
+    gridSize: 2,
+    viewpoint: getViewpointStarId() || 'sol'
+  });
+}
+
+function buildCloudDensityRenderSignature(options) {
+  return `${options.cloudDensityRadius}|${options.cloudDensityOpacity}`;
+}
+
+function normalizeFilterOpacityOptions(filters) {
+  [
+    'densityOpacity',
+    'cloudOpacity',
+    'cloudDensityOpacity',
+    'starOpacity',
+    'starNameOpacity',
+    'connectionOpacity',
+    'constellationLineOpacity',
+    'constellationNameOpacity',
+    'planeOpacity',
+    'mollweideBorderOpacity'
+  ].forEach(key => {
+    filters[key] = clamp01(filters[key]);
+  });
+  return filters;
 }
 
 async function refreshCloudDensityOverlays(ctx, options) {
   const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
   const { state } = ctx;
 
-  clearCloudDensityOverlays(ctx);
-  if (!state.showCloudDensityFlag) return;
+  if (!state.showCloudDensityFlag) {
+    if (state.cloudDensityOverlays.length) {
+      clearCloudDensityOverlays(ctx);
+    } else {
+      state.cloudDensitySignature = '';
+      state.cloudDensityRenderSignature = '';
+    }
+    return;
+  }
 
   const form = document.getElementById('filters-form');
   const files = getSelectedDustCloudFiles(form);
-  for (const file of files) {
-    const overlay = await createCloudDensityOverlay(options.minDistance, options.maxDistance, 2, file, state.cachedStars);
+  const topologySignature = buildCloudDensitySignature(files, options);
+  const renderSignature = buildCloudDensityRenderSignature(options);
+  const canReuseOverlays =
+    state.cloudDensitySignature === topologySignature &&
+    state.cloudDensityOverlays.length === files.length;
+
+  if (canReuseOverlays && state.cloudDensityRenderSignature === renderSignature) {
+    return;
+  }
+
+  if (!canReuseOverlays) {
+    clearCloudDensityOverlays(ctx);
+    for (const file of files) {
+      const overlay = await createCloudDensityOverlay(options.minDistance, options.maxDistance, 2, file, state.cachedStars);
+      state.cloudDensityOverlays.push(overlay);
+    }
+    state.cloudDensitySignature = topologySignature;
+  }
+
+  for (const overlay of state.cloudDensityOverlays) {
     updateCloudDensityOverlay(
       overlay,
       trueCoordinatesMap.scene,
@@ -195,8 +266,8 @@ async function refreshCloudDensityOverlays(ctx, options) {
       options.cloudDensityRadius,
       options.cloudDensityOpacity
     );
-    state.cloudDensityOverlays.push(overlay);
   }
+  state.cloudDensityRenderSignature = renderSignature;
 }
 
 export async function buildAndApplyFilters(ctx) {
@@ -211,6 +282,7 @@ export async function buildAndApplyFilters(ctx) {
       moll: mollweideMap?.scene
     }
   });
+  normalizeFilterOpacityOptions(filters);
   const stellarClassCandidates = filters.stellarClassCandidates || filters.currentFilteredStars;
 
   if (shouldRebuildStellarClassUi(ctx, stellarClassCandidates)) {
@@ -234,7 +306,7 @@ export async function buildAndApplyFilters(ctx) {
 
   const sanitizedConstellationLineWidth = Math.max(0.1, filters.constellationLineWidth || 0.1);
   const sanitizedBorderWidth = Math.max(0.1, filters.mollweideBorderWidth || 0.1);
-  const sanitizedBorderOpacity = Math.max(0, Math.min(1, filters.mollweideBorderOpacity));
+  const sanitizedBorderOpacity = filters.mollweideBorderOpacity;
 
   syncFilterResultsToAppState(state, filters);
 
@@ -279,7 +351,6 @@ export async function updateMollweideView(ctx) {
 
   const { mollweideMap, uvMap, uvGlobeMap } = ctx.getMaps();
   mollweideMap.addStars(state.currentMollweideFilteredStars);
-  mollweideMap.updateStarPositions(state.currentMollweideFilteredStars);
   mollweideMap.updateConnectionPositions(state.currentMollweideFilteredStars, state.currentMollweideConnections);
   mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
   uvMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
@@ -301,6 +372,9 @@ export async function updateMollweideView(ctx) {
   }
   if (state.enableDensityFilterFlag && state.densityOverlay && typeof state.densityOverlay.refreshMollweide === 'function') {
     state.densityOverlay.refreshMollweide();
+  }
+  if (state.showCloudDensityFlag && Array.isArray(state.cloudDensityOverlays)) {
+    state.cloudDensityOverlays.forEach(overlay => overlay.refreshMollweide?.());
   }
 
   refreshMollweidePlanes(ctx);

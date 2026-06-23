@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 
 export function createWideLineMaterial(color, { fadePower = 1.0, opacityFactor = 1.0 } = {}) {
   return new THREE.ShaderMaterial({
@@ -95,6 +95,15 @@ export function disposeObject3D(obj) {
     child.geometry?.dispose?.();
     disposeMaterial(child.material);
   });
+}
+
+export function clearObject3DChildren(parent) {
+  if (!parent?.children) return;
+  while (parent.children.length) {
+    const child = parent.children[0];
+    parent.remove(child);
+    disposeObject3D(child);
+  }
 }
 
 export function stableAngleFromString(value) {

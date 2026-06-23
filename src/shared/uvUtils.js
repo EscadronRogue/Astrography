@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../vendor/three.js';
 import { GLOBE_RADIUS } from './constants.js';
 import { getStarCoordinates } from './starUtils.js';
 import { getGreatCirclePoints, radToSphere, vectorToRaDecRad } from './geometryUtils.js';

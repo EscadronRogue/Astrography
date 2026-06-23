@@ -2,7 +2,7 @@
  * @file Manages the opaque globe surface sphere.
  * Extracted from createApp.js to give globe surface rendering its own home.
  */
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../vendor/three.js';
 import { getGlobeSurfaceSphere, setGlobeSurfaceSphere } from './appStateFactory.js';
 
 /**

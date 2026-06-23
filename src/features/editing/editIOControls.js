@@ -1,21 +1,25 @@
+import { notifyError } from '../../shared/userNotifications.js';
+import { readTextFile } from '../../shared/fileUtils.js';
+
 export function setupEditIOControls(manager) {
   const dlBtn = document.getElementById('download-edits');
   if (dlBtn) {
-    dlBtn.addEventListener('click', () => manager.downloadLabelEdits());
+    manager.addManagedEventListener(dlBtn, 'click', () => manager.downloadLabelEdits());
   }
   const upBtn = document.getElementById('upload-edits');
   const fileInput = document.getElementById('upload-edits-input');
   if (upBtn && fileInput) {
-    upBtn.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', async () => {
+    manager.addManagedEventListener(upBtn, 'click', () => fileInput.click());
+    manager.addManagedEventListener(fileInput, 'change', async () => {
       const file = fileInput.files[0];
       if (!file) return;
       try {
-        const text = await file.text();
+        const text = await readTextFile(file);
         const data = JSON.parse(text);
         manager.applyLabelEdits(data);
-      } catch {
-        alert('Invalid edits file');
+      } catch (error) {
+        console.error('Invalid edits file:', error);
+        notifyError('Invalid edits file', error);
       }
       fileInput.value = '';
     });

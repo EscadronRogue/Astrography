@@ -1,43 +1,33 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
+import { downloadBlob } from '../export/downloadUtils.js';
+import { createEditExportPayload, normalizeLabelEdits } from './editSchema.js';
+
+export { normalizeLabelEdits } from './editSchema.js';
 
 export function downloadLabelEdits(manager) {
-  const edits = {
-    starOffsets: Array.from(manager.starLabelOffsets.entries()),
-    starRotations: Array.from(manager.starLabelRotations.entries()),
-    starScales: Array.from(manager.starLabelScales.entries()),
-    constellationOffsets: Array.from(manager.constellationLabelOffsets.entries()),
-    galacticOffsets: Array.from(manager.galacticLabelOffsets.entries())
-  };
-  const blob = new Blob([JSON.stringify(edits, null, 2)], { type: 'application/json' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = 'label-edits.json';
-  link.click();
-  URL.revokeObjectURL(link.href);
+  const payload = createEditExportPayload(manager);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  downloadBlob(blob, 'astrography-edits.json');
 }
 
 export function applyLabelEdits(manager, edits) {
-  if (!edits) return;
-  if (edits.starOffsets) {
-    manager.starLabelOffsets.clear();
-    edits.starOffsets.forEach(([id, off]) => manager.starLabelOffsets.set(id, off));
-  }
-  if (edits.starRotations) {
-    manager.starLabelRotations.clear();
-    edits.starRotations.forEach(([id, rot]) => manager.starLabelRotations.set(id, rot));
-  }
-  if (edits.starScales) {
-    manager.starLabelScales.clear();
-    edits.starScales.forEach(([id, sc]) => manager.starLabelScales.set(id, sc));
-  }
-  if (edits.constellationOffsets) {
-    manager.constellationLabelOffsets.clear();
-    edits.constellationOffsets.forEach(([id, off]) => manager.constellationLabelOffsets.set(id, off));
-  }
-  if (edits.galacticOffsets) {
-    manager.galacticLabelOffsets.clear();
-    edits.galacticOffsets.forEach(([id, off]) => manager.galacticLabelOffsets.set(id, off));
-  }
+  const normalized = normalizeLabelEdits(edits);
+
+  manager.starLabelOffsets.clear();
+  normalized.starOffsets.forEach(([id, off]) => manager.starLabelOffsets.set(id, off));
+  manager.starLabelRotations.clear();
+  normalized.starRotations.forEach(([id, rot]) => manager.starLabelRotations.set(id, rot));
+  manager.starLabelScales.clear();
+  normalized.starScales.forEach(([id, sc]) => manager.starLabelScales.set(id, sc));
+  manager.constellationLabelOffsets.clear();
+  normalized.constellationOffsets.forEach(([id, off]) => manager.constellationLabelOffsets.set(id, off));
+  manager.galacticLabelOffsets.clear();
+  normalized.galacticOffsets.forEach(([id, off]) => manager.galacticLabelOffsets.set(id, off));
+  manager.removedLineSegments.clear();
+  normalized.removedLineSegments.forEach(key => manager.removedLineSegments.add(key));
+  manager.hiddenLineKeys.clear();
+  normalized.hiddenLineKeys.forEach(key => manager.hiddenLineKeys.add(key));
+  manager.editHistory = [];
 
   if (manager.cachedStars) {
     manager.cachedStars.forEach(star => {
@@ -61,7 +51,12 @@ export function applyLabelEdits(manager, edits) {
       }
     });
   }
-  manager.buildAndApplyFilters();
+  Promise.resolve(manager.buildAndApplyFilters()).catch(error => {
+    console.error('Failed to refresh after applying label edits:', error);
+  });
+  if (typeof manager.registerMollweideEditableLines === 'function') {
+    manager.registerMollweideEditableLines();
+  }
   manager.maybePersistPresets();
 }
 

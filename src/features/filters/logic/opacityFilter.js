@@ -10,7 +10,7 @@ import { EPSILON, MIN_MAGNITUDE_OPACITY } from '../../../shared/constants.js';
  * @param {Object} filters - Filter state with opacity mode/value.
  * @returns {Array} The same stars array with displayOpacity set.
  */
-export function applyOpacityFilter(stars, filters) {
+export function applyOpacityFilter(stars, filters, displayStats = null) {
   const fixedOpacity = Number.parseFloat(filters.opacity);
 
   if (Number.isFinite(fixedOpacity)) {
@@ -20,13 +20,16 @@ export function applyOpacityFilter(stars, filters) {
   }
 
   if (filters.opacity === 'absolute-magnitude') {
-    let minMag = Infinity;
-    let maxMag = -Infinity;
-    for (let i = 0; i < stars.length; i++) {
-      const m = stars[i].absoluteMagnitude;
-      if (Number.isFinite(m)) {
-        if (m < minMag) minMag = m;
-        if (m > maxMag) maxMag = m;
+    let minMag = displayStats?.absoluteMagnitudeMin ?? Infinity;
+    let maxMag = displayStats?.absoluteMagnitudeMax ?? -Infinity;
+
+    if (!displayStats) {
+      for (let i = 0; i < stars.length; i++) {
+        const m = stars[i].absoluteMagnitude;
+        if (Number.isFinite(m)) {
+          if (m < minMag) minMag = m;
+          if (m > maxMag) maxMag = m;
+        }
       }
     }
 

@@ -13,17 +13,9 @@
   <link rel="stylesheet" href="styles/panels.css?v=1776519673389" />
   <link rel="stylesheet" href="styles/overlays.css?v=1776519673389" />
   <link rel="stylesheet" href="styles/responsive.css?v=1776519673389" />
-  <link rel="stylesheet" href="styles/export.css?v=1776519673389" />
   <link rel="stylesheet" href="styles/theme.css?v=1776519673389" />
   <script>
-    (function () {
-      try {
-        var t = localStorage.getItem("ag-theme") || "observatory";
-        document.documentElement.setAttribute("data-theme", t);
-      } catch (e) {
-        document.documentElement.setAttribute("data-theme", "observatory");
-      }
-    })();
+    document.documentElement.setAttribute("data-theme", "observatory");
   </script>
 </head>
 <body>
@@ -35,12 +27,12 @@
   </div>
 
   <header>
-    <button id="menu-toggle" aria-label="Toggle Menu">&#9776;</button>
+    <button id="menu-toggle" aria-label="Toggle Menu" aria-controls="filters-sidebar" aria-expanded="false">&#9776;</button>
     <h1>Astrography</h1>
   </header>
 
   <div class="main-container">
-    <aside class="sidebar">
+    <aside id="filters-sidebar" class="sidebar">
       <h2>Filters</h2>
       <form id="filters-form">
         <div class="ag-section"><span class="ag-section-label">Scope</span></div>
@@ -483,6 +475,8 @@
         <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">&#x2922;</button>
         <canvas id="map3D"></canvas>
         <div class="export-controls">
+          <button id="export-true-png" class="export-btn">PNG</button>
+          <button id="export-true-pdf" class="export-btn">PDF</button>
           <button id="export-stl" class="export-btn">Export STL</button>
           <button id="export-stl-kit" class="export-btn">STL for 3D Printing</button>
         </div>
@@ -492,18 +486,30 @@
         <p class="map-subtitle">Primary UV / equirectangular source map</p>
         <button class="fullscreen-btn" aria-label="Fullscreen UV Map">&#x2922;</button>
         <canvas id="uvMap"></canvas>
+        <div class="export-controls">
+          <button id="export-uv-png" class="export-btn">PNG</button>
+          <button id="export-uv-pdf" class="export-btn">PDF</button>
+        </div>
       </div>
       <div class="map-container">
         <h2>Globe</h2>
         <p class="map-subtitle">Primary globe projected from the UV map</p>
         <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">&#x2922;</button>
         <canvas id="sphereMap"></canvas>
+        <div class="export-controls">
+          <button id="export-globe-png" class="export-btn">PNG</button>
+          <button id="export-globe-pdf" class="export-btn">PDF</button>
+        </div>
       </div>
       <div class="map-container legacy-map-container">
         <h2>Legacy Globe</h2>
         <p class="map-subtitle">Legacy scene-based 3D plotting workflow</p>
         <button class="fullscreen-btn" aria-label="Fullscreen Legacy Globe Map">&#x2922;</button>
         <canvas id="legacySphereMap"></canvas>
+        <div class="export-controls">
+          <button id="export-legacy-globe-png" class="export-btn">PNG</button>
+          <button id="export-legacy-globe-pdf" class="export-btn">PDF</button>
+        </div>
       </div>
       <div class="map-container legacy-map-container">
         <h2>Legacy Mollweide</h2>
@@ -514,6 +520,7 @@
           <button id="export-mollweide" class="export-btn">Export</button>
           <button id="export-png" class="export-btn hidden-control">PNG</button>
           <button id="export-pdf" class="export-btn hidden-control">PDF</button>
+          <button id="export-svg" class="export-btn hidden-control">SVG</button>
           <button id="toggle-label-editor" class="export-btn">Edit Labels</button>
           <button id="toggle-line-editor" class="export-btn">Edit Lines</button>
           <button id="undo-edit" class="export-btn">Undo</button>

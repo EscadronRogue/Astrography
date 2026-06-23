@@ -8,7 +8,7 @@
  * The coordinate frame orientation never changes — only the origin shifts.
  */
 
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../vendor/three.js';
 import { getStarId, isSolStar } from './starUtils.js';
 
 /* ------------------------------------------------------------------ */

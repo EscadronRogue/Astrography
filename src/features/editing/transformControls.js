@@ -1,8 +1,23 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
+
+function replaceTransformDocumentListeners(manager, key, moveHandler, upHandler) {
+  manager[key]?.();
+  const disposers = [
+    manager.addManagedEventListener(globalThis.document, 'pointermove', moveHandler),
+    manager.addManagedEventListener(globalThis.document, 'pointerup', upHandler)
+  ].filter(dispose => typeof dispose === 'function');
+  manager[key] = () => {
+    while (disposers.length) {
+      disposers.pop()();
+    }
+    manager[key] = null;
+  };
+}
 
 export function setupEditOverlay(manager) {
   const container = document.querySelector('.label-container');
   if (!container) return;
+  manager.editOverlay?.remove?.();
   manager.editOverlay = document.createElement('div');
   manager.editOverlay.id = 'label-edit-overlay';
   manager.rotateHandle = document.createElement('div');
@@ -15,7 +30,7 @@ export function setupEditOverlay(manager) {
   manager.editOverlay.appendChild(manager.scaleHandle);
   container.appendChild(manager.editOverlay);
 
-  manager.rotateHandle.addEventListener('pointerdown', event => {
+  manager.addManagedEventListener(manager.rotateHandle, 'pointerdown', event => {
     if (!manager.selectedLabel) return;
     manager.isRotating = true;
     const rect = manager.editOverlay.getBoundingClientRect();
@@ -24,13 +39,12 @@ export function setupEditOverlay(manager) {
     manager.rotateStartAngle = Math.atan2(event.clientY - cy, event.clientX - cx);
     manager.rotateInitialRotation = manager.selectedLabel.material.rotation || 0;
     manager.rotateCurrentRotation = manager.rotateInitialRotation;
-    document.addEventListener('pointermove', manager.onRotateMove);
-    document.addEventListener('pointerup', manager.onRotateUp);
+    replaceTransformDocumentListeners(manager, 'stopRotateTransformListeners', manager.onRotateMove, manager.onRotateUp);
     event.stopPropagation();
     event.preventDefault();
   });
 
-  manager.scaleHandle.addEventListener('pointerdown', event => {
+  manager.addManagedEventListener(manager.scaleHandle, 'pointerdown', event => {
     if (!manager.selectedLabel) return;
     manager.isScaling = true;
     const rect = manager.editOverlay.getBoundingClientRect();
@@ -43,8 +57,7 @@ export function setupEditOverlay(manager) {
       sx: manager.selectedLabel.scale.x,
       sy: manager.selectedLabel.scale.y
     };
-    document.addEventListener('pointermove', manager.onScaleMove);
-    document.addEventListener('pointerup', manager.onScaleUp);
+    replaceTransformDocumentListeners(manager, 'stopScaleTransformListeners', manager.onScaleMove, manager.onScaleUp);
     event.stopPropagation();
     event.preventDefault();
   });
@@ -70,8 +83,7 @@ export function handleRotateMove(manager, event) {
 
 export function handleRotateUp(manager) {
   if (!manager.isRotating) return;
-  document.removeEventListener('pointermove', manager.onRotateMove);
-  document.removeEventListener('pointerup', manager.onRotateUp);
+  manager.stopRotateTransformListeners?.();
   manager.editHistory.push({ type: 'rotateLabel', label: manager.selectedLabel, prevRotation: manager.rotateInitialRotation });
   manager.isRotating = false;
   manager.maybePersistPresets();
@@ -100,8 +112,7 @@ export function handleScaleMove(manager, event) {
 
 export function handleScaleUp(manager) {
   if (!manager.isScaling) return;
-  document.removeEventListener('pointermove', manager.onScaleMove);
-  document.removeEventListener('pointerup', manager.onScaleUp);
+  manager.stopScaleTransformListeners?.();
   manager.editHistory.push({
     type: 'scaleLabel',
     label: manager.selectedLabel,

@@ -1,6 +1,7 @@
 // Plane mesh builders migrated from the legacy planes filter module.
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { radToSphere, radToMollweide, getMollweideLambda0, splitMollweideWrap } from '../../shared/geometryUtils.js';
+import { createMeasuredTextCanvas } from '../../shared/textCanvas.js';
 import { DEG2RAD, galacticToEquatorial, eclipticToEquatorial } from './planeDefinitions.js';
 
 
@@ -189,16 +190,14 @@ export function updateCelestialEquatorMollweide(line) {
 }
 
 function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas context unavailable');
-  ctx.font = `${fontSize}px Oswald`;
-  const textWidth = ctx.measureText(text).width;
-  canvas.width = textWidth + 20;
-  canvas.height = fontSize * 1.2;
-  ctx.font = `${fontSize}px Oswald`;
-  ctx.fillStyle = color;
-  ctx.fillText(text, 10, fontSize);
+  const { canvas } = createMeasuredTextCanvas(text, {
+    font: `${fontSize}px Oswald`,
+    paddingX: 10,
+    height: fontSize * 1.2,
+    fillStyle: color,
+    textBaseline: 'alphabetic',
+    textY: fontSize
+  });
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
   const material = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity });
@@ -208,16 +207,14 @@ function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150
 }
 
 function createTextPlane(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('2D canvas context unavailable');
-  ctx.font = `${fontSize}px Oswald`;
-  const textWidth = ctx.measureText(text).width;
-  canvas.width = textWidth + 20;
-  canvas.height = fontSize * 1.2;
-  ctx.font = `${fontSize}px Oswald`;
-  ctx.fillStyle = color;
-  ctx.fillText(text, 10, fontSize);
+  const { canvas } = createMeasuredTextCanvas(text, {
+    font: `${fontSize}px Oswald`,
+    paddingX: 10,
+    height: fontSize * 1.2,
+    fillStyle: color,
+    textBaseline: 'alphabetic',
+    textY: fontSize
+  });
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
   const material = new THREE.ShaderMaterial({

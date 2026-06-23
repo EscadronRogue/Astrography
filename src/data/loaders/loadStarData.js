@@ -1,3 +1,6 @@
+import { fetchWithTimeout } from '../fetchWithTimeout.js';
+import { validateManifestFiles, validateStarBatch } from '../dataValidation.js';
+
 function normalizeNumber(value) {
   const num = typeof value === 'string' ? Number.parseFloat(value) : value;
   return Number.isFinite(num) ? num : undefined;
@@ -35,22 +38,6 @@ export function normalizeStarRecord(star) {
   };
 }
 
-import { DATA_LOAD_TIMEOUT } from '../../shared/constants.js';
-
-/**
- * Wraps a promise with a timeout. Rejects if the promise doesn't settle
- * within the given number of milliseconds.
- */
-function withTimeout(promise, ms) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Data load timed out after ${ms}ms`)), ms);
-    promise.then(
-      value => { clearTimeout(timer); resolve(value); },
-      error => { clearTimeout(timer); reject(error); }
-    );
-  });
-}
-
 /**
  * Loads star data from all manifest files.
  *
@@ -66,19 +53,14 @@ function withTimeout(promise, ms) {
 export async function loadStarData({ onProgress, onBatchReady } = {}) {
   const manifestUrl = 'data/manifest.json';
   try {
-    const manifestResp = await withTimeout(fetch(manifestUrl), DATA_LOAD_TIMEOUT);
+    const manifestResp = await fetchWithTimeout(manifestUrl);
     if (!manifestResp.ok) {
       console.warn(`Could not load manifest at ${manifestUrl} (HTTP ${manifestResp.status})`);
       return [];
     }
 
     const manifest = await manifestResp.json();
-    const fileNames = Array.isArray(manifest) ? manifest : manifest.files;
-
-    if (!Array.isArray(fileNames)) {
-      console.warn('Invalid data manifest format');
-      return [];
-    }
+    const fileNames = validateManifestFiles(manifest, manifestUrl);
 
     const total = fileNames.length;
     const allStars = [];
@@ -87,11 +69,11 @@ export async function loadStarData({ onProgress, onBatchReady } = {}) {
     for (let i = 0; i < total; i++) {
       const name = fileNames[i];
       try {
-        const resp = await withTimeout(fetch(`data/${name}`), DATA_LOAD_TIMEOUT);
+        const resp = await fetchWithTimeout(`data/${name}`);
         if (!resp.ok) {
           console.warn(`Missing star data file: data/${name} (HTTP ${resp.status})`);
         } else {
-          const batch = await resp.json();
+          const batch = validateStarBatch(await resp.json(), `data/${name}`);
           const normalized = batch.map(normalizeStarRecord);
           allStars.push(...normalized);
         }

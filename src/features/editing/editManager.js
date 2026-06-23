@@ -1,4 +1,5 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
+import { createEventListenerRegistry } from '../../shared/eventListenerRegistry.js';
 import { initializeEditState } from './editState.js';
 import { downloadLabelEdits, applyLabelEdits, buildSerializableEditState } from './editPersistence.js';
 import { setupEditIOControls } from './editIOControls.js';
@@ -23,7 +24,14 @@ export class EditManager {
     this.buildAndApplyFilters = buildAndApplyFilters;
     this.maybePersistPresets = maybePersistPresets;
     this.requestRender = requestRender;
+    this._eventListeners = createEventListenerRegistry({
+      onError: error => console.warn('Failed to remove edit UI listener:', error)
+    });
     initializeEditState(this);
+  }
+
+  addManagedEventListener(target, type, handler, options) {
+    return this._eventListeners.add(target, type, handler, options);
   }
 
   downloadLabelEdits() {
@@ -91,7 +99,7 @@ export class EditManager {
   setupLineEditor() {
     const btn = document.getElementById('toggle-line-editor');
     if (!btn) return;
-    btn.addEventListener('click', () => {
+    this.addManagedEventListener(btn, 'click', () => {
       this.lineEditMode = !this.lineEditMode;
       btn.classList.toggle('active', this.lineEditMode);
       if (this.lineEditMode) {
@@ -105,13 +113,13 @@ export class EditManager {
       this.mollweideMap.canvas.classList.toggle('edit-mode', this.lineEditMode || this.labelEditMode);
       this.requestRender();
     });
-    this.mollweideMap.canvas.addEventListener('pointerdown', this.onLinePointerDown);
+    this.addManagedEventListener(this.mollweideMap.canvas, 'pointerdown', this.onLinePointerDown);
   }
 
   setupUndoButton() {
     const btn = document.getElementById('undo-edit');
     if (!btn) return;
-    btn.addEventListener('click', () => {
+    this.addManagedEventListener(btn, 'click', () => {
       undoLastEdit(this);
     });
   }
@@ -151,16 +159,14 @@ export class EditManager {
   }
 
   dispose() {
-    if (this.mollweideMap?.canvas) {
-      this.mollweideMap.canvas.removeEventListener('pointerdown', this.onEditPointerDown);
-      this.mollweideMap.canvas.removeEventListener('pointermove', this.onEditPointerMove);
-      this.mollweideMap.canvas.removeEventListener('pointerdown', this.onLinePointerDown);
-    }
-    window.removeEventListener('pointerup', this.onEditPointerUp);
-    window.removeEventListener('pointermove', this.onRotateMove);
-    window.removeEventListener('pointerup', this.onRotateUp);
-    window.removeEventListener('pointermove', this.onScaleMove);
-    window.removeEventListener('pointerup', this.onScaleUp);
+    this.stopRotateTransformListeners?.();
+    this.stopScaleTransformListeners?.();
+    this._eventListeners.disposeAll();
+
+    this.editOverlay?.remove?.();
+    this.editOverlay = null;
+    this.rotateHandle = null;
+    this.scaleHandle = null;
   }
 
   setConstellationLinesMoll(constellationLinesMoll) {

@@ -8,12 +8,13 @@ import { computeConnectionPairs, computeKNearestPairs } from '../../connections/
 import { setConnectionLineParams, getConnectionLineParams } from '../../connections/connectionSettings.js';
 import { applyStellarClassLogic } from '../logic/stellarClassFilter.js';
 import { applyDistanceFilter } from '../logic/distanceFilter.js';
+import { computeDisplayStats, needsDisplayStats } from '../logic/starDisplayStats.js';
 import { createDefaultFilterResult } from '../state/filterDefaults.js';
 import { computeAdaptiveGridSize, readFilterState } from '../state/filterStateReader.js';
 import { setupFilterUI, generateStellarClassFilters } from '../../../ui/sidebar/buildSidebar.js';
 import { updateDerivedOverlays } from '../state/filterOverlayState.js';
 import { isDefaultViewpoint, getViewpointStarId } from '../../../shared/viewpoint.js';
-import { getStarId, isSolStar } from '../../../shared/starUtils.js';
+import { getAngularProjectionStars } from '../state/filterProjectionStars.js';
 
 let filterForm = null;
 
@@ -38,18 +39,16 @@ export function applyFilters(allStars, context = {}) {
   filteredStars = applyStarsShownFilter(filteredStars, filters);
   const stellarClassCandidates = filteredStars.slice();
   filteredStars = applyStellarClassLogic(filteredStars, form, filters);
-  filteredStars = applySizeFilter(filteredStars, filters);
-  filteredStars = applyColorFilter(filteredStars, filters);
-  filteredStars = applyOpacityFilter(filteredStars, filters);
+  const displayStats = needsDisplayStats(filters) ? computeDisplayStats(filteredStars) : null;
+  filteredStars = applySizeFilter(filteredStars, filters, displayStats);
+  filteredStars = applyColorFilter(filteredStars, filters, displayStats);
+  filteredStars = applyOpacityFilter(filteredStars, filters, displayStats);
 
   // Exclude the viewpoint star from angular projections (Globe/Mollweide/Equirect).
   // When viewing from Sol (default), exclude Sol. When viewing from another star,
   // exclude that star and let Sol appear as a regular star.
   const viewpointId = getViewpointStarId();
-  const nonViewpointStars = filteredStars.filter(star => {
-    if (viewpointId) return getStarId(star) !== viewpointId;
-    return !isSolStar(star);
-  });
+  const nonViewpointStars = getAngularProjectionStars(filteredStars, viewpointId);
 
   let connections = [];
   let globeConnections = [];

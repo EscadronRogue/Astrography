@@ -3,23 +3,20 @@
  * Consolidates duplicated color hash, HSL, and interpolation functions
  * from cloudsFilter.js, cloudDensityFilter.js, densityColorUtils.js, and colorFilter.js.
  */
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../vendor/three.js';
 import { getDustCloudColor } from '../features/clouds/dustCloudColors.js';
 import { AUTO_COLOR_SATURATION, AUTO_COLOR_LIGHTNESS } from './constants.js';
+import {
+  hexToRgb255,
+  hexToRgbaString,
+  interpolateColorNumber,
+  interpolateHexColor,
+  normalizeHexColor,
+  rgbToHex as rgbToHexValue
+} from './colorParsing.js';
+import { hashString } from './hashUtils.js';
 
-/**
- * Deterministic hash of a string to an integer.
- * @param {string} str - Input string.
- * @returns {number} Hash value.
- */
-export function hashString(str) {
-  let hash = 0;
-  const value = String(str ?? '');
-  for (let i = 0; i < value.length; i++) {
-    hash = value.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return hash;
-}
+export { hashString } from './hashUtils.js';
 
 /**
  * Generates a THREE.Color from a name using predefined dust cloud colors
@@ -70,16 +67,7 @@ export function getCloudNameFromFileUrl(fileUrl) {
  * @returns {{ r: number, g: number, b: number }}
  */
 export function hexToRgb(hex) {
-  if (typeof hex === 'number') {
-    hex = '#' + hex.toString(16).padStart(6, '0');
-  }
-  const normalized = hex.replace('#', '');
-  const bigint = parseInt(normalized, 16);
-  return {
-    r: (bigint >> 16) & 255,
-    g: (bigint >> 8) & 255,
-    b: bigint & 255
-  };
+  return hexToRgb255(hex, '#ffffff');
 }
 
 /**
@@ -90,8 +78,7 @@ export function hexToRgb(hex) {
  * @returns {string}
  */
 export function rgbToHex(r, g, b) {
-  const toHex = c => c.toString(16).padStart(2, '0');
-  return '#' + toHex(r) + toHex(g) + toHex(b);
+  return rgbToHexValue(r, g, b);
 }
 
 /**
@@ -102,12 +89,7 @@ export function rgbToHex(r, g, b) {
  * @returns {string} Interpolated hex color string.
  */
 export function interpolateHex(hex1, hex2, factor) {
-  const c1 = hexToRgb(hex1);
-  const c2 = hexToRgb(hex2);
-  const r = Math.round(c1.r + factor * (c2.r - c1.r));
-  const g = Math.round(c1.g + factor * (c2.g - c1.g));
-  const b = Math.round(c1.b + factor * (c2.b - c1.b));
-  return rgbToHex(r, g, b);
+  return interpolateHexColor(hex1, hex2, factor);
 }
 
 /**
@@ -119,12 +101,7 @@ export function interpolateHex(hex1, hex2, factor) {
  * @returns {number} Interpolated color as a decimal.
  */
 export function interpolateColor(color1, color2, factor) {
-  const c1 = hexToRgb(color1);
-  const c2 = hexToRgb(color2);
-  const r = Math.round(c1.r + factor * (c2.r - c1.r));
-  const g = Math.round(c1.g + factor * (c2.g - c1.g));
-  const b = Math.round(c1.b + factor * (c2.b - c1.b));
-  return (r << 16) + (g << 8) + b;
+  return interpolateColorNumber(color1, color2, factor);
 }
 
 /**
@@ -134,6 +111,7 @@ export function interpolateColor(color1, color2, factor) {
  * @returns {string} 'rgba(r, g, b, opacity)'
  */
 export function hexToRGBA(hex, opacity) {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  return hexToRgbaString(hex, opacity);
 }
+
+export { normalizeHexColor };

@@ -1,5 +1,5 @@
 // Cloud overlay rendering migrated from the legacy clouds filter module.
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import {
   getGreatCirclePoints,
   radToSphere,
@@ -14,6 +14,7 @@ import { loadCachedCloudData } from './cloudDataCache.js';
 import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../../render/engine/renderUtils.js';
 import { uniqueColorFromName, getCloudNameFromFileUrl } from '../../shared/colorUtils.js';
 import { GLOBE_RADIUS, CIRCLE_SEGMENTS } from '../../shared/constants.js';
+import { normalizeCloudStarName } from './cloudNameUtils.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -24,12 +25,112 @@ async function loadCloudData(cloudFileUrl) {
   return await loadCachedCloudData(cloudFileUrl);
 }
 
-function normalizeCloudStarName(value) {
-  return String(value || '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+function getSpatialBucketKey(x, y, z) {
+  return `${x}|${y}|${z}`;
+}
+
+function buildCloudStarSpatialIndex(cloudStars, bucketSize = 12) {
+  const buckets = new Map();
+  const bounds = {
+    minX: Infinity,
+    maxX: -Infinity,
+    minY: Infinity,
+    maxY: -Infinity,
+    minZ: Infinity,
+    maxZ: -Infinity
+  };
+
+  cloudStars.forEach((entry, index) => {
+    const bx = Math.floor(entry.pos.x / bucketSize);
+    const by = Math.floor(entry.pos.y / bucketSize);
+    const bz = Math.floor(entry.pos.z / bucketSize);
+    bounds.minX = Math.min(bounds.minX, bx);
+    bounds.maxX = Math.max(bounds.maxX, bx);
+    bounds.minY = Math.min(bounds.minY, by);
+    bounds.maxY = Math.max(bounds.maxY, by);
+    bounds.minZ = Math.min(bounds.minZ, bz);
+    bounds.maxZ = Math.max(bounds.maxZ, bz);
+
+    const key = getSpatialBucketKey(bx, by, bz);
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = [];
+      buckets.set(key, bucket);
+    }
+    bucket.push(index);
+  });
+  return { buckets, bucketSize, bounds };
+}
+
+function insertNearest(nearest, candidate, limit) {
+  const existingIndex = nearest.findIndex(item => item.other.star === candidate.other.star);
+  if (existingIndex >= 0) {
+    if (candidate.distance >= nearest[existingIndex].distance) return;
+    nearest.splice(existingIndex, 1);
+  }
+
+  let insertAt = nearest.length;
+  while (insertAt > 0 && nearest[insertAt - 1].distance > candidate.distance) insertAt -= 1;
+  nearest.splice(insertAt, 0, candidate);
+  if (nearest.length > limit) nearest.length = limit;
+}
+
+function findNearestCloudNeighbors(cloudStars, currentIndex, spatialIndex, limit) {
+  const current = cloudStars[currentIndex];
+  const { buckets, bucketSize, bounds } = spatialIndex;
+  const centerX = Math.floor(current.pos.x / bucketSize);
+  const centerY = Math.floor(current.pos.y / bucketSize);
+  const centerZ = Math.floor(current.pos.z / bucketSize);
+  const nearest = [];
+  const seen = new Set([currentIndex]);
+  const maxRange = Math.max(
+    centerX - bounds.minX,
+    bounds.maxX - centerX,
+    centerY - bounds.minY,
+    bounds.maxY - centerY,
+    centerZ - bounds.minZ,
+    bounds.maxZ - centerZ
+  );
+
+  for (let range = 0; range <= maxRange; range += 1) {
+    for (let bx = centerX - range; bx <= centerX + range; bx += 1) {
+      for (let by = centerY - range; by <= centerY + range; by += 1) {
+        for (let bz = centerZ - range; bz <= centerZ + range; bz += 1) {
+          if (
+            range > 0 &&
+            bx !== centerX - range &&
+            bx !== centerX + range &&
+            by !== centerY - range &&
+            by !== centerY + range &&
+            bz !== centerZ - range &&
+            bz !== centerZ + range
+          ) {
+            continue;
+          }
+
+          const bucket = buckets.get(getSpatialBucketKey(bx, by, bz));
+          if (!bucket) continue;
+          bucket.forEach(otherIndex => {
+            if (seen.has(otherIndex)) return;
+            seen.add(otherIndex);
+            const other = cloudStars[otherIndex];
+            insertNearest(nearest, {
+              other,
+              distance: current.pos.distanceTo(other.pos)
+            }, limit);
+          });
+        }
+      }
+    }
+
+    if (nearest.length >= limit) {
+      const farthestKept = nearest[nearest.length - 1].distance;
+      const nextShellDistance = range * bucketSize;
+      if (nextShellDistance > farthestKept) break;
+    }
+  }
+
+  return nearest;
 }
 
 
@@ -71,19 +172,13 @@ export async function createCloudOverlay(
   if (cloudStars.length < 2) return null;
 
   const pairs = [];
+  const neighborCount = 4;
+  const spatialIndex = buildCloudStarSpatialIndex(cloudStars);
   for (let i = 0; i < cloudStars.length; i++) {
-    const current = cloudStars[i];
-    const neighbors = [];
-    for (let j = 0; j < cloudStars.length; j++) {
-      if (i === j) continue;
-      const other = cloudStars[j];
-      const d = current.pos.distanceTo(other.pos);
-      neighbors.push({ other, distance: d });
-    }
-    neighbors.sort((a, b) => a.distance - b.distance);
-    const k = Math.min(4, neighbors.length);
+    const neighbors = findNearestCloudNeighbors(cloudStars, i, spatialIndex, neighborCount);
+    const k = Math.min(neighborCount, neighbors.length);
     for (let n = 0; n < k; n++) {
-      pairs.push({ starA: current.star, starB: neighbors[n].other.star });
+      pairs.push({ starA: cloudStars[i].star, starB: neighbors[n].other.star });
     }
   }
 

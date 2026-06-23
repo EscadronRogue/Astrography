@@ -1,7 +1,7 @@
 /* Responsive */
 @media (max-width:1200px) {
   .map-container canvas {
-    height: 800px;
+    height: clamp(480px, 74svh, 840px);
   }
 }
 @media (max-width:800px) {
@@ -12,7 +12,7 @@
     max-width: 100%;
   }
   .map-container canvas {
-    height:600px;
+    height: clamp(360px, 68svh, 640px);
   }
   header h1 {
     font-size: 20px;

@@ -1,4 +1,5 @@
-import { captureFormState, restoreFormState } from '../shared/formUtils.js';
+import { captureFormState, getElementByIdWithin, restoreFormState } from '../shared/formUtils.js';
+import { readStorageItem, removeStorageItem, writeStorageItem } from '../shared/storageUtils.js';
 
 export const PRESET_KEY = 'astrography-presets';
 export const PRESET_SCHEMA_VERSION = 3;
@@ -15,7 +16,7 @@ function migrateLegacyDustCloudSelections(form, savedFormState) {
 
   densitySelections.forEach(([id]) => {
     const unifiedId = id.replace(/^dust-density-/, 'dust-cloud-');
-    const checkbox = form.querySelector(`#${CSS.escape(unifiedId)}`);
+    const checkbox = getElementByIdWithin(form, unifiedId);
     if (checkbox) {
       checkbox.checked = true;
     }
@@ -46,7 +47,7 @@ function refreshRestoredFilterUi(form) {
     'dust-cloud-mode-density',
     'dust-cloud-mode-legacy'
   ].forEach(id => {
-    const control = form.querySelector(`#${CSS.escape(id)}`);
+    const control = getElementByIdWithin(form, id);
     if (control) {
       control.dispatchEvent(new Event('change', { bubbles: true }));
     }
@@ -104,11 +105,9 @@ export function savePresets({
     }
   };
 
-  try {
-    localStorage.setItem(PRESET_KEY, JSON.stringify(payload));
-  } catch (error) {
-    console.warn('[savePresets] Failed to persist presets:', error);
-  }
+  writeStorageItem(PRESET_KEY, JSON.stringify(payload), {
+    onError: error => console.warn('[savePresets] Failed to persist presets:', error)
+  });
 }
 
 export function loadPresets({
@@ -121,13 +120,9 @@ export function loadPresets({
   removedLineSegments,
   hiddenLineKeys
 }) {
-  let serialized = null;
-  try {
-    serialized = localStorage.getItem(PRESET_KEY);
-  } catch (error) {
-    console.warn('[loadPresets] Failed to read saved presets:', error);
-    return false;
-  }
+  const serialized = readStorageItem(PRESET_KEY, {
+    onError: error => console.warn('[loadPresets] Failed to read saved presets:', error)
+  });
   if (!serialized) return false;
 
   let payload;
@@ -170,9 +165,7 @@ export function loadPresets({
 }
 
 export function clearSavedPresets() {
-  try {
-    localStorage.removeItem(PRESET_KEY);
-  } catch (error) {
-    console.warn('[clearSavedPresets] Failed to clear presets:', error);
-  }
+  removeStorageItem(PRESET_KEY, {
+    onError: error => console.warn('[clearSavedPresets] Failed to clear presets:', error)
+  });
 }

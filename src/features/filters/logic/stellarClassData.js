@@ -1,18 +1,18 @@
+import { fetchWithTimeout } from '../../../data/fetchWithTimeout.js';
+import { validateStellarClassData } from '../../../data/dataValidation.js';
+
 let stellarClassData = {};
 let stellarClassDataPromise = null;
 
 export async function loadStellarClassData() {
   if (stellarClassDataPromise) return stellarClassDataPromise;
-  stellarClassDataPromise = fetch('./stellar_class.json')
+  stellarClassDataPromise = fetchWithTimeout('./stellar_class.json')
     .then(response => {
       if (!response.ok) throw new Error(`Failed to fetch stellar_class.json: ${response.status}`);
       return response.json();
     })
     .then(data => {
-      if (!data || typeof data !== 'object' || Array.isArray(data)) {
-        throw new Error('stellar_class.json must be an object keyed by stellar class.');
-      }
-      stellarClassData = Object.freeze({ ...data });
+      stellarClassData = Object.freeze(validateStellarClassData(data, 'stellar_class.json'));
       return stellarClassData;
     })
     .catch(error => {

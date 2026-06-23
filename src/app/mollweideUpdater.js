@@ -2,8 +2,9 @@
  * @file Handles Mollweide coordinate position updates for stars.
  * Extracted from createApp.js to separate Mollweide projection concerns.
  */
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../vendor/three.js';
 import { minimalRADifference, getMollweideLambda0 } from '../shared/geometryUtils.js';
+import { scheduleAnimationFrame } from '../shared/renderScheduler.js';
 
 /**
  * Recalculates a star's Mollweide position based on the current central meridian.
@@ -25,7 +26,7 @@ export function createMollweideScheduler(refreshMollweideMap) {
   return function scheduleMollweideUpdate() {
     if (!pendingUpdate) {
       pendingUpdate = true;
-      requestAnimationFrame(() => {
+      scheduleAnimationFrame(() => {
         pendingUpdate = false;
         refreshMollweideMap();
       });

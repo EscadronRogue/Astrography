@@ -152,12 +152,115 @@ function bindDustCloudModeControls() {
   syncMode();
 }
 
+function getFullscreenElement() {
+  return document.fullscreenElement
+    || document.webkitFullscreenElement
+    || document.webkitCurrentFullScreenElement
+    || document.mozFullScreenElement
+    || document.msFullscreenElement
+    || null;
+}
+
+function isFullscreenSupported(element) {
+  return Boolean(
+    element?.requestFullscreen
+    || element?.webkitRequestFullscreen
+    || element?.webkitRequestFullScreen
+    || element?.mozRequestFullScreen
+    || element?.msRequestFullscreen
+  );
+}
+
+function requestElementFullscreen(element) {
+  const request = element?.requestFullscreen
+    || element?.webkitRequestFullscreen
+    || element?.webkitRequestFullScreen
+    || element?.mozRequestFullScreen
+    || element?.msRequestFullscreen;
+  if (!request) {
+    return Promise.reject(new Error('Fullscreen is not supported by this browser.'));
+  }
+  return Promise.resolve(request.call(element));
+}
+
+function exitDocumentFullscreen() {
+  const exit = document.exitFullscreen
+    || document.webkitExitFullscreen
+    || document.webkitCancelFullScreen
+    || document.mozCancelFullScreen
+    || document.msExitFullscreen;
+  if (!exit) {
+    return Promise.reject(new Error('Fullscreen exit is not supported by this browser.'));
+  }
+  return Promise.resolve(exit.call(document));
+}
+
+function bindFullscreenControls() {
+  const buttonBindings = Array.from(document.querySelectorAll('.fullscreen-btn')).map(button => {
+    const canvas = button.parentElement?.querySelector('canvas');
+    if (!canvas || !isFullscreenSupported(canvas)) {
+      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
+      button.title = 'Fullscreen is not supported by this browser.';
+      return null;
+    }
+
+    button.setAttribute('aria-disabled', 'false');
+    button.setAttribute('aria-pressed', 'false');
+    const handler = () => {
+      const activeElement = getFullscreenElement();
+      const action = activeElement ? exitDocumentFullscreen() : requestElementFullscreen(canvas);
+      action.catch(error => {
+        console.error('Error toggling fullscreen:', error);
+      });
+    };
+    button.addEventListener('click', handler);
+    return { button, canvas, handler };
+  }).filter(Boolean);
+
+  const syncFullscreenButtonState = () => {
+    const activeElement = getFullscreenElement();
+    buttonBindings.forEach(({ button, canvas }) => {
+      button.setAttribute('aria-pressed', String(activeElement === canvas));
+    });
+    if (!activeElement) {
+      document.querySelectorAll('.map-container canvas').forEach(canvas => {
+        canvas.style.width = '';
+        canvas.style.height = '';
+      });
+      window.dispatchEvent(new Event('resize'));
+    }
+  };
+
+  const eventNames = ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange', 'MSFullscreenChange'];
+  eventNames.forEach(eventName => {
+    document.addEventListener(eventName, syncFullscreenButtonState);
+  });
+
+  return {
+    dispose() {
+      buttonBindings.forEach(({ button, handler }) => {
+        button.removeEventListener('click', handler);
+      });
+      eventNames.forEach(eventName => {
+        document.removeEventListener(eventName, syncFullscreenButtonState);
+      });
+    }
+  };
+}
+
 function initSliderSync() {
   const menuToggle = document.getElementById('menu-toggle');
   if (menuToggle) {
+    const sidebar = document.getElementById(menuToggle.getAttribute('aria-controls')) || document.querySelector('.sidebar');
+    const syncMenuToggleState = () => {
+      menuToggle.setAttribute('aria-expanded', String(sidebar?.classList.contains('open') ?? false));
+    };
     menuToggle.addEventListener('click', () => {
-      document.querySelector('.sidebar')?.classList.toggle('open');
+      sidebar?.classList.toggle('open');
+      syncMenuToggleState();
     });
+    syncMenuToggleState();
   }
 
   bindEnableGroup('enable-connections', [
@@ -251,33 +354,11 @@ function initSliderSync() {
   bindToggleAllDustClouds();
   bindDustCloudModeControls();
 
-  document.querySelectorAll('.fullscreen-btn').forEach(button => {
-    button.addEventListener('click', function () {
-      const canvas = this.parentElement?.querySelector('canvas');
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        canvas?.requestFullscreen().catch(error => {
-          console.error('Error enabling fullscreen:', error);
-        });
-      }
-    });
-  });
-
-  const onFullscreenChange = () => {
-    if (!document.fullscreenElement) {
-      document.querySelectorAll('.map-container canvas').forEach(canvas => {
-        canvas.style.width = '';
-        canvas.style.height = '';
-      });
-      window.dispatchEvent(new Event('resize'));
-    }
-  };
-  document.addEventListener('fullscreenchange', onFullscreenChange);
+  const fullscreenControls = bindFullscreenControls();
 
   return {
     dispose() {
-      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      fullscreenControls.dispose();
     }
   };
 }

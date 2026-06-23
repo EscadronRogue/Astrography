@@ -23,6 +23,26 @@
 
     sidebar.insertBefore(wrap, form);
 
+    function setLegendExpanded(legend, expanded, { searchOpened = false } = {}) {
+      if (!legend) return;
+      const content = legend.nextElementSibling;
+      legend.classList.toggle('active', expanded);
+      legend.setAttribute('aria-expanded', String(expanded));
+      if (searchOpened) {
+        legend.dataset.searchOpened = 'true';
+      } else {
+        delete legend.dataset.searchOpened;
+      }
+      if (!content || !content.classList.contains('filter-content')) return;
+      if (expanded) {
+        content.style.maxHeight = content.scrollHeight + 'px';
+        content.style.overflowY = 'visible';
+      } else {
+        content.style.maxHeight = '0px';
+        content.style.overflowY = 'hidden';
+      }
+    }
+
     function runSearch(query) {
       const q = (query || '').trim().toLowerCase();
       const fieldsets = form.querySelectorAll('fieldset');
@@ -46,6 +66,9 @@
           fieldset.querySelectorAll('.stellar-class-subcategory').forEach(subcategory => {
             subcategory.classList.remove('ag-hidden');
           });
+          if (legend?.dataset.searchOpened === 'true') {
+            setLegendExpanded(legend, false);
+          }
           return;
         }
 
@@ -69,7 +92,7 @@
         fieldset.classList.toggle('ag-hidden', !anyVisible);
 
         if (anyVisible && legend && !legend.classList.contains('active')) {
-          legend.classList.add('active');
+          setLegendExpanded(legend, true, { searchOpened: true });
         }
       });
     }

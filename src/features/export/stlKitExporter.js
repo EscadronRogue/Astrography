@@ -15,199 +15,121 @@
  */
 
 import { CSG } from '../../vendor/csg.js';
-import { getPrimaryClass } from '../../shared/stellarClassUtils.js';
+import { downloadBlob } from './downloadUtils.js';
+import { getJsZipConstructor } from './pdfUtils.js';
 import {
   filterMainStars,
   buildSphereTriangles,
   buildTubeTriangles,
   trianglesToBinarySTL
 } from './stlExporter.js';
+import {
+  STL_MM_PER_LY,
+  STL_STANDARD_STAR_DIAMETER_MM,
+  STL_TUBE_RADIUS_MM
+} from './stlScale.js';
+import {
+  DIGIT_WIDTH_UNITS,
+  DIGIT_HEIGHT_UNITS,
+  DIGIT_SPACING_UNITS,
+  DIGIT_LINE_SPACING_UNITS,
+  STAR_STROKE_WIDTH_UNITS,
+  LABEL_STROKE_WIDTH_UNITS,
+  STROKE_SEGMENT_OVERLAP_UNITS,
+  VECTOR_GLYPHS,
+  getGlyphLineMetrics,
+  layoutDigits
+} from './stlTextGlyphs.js';
+import { findFeatureDirection } from './stlFeatureDirections.js';
+import {
+  buildFeatureBasis,
+  orientStarForPrint,
+  placeTrianglesOnBuildPlate
+} from './stlPrintOrientation.js';
+import {
+  getFacetBoxHalfDepth,
+  getFacetBoxHalfExtent,
+  getFacetDepth,
+  getFacetDiameter,
+  getFacetPlaneOffset,
+  makePointOnFacet
+} from './stlFacetGeometry.js';
+import {
+  buildKitManifest,
+  buildSystemRankMap,
+  getPrintableRadius,
+  getSystemName,
+  sanitizeSTLFilename
+} from './stlKitMetadata.js';
+import { createSTLKitWorkerPayload } from './stlKitWorkerPayload.js';
+import {
+  vecAdd,
+  vecCross,
+  vecDistance,
+  vecDot,
+  vecLength,
+  vecNormalise,
+  vecScale,
+  vecSub
+} from './stlVectorMath.js';
+import {
+  HOLE_RADIUS,
+  TUBE_INSERTION_DEPTH,
+  buildForcedMergeMap,
+  buildSystemSocketPlans,
+  buildTubeComponents,
+  getForcedMergeSignature
+} from './stlSocketPlanning.js';
+import {
+  buildSegmentLabelBasis,
+  computeTubeLabelLayout,
+  getTubeFlatLayout,
+  getTubeLabelMaxHeight,
+  getTubeLabelMaxWidth
+} from './stlTubeLabelLayout.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Physical dimensions (mm)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const KIT_MM_PER_LY = 5;
+const KIT_MM_PER_LY = STL_MM_PER_LY;
 
 // Stars
-const STANDARD_DIAMETER_MM = 16;
-const STANDARD_RADIUS = STANDARD_DIAMETER_MM / 2; // 8
-const REDUCED_STAR_SCALE = 0.75;
-const STANDARD_SIZE_CLASSES = new Set(['O', 'B', 'A', 'F', 'G', 'K']);
+const STANDARD_DIAMETER_MM = STL_STANDARD_STAR_DIAMETER_MM;
 
 // Tubes
-const KIT_TUBE_RADIUS = 2; // 4 mm diameter
+const KIT_TUBE_RADIUS = STL_TUBE_RADIUS_MM;
 const KIT_TUBE_SEGMENTS = 24;
 
 // Holes for tube insertion (press-fit)
-const HOLE_TOLERANCE = 0.15;
-const HOLE_RADIUS = KIT_TUBE_RADIUS + HOLE_TOLERANCE;
-const TUBE_INSERTION_DEPTH = 4; // mm into sphere
 const HOLE_SEGMENTS = 24;
 const MIN_TUBE_LENGTH = 2; // skip connections shorter than this (mm)
+const EXPORT_YIELD_INTERVAL = 8;
+const EXPORT_HEAVY_YIELD_INTERVAL = 2;
 
-// Flattened crown and label on tubes
-const TUBE_FLAT_WIDTH = 3.6;      // mm chord width of the shaved top
-const TUBE_FLAT_END_MARGIN = 1.2; // keep rounded ends so the crown feels carved, not stitched on
 const LABEL_ENGRAVE_DEPTH = 0.5;
 const LABEL_ENGRAVE_BLEED = 0.25;
-const LABEL_TEXT_WIDTH_FACTOR = 0.85;
-const LABEL_TEXT_HEIGHT_FACTOR = 0.78;
 
 // Overlapping-hole merge / external Y splitters
-const HOLE_CLUSTER_CLEARANCE = 0.4;
-const Y_JUNCTION_OUTSIDE = 4.5;      // mm outside the sphere surface for a usable trunk
 const BRANCH_NODE_RADIUS = KIT_TUBE_RADIUS + 0.25;
 
 // Star-face engraving
-const FACET_DEPTH_FACTOR = 0.3;
-const FACET_BOX_HALF_DEPTH_FACTOR = 1.5;
-const FACET_BOX_HALF_EXTENT_FACTOR = 2.2;
 const STAR_ENGRAVE_DEPTH = 0.5;
 const STAR_ENGRAVE_BLEED = 0.25;
 const STAR_ENGRAVE_WIDTH_FACTOR = 0.8;
 const STAR_ENGRAVE_HEIGHT_FACTOR = 0.72;
 
-// Glyph stroke geometry
-const DIGIT_WIDTH_UNITS = 1;
-const DIGIT_HEIGHT_UNITS = 1;
-const DIGIT_SPACING_UNITS = 0.22;
-const DIGIT_LINE_SPACING_UNITS = 0.3;
-const STAR_STROKE_WIDTH_UNITS = 0.16;
-const LABEL_STROKE_WIDTH_UNITS = 0.28; // thicker for tube labels
-const STROKE_SEGMENT_OVERLAP_UNITS = 0.06;
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Vector glyph definitions (0-9 and dash)
-// ═══════════════════════════════════════════════════════════════════════════
-
-const VECTOR_GLYPHS = {
-  '0': [
-    [[0.24, 0.02], [0.08, 0.18], [0.08, 0.82], [0.24, 0.98], [0.76, 0.98], [0.92, 0.82], [0.92, 0.18], [0.76, 0.02], [0.24, 0.02]]
-  ],
-  '1': [
-    [[0.3, 0.78], [0.5, 0.98], [0.5, 0.02]],
-    [[0.24, 0.02], [0.76, 0.02]]
-  ],
-  '2': [
-    [[0.1, 0.78], [0.24, 0.98], [0.76, 0.98], [0.9, 0.8], [0.9, 0.62], [0.12, 0.02], [0.9, 0.02]]
-  ],
-  '3': [
-    [[0.1, 0.98], [0.78, 0.98], [0.56, 0.56], [0.78, 0.48], [0.92, 0.28], [0.76, 0.02], [0.14, 0.02]]
-  ],
-  '4': [
-    [[0.78, 0.02], [0.78, 0.98]],
-    [[0.12, 0.34], [0.9, 0.34]],
-    [[0.12, 0.34], [0.58, 0.98]]
-  ],
-  '5': [
-    [[0.9, 0.98], [0.18, 0.98], [0.14, 0.54], [0.72, 0.54], [0.9, 0.38], [0.9, 0.16], [0.72, 0.02], [0.14, 0.02]]
-  ],
-  '6': [
-    [[0.86, 0.84], [0.72, 0.98], [0.24, 0.98], [0.08, 0.8], [0.08, 0.18], [0.24, 0.02], [0.78, 0.02], [0.92, 0.18], [0.92, 0.42], [0.76, 0.56], [0.24, 0.56], [0.08, 0.42]]
-  ],
-  '7': [
-    [[0.08, 0.98], [0.92, 0.98], [0.34, 0.02]]
-  ],
-  '8': [
-    [[0.24, 0.02], [0.08, 0.18], [0.08, 0.4], [0.24, 0.56], [0.76, 0.56], [0.92, 0.4], [0.92, 0.18], [0.76, 0.02], [0.24, 0.02]],
-    [[0.24, 0.56], [0.08, 0.72], [0.08, 0.82], [0.24, 0.98], [0.76, 0.98], [0.92, 0.82], [0.92, 0.72], [0.76, 0.56]]
-  ],
-  '9': [
-    [[0.92, 0.56], [0.76, 0.42], [0.24, 0.42], [0.08, 0.58], [0.08, 0.82], [0.24, 0.98], [0.76, 0.98], [0.92, 0.82], [0.92, 0.18], [0.74, 0.02], [0.28, 0.02]]
-  ],
-  '-': [
-    [[0.15, 0.50], [0.85, 0.50]]
-  ]
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Feature-direction candidates (26 directions on the unit cube)
-// ═══════════════════════════════════════════════════════════════════════════
-
-const FEATURE_CANDIDATES = (() => {
-  const dirs = [];
-  for (let x = -1; x <= 1; x += 1) {
-    for (let y = -1; y <= 1; y += 1) {
-      for (let z = -1; z <= 1; z += 1) {
-        if (x === 0 && y === 0 && z === 0) continue;
-        const len = Math.sqrt(x * x + y * y + z * z);
-        dirs.push([x / len, y / len, z / len]);
-      }
-    }
-  }
-  return dirs;
-})();
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Utility helpers
 // ═══════════════════════════════════════════════════════════════════════════
 
-function sanitizeFilename(name) {
-  return name
-    .replace(/[<>:"/\\|?*]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '');
-}
-
-function getSystemName(star) {
-  return star.Common_name_of_the_star_system
-    || star.Common_name_of_the_star
-    || star.starId
-    || 'Unknown';
-}
-
-function getRankingDistance(star) {
-  return Number.isFinite(star?.distance) ? star.distance : Number.POSITIVE_INFINITY;
-}
-
-function getPrintableRadius(star) {
-  const cls = getPrimaryClass(star);
-  const multiplier = STANDARD_SIZE_CLASSES.has(cls) ? 1 : REDUCED_STAR_SCALE;
-  return STANDARD_RADIUS * multiplier;
+function yieldToBrowser() {
+  return new Promise(resolve => globalThis.setTimeout(resolve, 0));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Vector math
 // ═══════════════════════════════════════════════════════════════════════════
-
-function vecNormalise(x, y, z) {
-  const len = Math.sqrt(x * x + y * y + z * z) || 1;
-  return [x / len, y / len, z / len];
-}
-
-function vecDot(a, b) {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function vecCross(a, b) {
-  return [
-    a[1] * b[2] - a[2] * b[1],
-    a[2] * b[0] - a[0] * b[2],
-    a[0] * b[1] - a[1] * b[0]
-  ];
-}
-
-function vecAdd(a, b) {
-  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-}
-
-function vecSub(a, b) {
-  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
-
-function vecScale(v, scalar) {
-  return [v[0] * scalar, v[1] * scalar, v[2] * scalar];
-}
-
-function vecLength(v) {
-  return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-}
-
-function vecDistance(a, b) {
-  return vecLength([a[0] - b[0], a[1] - b[1], a[2] - b[2]]);
-}
 
 function unionAllCSG(solids) {
   if (!Array.isArray(solids) || solids.length === 0) return CSG.fromPolygons([]);
@@ -258,17 +180,6 @@ function buildOrientedBoxTriangles(c, axisR, axisU, axisF, halfR, halfU, halfF) 
   return triangles;
 }
 
-function buildFeatureBasis(forward) {
-  let worldUp = [0, 1, 0];
-  if (Math.abs(vecDot(forward, worldUp)) > 0.9) worldUp = [1, 0, 0];
-
-  const lookDir = [-forward[0], -forward[1], -forward[2]];
-  const right = vecNormalise(...vecCross(lookDir, worldUp));
-  const up = vecNormalise(...vecCross(right, lookDir));
-
-  return { right, up, forward };
-}
-
 function buildNodeSphereCSG(centre, radius, widthSegs = 20, heightSegs = 20) {
   return CSG.fromTriangles(
     buildSphereTriangles(centre[0], centre[1], centre[2], radius, widthSegs, heightSegs)
@@ -295,22 +206,6 @@ function placeCanonicalCSG(csg, centre, axisX, axisY, axisZ) {
   );
 }
 
-function buildSegmentLabelBasis(direction, preferredUp = [0, 0, 1]) {
-  let axisX = vecNormalise(...direction);
-  let axisZ = vecSub(preferredUp, vecScale(axisX, vecDot(preferredUp, axisX)));
-
-  if (vecLength(axisZ) < 1e-5) {
-    const fallback = Math.abs(axisX[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
-    axisZ = vecSub(fallback, vecScale(axisX, vecDot(fallback, axisX)));
-  }
-
-  axisZ = vecNormalise(...axisZ);
-  const axisY = vecNormalise(...vecCross(axisZ, axisX));
-  axisZ = vecNormalise(...vecCross(axisX, axisY));
-
-  return { axisX, axisY, axisZ };
-}
-
 function buildSegmentEndLabelCuts(segmentStart, segmentEnd, text, preferredUp = [0, 0, 1]) {
   if (!text) return [];
 
@@ -322,7 +217,7 @@ function buildSegmentEndLabelCuts(segmentStart, segmentEnd, text, preferredUp = 
   const flatLayout = getTubeFlatLayout(labelLength);
   if (!flatLayout) return [];
 
-  const labelLayout = computeLabelLayout(text, flatLayout);
+  const labelLayout = computeTubeLabelLayout(text, flatLayout);
   if (!labelLayout) return [];
 
   const { axisX, axisY, axisZ } = buildSegmentLabelBasis(direction, preferredUp);
@@ -338,68 +233,12 @@ function buildSegmentEndLabelCuts(segmentStart, segmentEnd, text, preferredUp = 
 // Star engraving (flat facet + rank number on sphere)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function findFeatureDirection(connectionDirs) {
-  if (!connectionDirs || connectionDirs.length === 0) return [0, 1, 0];
-
-  let bestDir = [0, 1, 0];
-  let bestMinAngle = -Infinity;
-
-  for (const candidate of FEATURE_CANDIDATES) {
-    let minAngle = Infinity;
-    for (const tubeDir of connectionDirs) {
-      const dot = vecDot(candidate, tubeDir);
-      const angle = Math.acos(Math.max(-1, Math.min(dot, 1)));
-      if (angle < minAngle) minAngle = angle;
-    }
-    if (minAngle > bestMinAngle) {
-      bestMinAngle = minAngle;
-      bestDir = candidate;
-    }
-  }
-
-  return bestDir;
-}
-
-function splitBalanced(text, parts) {
-  const lines = [];
-  let index = 0;
-
-  for (let part = 0; part < parts; part += 1) {
-    const remainingChars = text.length - index;
-    const remainingParts = parts - part;
-    const size = Math.ceil(remainingChars / remainingParts);
-    lines.push(text.slice(index, index + size));
-    index += size;
-  }
-
-  return lines.filter(Boolean);
-}
-
-function layoutDigits(text) {
-  if (text.length <= 2) return [text];
-  if (text.length <= 4) return splitBalanced(text, 2);
-  return splitBalanced(text, 3);
-}
-
-function getFacetDepth(sphereRadius) {
-  return sphereRadius * FACET_DEPTH_FACTOR;
-}
-
-function getFacetPlaneOffset(sphereRadius, facetDepth = getFacetDepth(sphereRadius)) {
-  return sphereRadius - facetDepth;
-}
-
-function getFacetDiameter(sphereRadius, facetDepth = getFacetDepth(sphereRadius)) {
-  const planeOffset = getFacetPlaneOffset(sphereRadius, facetDepth);
-  return 2 * Math.sqrt(Math.max(0, sphereRadius * sphereRadius - planeOffset * planeOffset));
-}
-
 function buildFacetTrimCSG(dir, sphereRadius) {
   const { right, up, forward } = buildFeatureBasis(dir);
   const facetDepth = getFacetDepth(sphereRadius);
   const planeOffset = getFacetPlaneOffset(sphereRadius, facetDepth);
-  const halfDepth = sphereRadius * FACET_BOX_HALF_DEPTH_FACTOR;
-  const halfExtent = sphereRadius * FACET_BOX_HALF_EXTENT_FACTOR;
+  const halfDepth = getFacetBoxHalfDepth(sphereRadius);
+  const halfExtent = getFacetBoxHalfExtent(sphereRadius);
   const centreDist = planeOffset + halfDepth;
   const centre = [
     forward[0] * centreDist,
@@ -420,14 +259,6 @@ function buildFacetTrimCSG(dir, sphereRadius) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Shared stroke-rendering primitives
 // ═══════════════════════════════════════════════════════════════════════════
-
-function makePointOnFacet(right, up, forward, x, y, forwardOffset) {
-  return [
-    right[0] * x + up[0] * y + forward[0] * forwardOffset,
-    right[1] * x + up[1] * y + forward[1] * forwardOffset,
-    right[2] * x + up[2] * y + forward[2] * forwardOffset
-  ];
-}
 
 function buildStrokeSegmentCSG(startPt, endPt, strokeWidth, right, up, forward, forwardOffset, halfDepth) {
   const dx = endPt[0] - startPt[0];
@@ -494,11 +325,7 @@ function buildTextCSG(text, right, up, forward, surfaceOffset, maxWidth, maxHeig
 
   if (!lines) lines = [text];
 
-  const maxWidthUnits = Math.max(
-    ...lines.map(line => line.length * DIGIT_WIDTH_UNITS + Math.max(0, line.length - 1) * DIGIT_SPACING_UNITS)
-  );
-  const totalHeightUnits = lines.length * DIGIT_HEIGHT_UNITS
-    + Math.max(0, lines.length - 1) * DIGIT_LINE_SPACING_UNITS;
+  const { maxWidthUnits, totalHeightUnits } = getGlyphLineMetrics(lines);
 
   const unitScale = Math.min(
     maxWidth / Math.max(maxWidthUnits, 1),
@@ -598,58 +425,6 @@ function buildHoleCSG(direction, innerDist, outerDist) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Compute the shaved-flat crown geometry for a tube.
- */
-function getTubeFlatLayout(tubeLength) {
-  const flatWidth = Math.min(TUBE_FLAT_WIDTH, KIT_TUBE_RADIUS * 2 - 0.15);
-  const flatLength = Math.max(0, tubeLength - 2 * TUBE_FLAT_END_MARGIN);
-  if (flatLength < 2.5) return null;
-
-  return {
-    flatLength,
-    flatWidth,
-    surfaceZ: Math.sqrt(Math.max(0, KIT_TUBE_RADIUS * KIT_TUBE_RADIUS - (flatWidth * flatWidth) / 4))
-  };
-}
-
-/**
- * Compute label layout for a tube crown. Returns null if the tube is too short
- * for any label.
- */
-function computeLabelLayout(text, flatLayout) {
-  if (!flatLayout) return null;
-
-  const availableWidth = flatLayout.flatLength * LABEL_TEXT_WIDTH_FACTOR;
-  const availableHeight = flatLayout.flatWidth * LABEL_TEXT_HEIGHT_FACTOR;
-  const candidateLines = [[text]];
-  let bestLayout = null;
-  let bestScale = -Infinity;
-
-  if (text.length > 1) {
-    candidateLines.push(text.split('').map(ch => ch));
-  }
-
-  for (const lines of candidateLines) {
-    const maxWidthUnits = Math.max(
-      ...lines.map(line => line.length * DIGIT_WIDTH_UNITS + Math.max(0, line.length - 1) * DIGIT_SPACING_UNITS)
-    );
-    const totalHeightUnits = lines.length * DIGIT_HEIGHT_UNITS
-      + Math.max(0, lines.length - 1) * DIGIT_LINE_SPACING_UNITS;
-    const unitScale = Math.min(
-      availableWidth / Math.max(maxWidthUnits, 1),
-      availableHeight / Math.max(totalHeightUnits, 1)
-    );
-
-    if (Number.isFinite(unitScale) && unitScale > bestScale) {
-      bestScale = unitScale;
-      bestLayout = { ...flatLayout, lines };
-    }
-  }
-
-  return bestLayout;
-}
-
-/**
  * Build the flat trim cutter in canonical tube orientation (tube along X).
  */
 function buildTubeFlatTrimCSG(layout) {
@@ -676,8 +451,8 @@ function buildTubeFlatTrimCSG(layout) {
  * Text runs along X, character height along Y, engrave depth along -Z.
  */
 function buildLabelTextCSG(text, layout) {
-  const maxWidth = layout.flatLength * LABEL_TEXT_WIDTH_FACTOR;
-  const maxHeight = layout.flatWidth * LABEL_TEXT_HEIGHT_FACTOR;
+  const maxWidth = getTubeLabelMaxWidth(layout);
+  const maxHeight = getTubeLabelMaxHeight(layout);
 
   return buildTextCSG(
     text,
@@ -691,363 +466,6 @@ function buildLabelTextCSG(text, layout) {
     LABEL_ENGRAVE_DEPTH,
     LABEL_ENGRAVE_BLEED,
     layout.lines
-  );
-}
-
-function clusterHoleEndpoints(endpoints, sphereRadius, forcedGroups = []) {
-  if (!Array.isArray(endpoints) || endpoints.length === 0) return [];
-
-  const overlapLimit = 2 * HOLE_RADIUS + HOLE_CLUSTER_CLEARANCE;
-  const parent = endpoints.map((_, index) => index);
-
-  const find = (index) => {
-    let root = index;
-    while (parent[root] !== root) root = parent[root];
-    while (parent[index] !== index) {
-      const next = parent[index];
-      parent[index] = root;
-      index = next;
-    }
-    return root;
-  };
-
-  const union = (left, right) => {
-    const rootLeft = find(left);
-    const rootRight = find(right);
-    if (rootLeft !== rootRight) parent[rootRight] = rootLeft;
-  };
-
-  for (let index = 0; index < endpoints.length; index += 1) {
-    for (let otherIndex = index + 1; otherIndex < endpoints.length; otherIndex += 1) {
-      const centreA = vecScale(endpoints[index].dir, sphereRadius);
-      const centreB = vecScale(endpoints[otherIndex].dir, sphereRadius);
-      if (vecDistance(centreA, centreB) < overlapLimit) {
-        union(index, otherIndex);
-      }
-    }
-  }
-
-  const indexByConnectionId = new Map();
-  endpoints.forEach((endpoint, index) => {
-    indexByConnectionId.set(endpoint.connectionId, index);
-  });
-
-  for (const group of forcedGroups) {
-    const indexes = group
-      .map(connectionId => indexByConnectionId.get(connectionId))
-      .filter(Number.isInteger);
-
-    for (let index = 1; index < indexes.length; index += 1) {
-      union(indexes[0], indexes[index]);
-    }
-  }
-
-  const clustersByRoot = new Map();
-  for (let index = 0; index < endpoints.length; index += 1) {
-    const root = find(index);
-    let bucket = clustersByRoot.get(root);
-    if (!bucket) {
-      bucket = [];
-      clustersByRoot.set(root, bucket);
-    }
-    bucket.push(endpoints[index]);
-  }
-
-  return Array.from(clustersByRoot.values());
-}
-
-function getClusterMergedDirection(cluster) {
-  let sx = 0;
-  let sy = 0;
-  let sz = 0;
-
-  for (const member of cluster) {
-    sx += member.dir[0];
-    sy += member.dir[1];
-    sz += member.dir[2];
-  }
-
-  if (Math.sqrt(sx * sx + sy * sy + sz * sz) < 1e-6) {
-    return cluster[0]?.dir || [0, 1, 0];
-  }
-
-  return vecNormalise(sx, sy, sz);
-}
-
-function buildSystemSocketPlan(systemName, endpoints, sphereRadius, forcedGroups = []) {
-  const connectionClusters = new Map();
-  const openingDirections = [];
-  const negativeSolids = [];
-  const clusters = [];
-
-  const groupedClusters = clusterHoleEndpoints(endpoints, sphereRadius, forcedGroups);
-  for (let index = 0; index < groupedClusters.length; index += 1) {
-    const cluster = groupedClusters[index];
-    const merged = cluster.length > 1;
-    const holeDir = merged ? getClusterMergedDirection(cluster) : cluster[0].dir;
-    const anchorLocal = vecScale(holeDir, sphereRadius - TUBE_INSERTION_DEPTH);
-    const pieceLocal = merged
-      ? vecScale(holeDir, sphereRadius + Y_JUNCTION_OUTSIDE)
-      : anchorLocal;
-    const clusterId = `${sanitizeFilename(systemName)}__${index}`;
-    const connectionIds = [];
-
-    openingDirections.push(holeDir);
-    negativeSolids.push(
-      buildHoleCSG(holeDir, sphereRadius - TUBE_INSERTION_DEPTH, sphereRadius + 1)
-    );
-
-    for (const member of cluster) {
-      connectionClusters.set(member.connectionId, clusterId);
-      connectionIds.push(member.connectionId);
-    }
-
-    clusters.push({
-      id: clusterId,
-      systemName,
-      merged,
-      holeDir,
-      anchorLocal,
-      pieceLocal,
-      connectionIds
-    });
-  }
-
-  return { connectionClusters, clusters, openingDirections, negativeSolids };
-}
-
-function buildEndpointMap(connections) {
-  const endpointMap = new Map();
-
-  for (const conn of connections) {
-    if (!endpointMap.has(conn.sysA)) endpointMap.set(conn.sysA, []);
-    if (!endpointMap.has(conn.sysB)) endpointMap.set(conn.sysB, []);
-    endpointMap.get(conn.sysA).push({ connectionId: conn.id, dir: conn.dirA, otherSystem: conn.sysB });
-    endpointMap.get(conn.sysB).push({ connectionId: conn.id, dir: conn.dirB, otherSystem: conn.sysA });
-  }
-
-  return endpointMap;
-}
-
-function buildSystemSocketPlans(systemInfo, connections, forcedMergeMap = new Map()) {
-  const endpointMap = buildEndpointMap(connections);
-  const plans = new Map();
-
-  for (const [systemName, info] of systemInfo) {
-    plans.set(
-      systemName,
-      buildSystemSocketPlan(
-        systemName,
-        endpointMap.get(systemName) || [],
-        info.radius,
-        forcedMergeMap.get(systemName) || []
-      )
-    );
-  }
-
-  return plans;
-}
-
-function toWorldPoint(info, localPoint) {
-  return [
-    info.posMM.x + localPoint[0],
-    info.posMM.y + localPoint[1],
-    info.posMM.z + localPoint[2]
-  ];
-}
-
-function buildClusterWorldMap(systemInfo, socketPlans) {
-  const clusterMap = new Map();
-
-  for (const [systemName, plan] of socketPlans) {
-    const info = systemInfo.get(systemName);
-    if (!info) continue;
-
-    for (const cluster of plan.clusters) {
-      clusterMap.set(cluster.id, {
-        ...cluster,
-        rank: info.rank,
-        anchorWorld: toWorldPoint(info, cluster.anchorLocal),
-        pieceWorld: toWorldPoint(info, cluster.pieceLocal)
-      });
-    }
-  }
-
-  return clusterMap;
-}
-
-function buildTubeComponents(systemInfo, socketPlans, connections) {
-  const clusterMap = buildClusterWorldMap(systemInfo, socketPlans);
-  const edges = [];
-  const adjacency = new Map();
-
-  const touch = (clusterId, edgeIndex) => {
-    let bucket = adjacency.get(clusterId);
-    if (!bucket) {
-      bucket = [];
-      adjacency.set(clusterId, bucket);
-    }
-    bucket.push(edgeIndex);
-  };
-
-  for (const conn of connections) {
-    const planA = socketPlans.get(conn.sysA);
-    const planB = socketPlans.get(conn.sysB);
-    const clusterIdA = planA?.connectionClusters.get(conn.id);
-    const clusterIdB = planB?.connectionClusters.get(conn.id);
-    if (!clusterIdA || !clusterIdB) continue;
-
-    const clusterA = clusterMap.get(clusterIdA);
-    const clusterB = clusterMap.get(clusterIdB);
-    if (!clusterA || !clusterB) continue;
-
-    const edgeIndex = edges.length;
-    edges.push({
-      id: conn.id,
-      clusterIdA,
-      clusterIdB,
-      pointA: clusterA.pieceWorld,
-      pointB: clusterB.pieceWorld
-    });
-    touch(clusterIdA, edgeIndex);
-    touch(clusterIdB, edgeIndex);
-  }
-
-  const visited = new Set();
-  const components = [];
-
-  for (const startClusterId of adjacency.keys()) {
-    if (visited.has(startClusterId)) continue;
-
-    const queue = [startClusterId];
-    visited.add(startClusterId);
-    const clusterIds = new Set();
-    const edgeIndexes = new Set();
-
-    while (queue.length) {
-      const clusterId = queue.shift();
-      clusterIds.add(clusterId);
-
-      for (const edgeIndex of adjacency.get(clusterId) || []) {
-        edgeIndexes.add(edgeIndex);
-        const edge = edges[edgeIndex];
-        const otherId = edge.clusterIdA === clusterId ? edge.clusterIdB : edge.clusterIdA;
-        if (!visited.has(otherId)) {
-          visited.add(otherId);
-          queue.push(otherId);
-        }
-      }
-    }
-
-    const componentClusters = Array.from(clusterIds)
-      .map(clusterId => clusterMap.get(clusterId))
-      .filter(Boolean);
-    const componentEdges = Array.from(edgeIndexes).map(index => edges[index]);
-
-    if (componentClusters.length && componentEdges.length) {
-      components.push({
-        clusters: componentClusters,
-        edges: componentEdges,
-        clusterMap: new Map(componentClusters.map(cluster => [cluster.id, cluster]))
-      });
-    }
-  }
-
-  return components;
-}
-
-function mergeConnectionGroups(groups) {
-  const parent = new Map();
-
-  const ensure = (id) => {
-    if (!parent.has(id)) parent.set(id, id);
-  };
-
-  const find = (id) => {
-    ensure(id);
-    let root = id;
-    while (parent.get(root) !== root) root = parent.get(root);
-    while (parent.get(id) !== id) {
-      const next = parent.get(id);
-      parent.set(id, root);
-      id = next;
-    }
-    return root;
-  };
-
-  const union = (left, right) => {
-    const rootLeft = find(left);
-    const rootRight = find(right);
-    if (rootLeft !== rootRight) parent.set(rootRight, rootLeft);
-  };
-
-  for (const group of groups) {
-    const uniqueIds = Array.from(new Set(group)).sort((a, b) => a - b);
-    if (uniqueIds.length < 2) continue;
-    for (let index = 1; index < uniqueIds.length; index += 1) {
-      union(uniqueIds[0], uniqueIds[index]);
-    }
-  }
-
-  const buckets = new Map();
-  for (const id of parent.keys()) {
-    const root = find(id);
-    let bucket = buckets.get(root);
-    if (!bucket) {
-      bucket = [];
-      buckets.set(root, bucket);
-    }
-    bucket.push(id);
-  }
-
-  return Array.from(buckets.values())
-    .map(group => group.sort((a, b) => a - b))
-    .filter(group => group.length > 1)
-    .sort((left, right) => left[0] - right[0]);
-}
-
-function buildForcedMergeMap(components) {
-  const pendingBySystem = new Map();
-
-  for (const component of components) {
-    const clustersBySystem = new Map();
-
-    for (const cluster of component.clusters) {
-      let bucket = clustersBySystem.get(cluster.systemName);
-      if (!bucket) {
-        bucket = [];
-        clustersBySystem.set(cluster.systemName, bucket);
-      }
-      bucket.push(cluster);
-    }
-
-    for (const [systemName, clusters] of clustersBySystem) {
-      if (clusters.length < 2) continue;
-
-      let bucket = pendingBySystem.get(systemName);
-      if (!bucket) {
-        bucket = [];
-        pendingBySystem.set(systemName, bucket);
-      }
-
-      bucket.push(clusters.flatMap(cluster => cluster.connectionIds));
-    }
-  }
-
-  const forcedMergeMap = new Map();
-  for (const [systemName, groups] of pendingBySystem) {
-    const mergedGroups = mergeConnectionGroups(groups);
-    if (mergedGroups.length) forcedMergeMap.set(systemName, mergedGroups);
-  }
-
-  return forcedMergeMap;
-}
-
-function getForcedMergeSignature(forcedMergeMap) {
-  return JSON.stringify(
-    Array.from(forcedMergeMap.entries())
-      .sort((left, right) => left[0].localeCompare(right[0]))
-      .map(([systemName, groups]) => [systemName, groups])
   );
 }
 
@@ -1216,66 +634,6 @@ function buildTubeComponentCSG(component) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Orientation and build-plate helpers
-// ═══════════════════════════════════════════════════════════════════════════
-
-function rotatePointIntoBasis(point, basis) {
-  return [
-    vecDot(point, basis.right),
-    vecDot(point, basis.up),
-    vecDot(point, basis.forward)
-  ];
-}
-
-function placeTrianglesOnBuildPlate(triangles) {
-  let minZ = Infinity;
-  for (const tri of triangles) {
-    minZ = Math.min(minZ, tri.a[2], tri.b[2], tri.c[2]);
-  }
-  if (!Number.isFinite(minZ)) return triangles;
-
-  const zOffset = -minZ;
-  return triangles.map(tri => ({
-    a: [tri.a[0], tri.a[1], tri.a[2] + zOffset],
-    b: [tri.b[0], tri.b[1], tri.b[2] + zOffset],
-    c: [tri.c[0], tri.c[1], tri.c[2] + zOffset]
-  }));
-}
-
-/**
- * Rotate a star so the engraved facet faces +Z, then place on build plate.
- */
-function orientStarForPrint(triangles, faceDirection) {
-  const basis = buildFeatureBasis(faceDirection);
-  const rotated = triangles.map(tri => ({
-    a: rotatePointIntoBasis(tri.a, basis),
-    b: rotatePointIntoBasis(tri.b, basis),
-    c: rotatePointIntoBasis(tri.c, basis)
-  }));
-  return placeTrianglesOnBuildPlate(rotated);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// System rank map
-// ═══════════════════════════════════════════════════════════════════════════
-
-function buildSystemRankMap(sourceStars) {
-  const rankedStars = filterMainStars(Array.isArray(sourceStars) ? sourceStars : [])
-    .slice()
-    .sort((a, b) => {
-      const dd = getRankingDistance(a) - getRankingDistance(b);
-      if (dd !== 0) return dd;
-      return getSystemName(a).localeCompare(getSystemName(b));
-    });
-
-  const rankMap = new Map();
-  rankedStars.forEach((star, index) => {
-    rankMap.set(getSystemName(star), index + 1);
-  });
-  return rankMap;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // Public API
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1291,16 +649,9 @@ function buildSystemRankMap(sourceStars) {
  * @param {Object} [options]
  * @param {Array}  [options.allStars] Full heliocentric dataset for global numbering.
  */
-export async function exportPrintableSTLKit(stars, connections, options = {}) {
+export async function buildPrintableSTLKitFiles(stars, connections, options = {}) {
   if (!stars || stars.length === 0) {
-    console.warn('STL kit export: no stars to export.');
-    return;
-  }
-
-  const JSZip = window.JSZip;
-  if (!JSZip) {
-    alert('JSZip library is not loaded. Cannot create ZIP file.');
-    return;
+    return null;
   }
 
   // ── Build system info ────────────────────────────────────────────────
@@ -1308,6 +659,7 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
   const rankMap = buildSystemRankMap(options.allStars?.length ? options.allStars : stars);
   const systemInfo = new Map();
 
+  let processedSystems = 0;
   for (const star of mainStars) {
     if (!star.truePosition) continue;
     const systemName = getSystemName(star);
@@ -1321,15 +673,23 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
         z: star.truePosition.z * KIT_MM_PER_LY
       }
     });
+
+    processedSystems += 1;
+    if (processedSystems % EXPORT_YIELD_INTERVAL === 0) await yieldToBrowser();
   }
 
   // ── Build all connection pairs ───────────────────────────────────────
   const candidateConnections = [];
+  const skippedConnections = [];
 
   if (Array.isArray(connections)) {
     const seenPairs = new Set();
 
+    let processedConnections = 0;
     for (const { starA, starB } of connections) {
+      processedConnections += 1;
+      if (processedConnections % (EXPORT_YIELD_INTERVAL * 16) === 0) await yieldToBrowser();
+
       if (!starA || !starB) continue;
 
       const sysA = getSystemName(starA);
@@ -1342,7 +702,10 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
 
       const infoA = systemInfo.get(sysA);
       const infoB = systemInfo.get(sysB);
-      if (!infoA || !infoB) continue;
+      if (!infoA || !infoB) {
+        skippedConnections.push({ sysA, sysB, reason: 'one or both systems were not exported' });
+        continue;
+      }
 
       const dx = infoB.posMM.x - infoA.posMM.x;
       const dy = infoB.posMM.y - infoA.posMM.y;
@@ -1353,7 +716,14 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
 
       // Check if a tube can physically fit between the two spheres
       const tubeLength = distance - infoA.radius - infoB.radius + 2 * TUBE_INSERTION_DEPTH;
-      if (tubeLength < MIN_TUBE_LENGTH) continue;
+      if (tubeLength < MIN_TUBE_LENGTH) {
+        skippedConnections.push({
+          sysA,
+          sysB,
+          reason: `tube would be ${tubeLength.toFixed(2)} mm, below the ${MIN_TUBE_LENGTH} mm minimum`
+        });
+        continue;
+      }
 
       candidateConnections.push({
         id: candidateConnections.length,
@@ -1369,7 +739,7 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     }
   }
 
-  // ── Build ZIP ────────────────────────────────────────────────────────
+  // Build printable file buffers.
   const allConnections = candidateConnections;
   let forcedMergeMap = new Map();
   let socketPlans = buildSystemSocketPlans(systemInfo, allConnections, forcedMergeMap);
@@ -1385,11 +755,10 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     forcedMergeMap = nextForcedMergeMap;
     socketPlans = buildSystemSocketPlans(systemInfo, allConnections, forcedMergeMap);
     tubeComponents = buildTubeComponents(systemInfo, socketPlans, allConnections);
+    await yieldToBrowser();
   }
 
-  const zip = new JSZip();
-  const starsFolder = zip.folder('stars');
-  const tubesFolder = zip.folder('tubes');
+  const files = [];
 
   const maxRank = rankMap.size;
   const padDigits = String(maxRank).length;
@@ -1405,7 +774,7 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
       connectionClusters: new Map(),
       clusters: [],
       openingDirections: [],
-      negativeSolids: []
+      holeCutters: []
     };
     const holeDirs = socketPlan.openingDirections;
 
@@ -1429,7 +798,9 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
 
     // Socket cutters are planned from the same overlap-merge logic used for
     // the branched tube parts, so stars and removable parts stay aligned.
-    cutSolids.push(...socketPlan.negativeSolids);
+    for (const cutter of socketPlan.holeCutters || []) {
+      cutSolids.push(buildHoleCSG(cutter.holeDir, cutter.innerDist, cutter.outerDist));
+    }
 
     let csg = unionAllCSG(positiveSolids);
     if (cutSolids.length) {
@@ -1441,8 +812,12 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     const stlBuffer = trianglesToBinarySTL(triangles);
 
     const rankStr = Number.isFinite(info.rank) ? padRank(info.rank) : '00';
-    starsFolder.file(`${rankStr}_${sanitizeFilename(systemName)}.stl`, stlBuffer);
+    files.push({
+      path: `stars/${rankStr}_${sanitizeSTLFilename(systemName)}.stl`,
+      buffer: stlBuffer
+    });
     starCount += 1;
+    if (starCount % EXPORT_HEAVY_YIELD_INTERVAL === 0) await yieldToBrowser();
   }
 
   // ── Tubes ────────────────────────────────────────────────────────────
@@ -1455,21 +830,96 @@ export async function exportPrintableSTLKit(stars, connections, options = {}) {
     const fileLabel = built.labelRanks.map(rank => padRank(rank)).join('-');
     if (!fileLabel) continue;
 
-    tubesFolder.file(`${fileLabel}.stl`, stlBuffer);
+    files.push({
+      path: `tubes/${fileLabel}.stl`,
+      buffer: stlBuffer
+    });
     tubeCount += 1;
+    if (tubeCount % EXPORT_HEAVY_YIELD_INTERVAL === 0) await yieldToBrowser();
   }
 
-  // ── Download ─────────────────────────────────────────────────────────
-  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'star_map_3d_print_kit.zip';
-  link.click();
-  URL.revokeObjectURL(url);
+  const manifest = buildKitManifest({
+    sourceStarCount: stars.length,
+    inputConnectionCount: Array.isArray(connections) ? connections.length : 0,
+    exportedSystemCount: systemInfo.size,
+    printableConnectionCount: allConnections.length,
+    starFileCount: starCount,
+    tubeFileCount: tubeCount,
+    skippedConnections
+  });
+  files.push({ path: 'README.txt', text: manifest });
 
-  console.log(
-    `3D-print kit exported – ${starCount} stars, ${tubeCount} tubes ` +
-    `(scale: 1 LY = ${KIT_MM_PER_LY} mm, star ⌀ ${STANDARD_DIAMETER_MM} mm, tube ⌀ ${KIT_TUBE_RADIUS * 2} mm).`
-  );
+  return {
+    files,
+    summary: {
+      starCount,
+      tubeCount,
+      sourceStarCount: stars.length,
+      inputConnectionCount: Array.isArray(connections) ? connections.length : 0,
+      exportedSystemCount: systemInfo.size,
+      printableConnectionCount: allConnections.length,
+      skippedConnectionCount: skippedConnections.length
+    },
+    logMessage:
+      `3D-print kit exported - ${starCount} stars, ${tubeCount} tubes ` +
+      `(scale: 1 LY = ${KIT_MM_PER_LY} mm, star diameter ${STANDARD_DIAMETER_MM} mm, tube diameter ${KIT_TUBE_RADIUS * 2} mm).`
+  };
+}
+
+function addBuiltFilesToZip(zip, built) {
+  built.files.forEach(file => {
+    zip.file(file.path, file.text ?? file.buffer);
+  });
+}
+
+async function buildPrintableSTLKitFilesInWorker(stars, connections, options = {}) {
+  if (typeof Worker !== 'function') return null;
+
+  const worker = new Worker(new URL('./stlKitWorker.js', import.meta.url), { type: 'module' });
+  const payload = createSTLKitWorkerPayload(stars, connections, options);
+
+  return new Promise((resolve, reject) => {
+    worker.onmessage = event => {
+      const { type, result, error } = event.data || {};
+      worker.terminate();
+      if (type === 'success') {
+        resolve(result);
+      } else {
+        reject(new Error(error || 'STL kit worker failed.'));
+      }
+    };
+    worker.onerror = event => {
+      worker.terminate();
+      reject(new Error(event.message || 'STL kit worker failed.'));
+    };
+    worker.postMessage(payload);
+  });
+}
+
+export async function exportPrintableSTLKit(stars, connections, options = {}) {
+  if (!stars || stars.length === 0) {
+    console.warn('STL kit export: no stars to export.');
+    return;
+  }
+
+  const JSZip = getJsZipConstructor();
+
+  let built = null;
+  try {
+    built = await buildPrintableSTLKitFilesInWorker(stars, connections, options);
+  } catch (error) {
+    console.warn('STL kit worker export failed; falling back to main-thread build.', error);
+  }
+  if (!built) {
+    built = await buildPrintableSTLKitFiles(stars, connections, options);
+  }
+  if (!built) return;
+
+  const zip = new JSZip();
+  addBuiltFilesToZip(zip, built);
+
+  await yieldToBrowser();
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  downloadBlob(blob, 'star_map_3d_print_kit.zip');
+  console.log(built.logMessage);
 }

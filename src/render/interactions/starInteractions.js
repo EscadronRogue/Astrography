@@ -1,6 +1,7 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { showTooltip, hideTooltip, pinTooltip, unpinTooltip, getPinnedTooltipPosition } from './tooltips.js';
 import { getStarEquirectangularPosition } from '../../shared/uvUtils.js';
+import { cancelScheduledAnimationFrame, scheduleAnimationFrame } from '../../shared/renderScheduler.js';
 
 const STAR_INTERACTIONS_INPUT_ID = 'enable-star-interactions';
 const STAR_INTERACTIONS_BUTTON_ID = 'toggle-star-interactions';
@@ -124,21 +125,42 @@ export function setupStarInteractionToggle(ctx) {
 }
 
 export function initStarInteractions(ctx, map) {
+  map.starInteractionDisposer?.();
+
   const raycaster = new THREE.Raycaster();
   raycaster.params.Points = { threshold: getRaycastThreshold(map) };
-  const mouse = new THREE.Vector2();
+  const pointer = new THREE.Vector2();
+  let pointerDown = null;
+  let pendingMove = null;
+  let hoverFrame = 0;
 
-  map.canvas.addEventListener('mousemove', event => {
+  const hitTest = ({ clientX, clientY }) => {
+    const rect = map.canvas.getBoundingClientRect();
+    pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, map.camera);
+    return resolveHoveredOrClickedStar(map, raycaster);
+  };
+
+  const isInsideTooltip = ({ clientX, clientY }) => {
+    const tooltip = document.getElementById('tooltip');
+    if (!tooltip) return false;
+    const tRect = tooltip.getBoundingClientRect();
+    return (
+      clientX >= tRect.left &&
+      clientX <= tRect.right &&
+      clientY >= tRect.top &&
+      clientY <= tRect.bottom
+    );
+  };
+
+  const showSelectionOrHover = eventLike => {
     if (!areStarInteractionsEnabled()) {
       hideTooltip();
       return;
     }
 
-    const rect = map.canvas.getBoundingClientRect();
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(mouse, map.camera);
-    const hoveredStar = resolveHoveredOrClickedStar(map, raycaster);
+    const hoveredStar = hitTest(eventLike);
     const selectedStar = ctx.state.selectedStarData;
 
     if (selectedStar) {
@@ -146,39 +168,64 @@ export function initStarInteractions(ctx, map) {
       if (pinnedPosition) {
         showTooltip(pinnedPosition.x, pinnedPosition.y, selectedStar);
       } else {
-        showTooltip(event.clientX, event.clientY, selectedStar);
+        showTooltip(eventLike.clientX, eventLike.clientY, selectedStar);
       }
     } else if (hoveredStar) {
-      showTooltip(event.clientX, event.clientY, hoveredStar);
+      showTooltip(eventLike.clientX, eventLike.clientY, hoveredStar);
     } else {
       hideTooltip();
     }
-  });
+  };
 
-  map.canvas.addEventListener('click', event => {
+  const onPointerMove = event => {
+    // Touch move usually means map navigation; tap selection is handled on pointerup.
+    if (event.pointerType !== 'mouse' && !ctx.state.selectedStarData) return;
+
+    pendingMove = {
+      clientX: event.clientX,
+      clientY: event.clientY
+    };
+    if (hoverFrame) return;
+
+    hoverFrame = scheduleAnimationFrame(() => {
+      hoverFrame = 0;
+      if (pendingMove) {
+        showSelectionOrHover(pendingMove);
+        pendingMove = null;
+      }
+    });
+  };
+
+  const onPointerDown = event => {
+    pointerDown = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      pointerId: event.pointerId,
+      time: performance.now()
+    };
+  };
+
+  const onPointerUp = event => {
     if (!areStarInteractionsEnabled()) {
       hideTooltip();
       return;
     }
 
-    const tooltip = document.getElementById('tooltip');
-    if (tooltip) {
-      const tRect = tooltip.getBoundingClientRect();
-      if (
-        event.clientX >= tRect.left &&
-        event.clientX <= tRect.right &&
-        event.clientY >= tRect.top &&
-        event.clientY <= tRect.bottom
-      ) {
-        return;
-      }
+    if (isInsideTooltip(event)) return;
+    if (pointerDown && pointerDown.pointerId !== event.pointerId) return;
+
+    const dx = pointerDown ? event.clientX - pointerDown.clientX : 0;
+    const dy = pointerDown ? event.clientY - pointerDown.clientY : 0;
+    const moved = Math.hypot(dx, dy);
+    const elapsed = pointerDown ? performance.now() - pointerDown.time : 0;
+    pointerDown = null;
+
+    const maxTapMovement = event.pointerType === 'mouse' ? 4 : 10;
+    if (moved > maxTapMovement || (event.pointerType !== 'mouse' && elapsed > 800)) {
+      return;
     }
 
-    const rect = map.canvas.getBoundingClientRect();
-    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(mouse, map.camera);
-    const clickedStar = resolveHoveredOrClickedStar(map, raycaster);
+    const clickedStar = hitTest(event);
 
     ctx.state.selectedStarData = clickedStar;
     updateSelectedStarHighlight(ctx);
@@ -189,7 +236,27 @@ export function initStarInteractions(ctx, map) {
       unpinTooltip();
       hideTooltip();
     }
-  });
+  };
+
+  const onPointerLeave = () => {
+    if (!ctx.state.selectedStarData) hideTooltip();
+  };
+
+  map.canvas.addEventListener('pointermove', onPointerMove);
+  map.canvas.addEventListener('pointerdown', onPointerDown);
+  map.canvas.addEventListener('pointerup', onPointerUp);
+  map.canvas.addEventListener('pointerleave', onPointerLeave);
+
+  map.starInteractionDisposer = () => {
+    if (hoverFrame) cancelScheduledAnimationFrame(hoverFrame);
+    map.canvas.removeEventListener('pointermove', onPointerMove);
+    map.canvas.removeEventListener('pointerdown', onPointerDown);
+    map.canvas.removeEventListener('pointerup', onPointerUp);
+    map.canvas.removeEventListener('pointerleave', onPointerLeave);
+    map.starInteractionDisposer = null;
+  };
+
+  return map.starInteractionDisposer;
 }
 
 export function updateSelectedStarHighlight(ctx) {

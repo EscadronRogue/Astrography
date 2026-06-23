@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { requestRenderIfAvailable } from '../../shared/renderScheduler.js';
 
 class BaseCameraControls {
@@ -10,6 +10,8 @@ class BaseCameraControls {
     this.activePointers = new Map();
     this.pinchDistance = null;
     this.previousPointerPosition = { x: 0, y: 0 };
+    this.wheelListenerOptions = { passive: false };
+    this.requestRender = options.requestRender || requestRenderIfAvailable;
 
     this.onPointerDown = this.onPointerDown.bind(this);
     this.onPointerMove = this.onPointerMove.bind(this);
@@ -20,7 +22,7 @@ class BaseCameraControls {
     this.domElement.addEventListener('pointermove', this.onPointerMove, false);
     this.domElement.addEventListener('pointerup', this.onPointerUp, false);
     this.domElement.addEventListener('pointercancel', this.onPointerUp, false);
-    this.domElement.addEventListener('wheel', this.onWheel, { passive: false });
+    this.domElement.addEventListener('wheel', this.onWheel, this.wheelListenerOptions);
   }
 
   onPointerDown(event) {
@@ -57,7 +59,7 @@ class BaseCameraControls {
     this.domElement.removeEventListener('pointermove', this.onPointerMove, false);
     this.domElement.removeEventListener('pointerup', this.onPointerUp, false);
     this.domElement.removeEventListener('pointercancel', this.onPointerUp, false);
-    this.domElement.removeEventListener('wheel', this.onWheel, false);
+    this.domElement.removeEventListener('wheel', this.onWheel, this.wheelListenerOptions);
   }
 }
 
@@ -92,7 +94,7 @@ export class ThreeDControls extends BaseCameraControls {
           offset.setLength(next);
           this.camera.position.copy(this.target.clone().add(offset));
           this.camera.lookAt(this.target);
-          requestRenderIfAvailable();
+          this.requestRender();
         }
       }
       this.pinchDistance = nextPinchDistance;
@@ -114,7 +116,7 @@ export class ThreeDControls extends BaseCameraControls {
     offset.setFromSpherical(spherical);
     this.camera.position.copy(this.target.clone().add(offset));
     this.camera.lookAt(this.target);
-    requestRenderIfAvailable();
+    this.requestRender();
   }
 
   onWheel(event) {
@@ -125,7 +127,7 @@ export class ThreeDControls extends BaseCameraControls {
     offset.setLength(next);
     this.camera.position.copy(this.target.clone().add(offset));
     this.camera.lookAt(this.target);
-    requestRenderIfAvailable();
+    this.requestRender();
   }
 }
 
@@ -158,7 +160,7 @@ export class TwoDControls extends BaseCameraControls {
         const zoomFactor = 1 + delta * this.pinchZoomSpeed;
         this.camera.zoom = THREE.MathUtils.clamp(this.camera.zoom * zoomFactor, this.minZoom, this.maxZoom);
         this.camera.updateProjectionMatrix();
-        requestRenderIfAvailable();
+        this.requestRender();
       }
       this.pinchDistance = nextPinchDistance;
       return;
@@ -172,7 +174,7 @@ export class TwoDControls extends BaseCameraControls {
     const speed = event.pointerType === 'touch' ? this.touchPanSpeed : this.panSpeed;
     this.camera.position.x -= dx * speed / this.camera.zoom;
     this.camera.position.y += dy * speed / this.camera.zoom;
-    requestRenderIfAvailable();
+    this.requestRender();
   }
 
   onWheel(event) {
@@ -180,6 +182,6 @@ export class TwoDControls extends BaseCameraControls {
     const nextZoom = THREE.MathUtils.clamp(this.camera.zoom * (1 - event.deltaY * this.zoomSpeed), this.minZoom, this.maxZoom);
     this.camera.zoom = nextZoom;
     this.camera.updateProjectionMatrix();
-    requestRenderIfAvailable();
+    this.requestRender();
   }
 }

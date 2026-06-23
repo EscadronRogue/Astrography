@@ -5,24 +5,38 @@ function requestMapSync(syncVisibleMaps) {
   });
 }
 
-export function setupMapProjectionToggles({ requestRender, maybePersistPresets, syncVisibleMaps, trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap }) {
-  const mapsSection = document.querySelector('.maps-section');
+export function getProjectionContainer(canvasId, documentRef = globalThis.document) {
+  return documentRef?.getElementById?.(canvasId)?.parentElement || null;
+}
+
+export function setupMapProjectionToggles({
+  requestRender,
+  maybePersistPresets,
+  syncVisibleMaps,
+  trueCoordinatesMap,
+  globeMap,
+  mollweideMap,
+  uvMap,
+  uvGlobeMap,
+  documentRef = globalThis.document
+}) {
+  const mapsSection = documentRef?.querySelector?.('.maps-section') || null;
   const containers = {
-    trueCoordinates: document.getElementById('map3D').parentElement,
-    uvGlobe: document.getElementById('sphereMap').parentElement,
-    uvMap: document.getElementById('uvMap').parentElement,
-    legacyGlobe: document.getElementById('legacySphereMap').parentElement,
-    legacyMollweide: document.getElementById('legacyMollweideMap').parentElement
+    trueCoordinates: getProjectionContainer('map3D', documentRef),
+    uvGlobe: getProjectionContainer('sphereMap', documentRef),
+    uvMap: getProjectionContainer('uvMap', documentRef),
+    legacyGlobe: getProjectionContainer('legacySphereMap', documentRef),
+    legacyMollweide: getProjectionContainer('legacyMollweideMap', documentRef)
   };
 
-  Object.values(containers).forEach(container => container.remove());
+  Object.values(containers).forEach(container => container?.remove?.());
 
   function bindToggle(id, container, manager, isLegacy = false) {
-    const checkbox = document.getElementById(id);
-    if (!checkbox || !container || !manager) return;
+    const checkbox = documentRef?.getElementById?.(id);
+    if (!checkbox || !container || !manager || !mapsSection) return null;
 
     function updateVisibility() {
-      const showLegacy = document.getElementById('show-legacy-projections')?.checked ?? false;
+      const showLegacy = documentRef?.getElementById?.('show-legacy-projections')?.checked ?? false;
       const shouldShow = checkbox.checked && (!isLegacy || showLegacy);
       if (shouldShow) {
         mapsSection.appendChild(container);
@@ -30,7 +44,7 @@ export function setupMapProjectionToggles({ requestRender, maybePersistPresets, 
       } else if (container.isConnected) {
         container.remove();
       }
-      requestRender();
+      requestRender?.();
     }
 
     checkbox.addEventListener('change', () => {
@@ -39,7 +53,7 @@ export function setupMapProjectionToggles({ requestRender, maybePersistPresets, 
       if (!wasConnected && container.isConnected) {
         requestMapSync(syncVisibleMaps);
       }
-      maybePersistPresets();
+      maybePersistPresets?.();
     });
 
     return updateVisibility;
@@ -53,18 +67,18 @@ export function setupMapProjectionToggles({ requestRender, maybePersistPresets, 
     bindToggle('map-legacy-mollweide', containers.legacyMollweide, mollweideMap, true)
   ].filter(Boolean);
 
-  const legacyToggle = document.getElementById('show-legacy-projections');
+  const legacyToggle = documentRef?.getElementById?.('show-legacy-projections');
   if (legacyToggle) {
     legacyToggle.addEventListener('change', () => {
-      const legacySection = document.getElementById('legacy-projection-controls');
+      const legacySection = documentRef?.getElementById?.('legacy-projection-controls');
       if (legacySection) legacySection.hidden = !legacyToggle.checked;
       refreshers.forEach(fn => fn());
       if (legacyToggle.checked) {
         requestMapSync(syncVisibleMaps);
       }
-      maybePersistPresets();
+      maybePersistPresets?.();
     });
-    const legacySection = document.getElementById('legacy-projection-controls');
+    const legacySection = documentRef?.getElementById?.('legacy-projection-controls');
     if (legacySection) legacySection.hidden = !legacyToggle.checked;
   }
 

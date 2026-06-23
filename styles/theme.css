@@ -754,6 +754,48 @@ fieldset.ag-hidden,
   justify-content: space-between;
   gap: 10px;
 }
+.tooltip-catalog-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.tooltip-action-row {
+  margin-top: 6px;
+  text-align: center;
+}
+.tooltip-action {
+  width: 100%;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.tooltip-action:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.tooltip-action-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.tooltip-action-primary:not(:disabled):hover {
+  background: color-mix(in oklab, var(--accent) 88%, white 12%);
+}
+.tooltip-action-secondary {
+  margin-top: 4px;
+  background: var(--hairline);
+  color: var(--fg-muted);
+  border: 1px solid var(--hairline-strong);
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.tooltip-action-secondary:not(:disabled):hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
 
 /* ---------- Viewpoint banner ----------------------------------------- */
 #viewpoint-banner {
@@ -808,12 +850,79 @@ fieldset.ag-hidden,
   background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
 
+/* ---------- Notifications ------------------------------------------- */
+#app-notification-region {
+  position: fixed;
+  z-index: 10000;
+  top: 16px;
+  right: 16px;
+  width: min(360px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.app-notification {
+  position: relative;
+  pointer-events: auto;
+  border: 1px solid var(--hairline-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px 40px 12px 14px;
+  background: color-mix(in oklab, var(--panel) 94%, black 6%);
+  color: var(--fg);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+.app-notification-error {
+  border-left-color: #ff6b6b;
+}
+.app-notification-title {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.app-notification-message {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fg-dim);
+  overflow-wrap: anywhere;
+}
+.app-notification-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font: 700 14px/1 var(--font-ui);
+}
+.app-notification-close:hover,
+.app-notification-close:focus-visible {
+  border-color: var(--hairline-strong);
+  color: var(--fg);
+  outline: none;
+}
+
 /* ---------- Responsive tightening ------------------------------------ */
 @media (max-width: 800px) {
   .sidebar { width: 86vw; max-width: 340px; }
   .maps-section { padding: 16px 14px 40px; }
   .map-container { padding: 16px 14px 14px; }
-  .ag-header-tools }
+  .ag-header-tools { gap: 6px; }
+  #app-notification-region {
+    top: 10px;
+    right: 10px;
+    width: calc(100vw - 20px);
+  }
+}
 
 /* ---------- Sidebar section labels & subheads ------------------------ */
 .ag-section {

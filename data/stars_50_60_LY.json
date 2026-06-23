@@ -8789,31 +8789,6 @@
     },
     {
         "Common_name_of_the_star_system": "Gaia DR2 6411063808332359808",
-        "Common_name_of_the_star": "Gaia DR2 6411063808333667328",
-        "Distance_from_the_Sun": "Unknown",
-        "Constellation": "Unknown",
-        "RA_in_degrees": "Unknown",
-        "DEC_in_degrees": "Unknown",
-        "RA_in_radian": "Unknown",
-        "DEC_in_radian": "Unknown",
-        "RA_normal": "Unknown",
-        "DEC_normal": "Unknown",
-        "Galactic_longitude": "Unknown",
-        "Galactic_latitude": "Unknown",
-        "Stellar_class": "Unknown",
-        "Mass": "Unknown",
-        "Size": "2.4",
-        "Apparent_magnitude": "Unknown",
-        "Absolute_magnitude": "Unknown",
-        "Parallax": "Unknown",
-        "Color": "Red dwarf",
-        "Catalog_link": "https://www.stellarcatalog.com/stars/gaia-dr2-6411063808332359808",
-        "Other designations": [
-            "1RXS J221545.5-585642"
-        ]
-    },
-    {
-        "Common_name_of_the_star_system": "Gaia DR2 6411063808332359808",
         "Common_name_of_the_star": "Gaia DR2 6411063808332359808",
         "Distance_from_the_Sun": 53.732,
         "Constellation": "Unknown",

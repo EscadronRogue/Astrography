@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../../vendor/three.js';
 import { hashString, hslColorFromHash } from '../../shared/colorUtils.js';
 
 export function lightenColor(color, factor) {

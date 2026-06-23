@@ -1,4 +1,4 @@
-import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+import * as THREE from '../vendor/three.js';
 import { cachedRadToSphere, cachedRadToMollweide, degToRad } from './geometryUtils.js';
 import { GLOBE_RADIUS, MOLLWEIDE_MAX_ITERATIONS, EPSILON, SOL_STAR_NAME } from './constants.js';
 
