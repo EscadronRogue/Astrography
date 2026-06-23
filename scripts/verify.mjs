@@ -235,14 +235,19 @@ function checkCentralizedThreeImport(files) {
   for (const file of files) {
     const text = readFileSync(file, 'utf8');
     if (text.includes(cdnSpecifier)) {
-      addFailure(`Three.js should resolve through the local npm vendor file instead of a CDN: ${file}`);
+      addFailure(`Three.js should resolve through the repo-served vendor file instead of a CDN: ${file}`);
     }
   }
 
   const vendor = join(root, 'src', 'vendor', 'three.js');
   const vendorText = readFileSync(vendor, 'utf8');
-  if (!vendorText.includes("../../node_modules/three/build/three.module.js")) {
-    addFailure(`Three.js vendor shim should point at the local npm package: ${vendor}`);
+  if (!vendorText.includes("../../vendor/three/three.module.js")) {
+    addFailure(`Three.js vendor shim should point at the repo-served browser asset: ${vendor}`);
+  }
+
+  const browserThreeAsset = join(root, 'vendor', 'three', 'three.module.js');
+  if (!existsSync(browserThreeAsset)) {
+    addFailure(`Missing repo-served Three.js browser asset: ${browserThreeAsset}`);
   }
 }
 
@@ -292,13 +297,30 @@ function checkRequiredHtmlControls() {
     });
 
   [
+    'vendor/jspdf/jspdf.umd.min.js',
+    'vendor/jszip/jszip.min.js'
+  ].forEach(path => {
+    if (!html.includes(path)) {
+      addFailure(`HTML should load export dependencies from the repo-served vendor path: ${path}`);
+    }
+    if (!existsSync(join(root, ...path.split('/')))) {
+      addFailure(`Missing repo-served export dependency: ${path}`);
+    }
+  });
+  [
     'node_modules/jspdf/dist/jspdf.umd.min.js',
     'node_modules/jszip/dist/jszip.min.js'
   ].forEach(path => {
-    if (!html.includes(path)) {
-      addFailure(`HTML should load export dependencies locally from ${path}`);
+    if (html.includes(path)) {
+      addFailure(`HTML should not load browser dependencies through node_modules: ${path}`);
     }
   });
+  if (!html.includes('href="favicon.ico"') || !existsSync(join(root, 'favicon.ico'))) {
+    addFailure('HTML should define a repo-served favicon.ico to satisfy legacy favicon requests.');
+  }
+  if (!html.includes('href="favicon.svg"') || !existsSync(join(root, 'favicon.svg'))) {
+    addFailure('HTML should define a repo-served favicon.svg for modern favicon rendering.');
+  }
   if (html.includes('cdnjs.cloudflare.com')) {
     addFailure('HTML should not load runtime dependencies from cdnjs.');
   }

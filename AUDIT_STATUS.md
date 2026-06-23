@@ -5,7 +5,7 @@ Date: 2026-06-23
 ## Current verification
 
 - `npm.cmd test` passes.
-- `npm.cmd audit --audit-level=moderate` passes after moving runtime dependencies to local npm packages.
+- `npm.cmd audit --audit-level=moderate` passes after pinning runtime dependencies to local npm packages.
 - Browser visual smoke testing now has a `npm run test:browser` harness, but running it is still blocked in this Codex environment by local-browser policy. Real Chromium, Firefox, WebKit, iOS Safari, Android Chrome, Edge, gesture, and download checks still need to run outside this restricted browser.
 
 ## Closed in this repair pass
@@ -23,7 +23,8 @@ Date: 2026-06-23
 - PNG/PDF scene snapshots and Mollweide SVG now share an `exportSceneModel` contract for format metadata, dimensions, filenames, and renderer family.
 - Raster/PDF Mollweide export is single-flight guarded.
 - STL scale docs were corrected and generated STL buffers are validated.
-- Runtime dependencies now load from pinned local npm packages instead of cdnjs.
+- Runtime dependencies are pinned through local npm packages and served from repo-local `vendor/` browser assets instead of cdnjs or `node_modules` URLs.
+- Repo-served ICO and SVG favicons are declared to avoid the browser's default `/favicon.ico` 404.
 - jsPDF was upgraded to an audit-clean local version.
 - WebGL availability and context-loss handling were added.
 - Canvas keyboard controls and focus labels were added.
