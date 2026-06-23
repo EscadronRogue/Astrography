@@ -1,3 +1,5 @@
+import { logWarn } from '../shared/logger.js';
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -9,7 +11,7 @@ function toFiniteNumber(value) {
 
 function warnInvalid(source, message, index = null) {
   const suffix = index === null ? '' : ` at index ${index}`;
-  console.warn(`Invalid ${source}${suffix}: ${message}`);
+  logWarn(`Invalid ${source}${suffix}: ${message}`);
 }
 
 export function validateManifestFiles(manifest, source = 'data manifest') {
@@ -41,6 +43,13 @@ export function validateStarBatch(batch, source = 'star data') {
     const distance = toFiniteNumber(record.distance ?? record.Distance_from_the_Sun);
     const ra = toFiniteNumber(record.RA_in_degrees);
     const dec = toFiniteNumber(record.DEC_in_degrees);
+    const hasCartesianCoordinates =
+      record.x_coordinate !== undefined ||
+      record.y_coordinate !== undefined ||
+      record.z_coordinate !== undefined;
+    const x = toFiniteNumber(record.x_coordinate);
+    const y = toFiniteNumber(record.y_coordinate);
+    const z = toFiniteNumber(record.z_coordinate);
     const hasNameOrCatalogId = Boolean(
       record.starId ||
       record.Source_id ||
@@ -50,8 +59,14 @@ export function validateStarBatch(batch, source = 'star data') {
       record.Common_name_of_the_star_system
     );
 
-    if (!Number.isFinite(distance) || !Number.isFinite(ra) || !Number.isFinite(dec) || !hasNameOrCatalogId) {
-      warnInvalid(source, 'record requires finite distance, RA/DEC degrees, and a name or catalog id', index);
+    if (
+      !Number.isFinite(distance) ||
+      !Number.isFinite(ra) ||
+      !Number.isFinite(dec) ||
+      (hasCartesianCoordinates && (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z))) ||
+      !hasNameOrCatalogId
+    ) {
+      warnInvalid(source, 'record requires finite distance, RA/DEC degrees, valid x/y/z coordinates when provided, and a name or catalog id', index);
       return false;
     }
 

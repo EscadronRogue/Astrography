@@ -53,6 +53,7 @@ const filterRuntimeState = {
   densityOverlay: null,
   cloudDensitySignature: '',
   cloudDensityRenderSignature: '',
+  cloudDensityUpdateRequestId: 0,
   showConstellationBoundariesFlag: false,
   showConstellationNamesFlag: false,
   showConstellationOverlayFlag: false,

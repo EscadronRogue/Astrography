@@ -74,6 +74,7 @@ export function createDefaultFilterResult(allStars) {
     densityOverlay: null,
     cloudDensityOverlays: [],
     cloudDensitySignature: '',
-    cloudDensityRenderSignature: ''
+    cloudDensityRenderSignature: '',
+    cloudDensityUpdateRequestId: 0
   };
 }

@@ -2,18 +2,20 @@
  * @file STL exporter for the True Coordinates 3D map.
  *
  * Generates a binary STL file containing:
- *  – one sphere per star *system* (only the main/primary star is exported)
- *  – sphere diameter determined by stellar class with physical scale
- *  – connection tubes with uniform thickness
+ *  - one sphere per star *system* (only the main/primary star is exported)
+ *  - sphere diameter determined by stellar class with physical scale
+ *  - connection tubes with uniform thickness
  *
  * Physical scale:
- *   1 LY  = 5 mm   →  coordinate multiplier = 5
- *   Standard star (G-class) diameter = 8 mm  →  radius = 4 mm = 0.8 LY-units
- *   Tube diameter = 2 mm  →  radius = 1 mm = 0.2 LY-units
+ *   1 LY = 5 mm, coordinate multiplier = 5
+ *   Standard star (G-class) diameter = 16 mm, radius = 8 mm = 1.6 LY-units
+ *   Tube diameter = 4 mm, radius = 2 mm = 0.4 LY-units
  */
 
 import { getPrimaryClass } from '../../shared/stellarClassUtils.js';
 import { downloadBlob } from './downloadUtils.js';
+import { logInfo, logWarn } from '../../shared/logger.js';
+import { validateBinarySTL } from './stlValidation.js';
 import {
   STL_MM_PER_LY,
   STL_STANDARD_STAR_DIAMETER_MM,
@@ -264,7 +266,7 @@ export function trianglesToBinarySTL(triangles) {
  */
 export function exportTrueCoordinatesSTL(stars, connections) {
   if (!stars || stars.length === 0) {
-    console.warn('STL export: no stars to export.');
+    logWarn('STL export: no stars to export.');
     return;
   }
 
@@ -338,11 +340,12 @@ export function exportTrueCoordinatesSTL(stars, connections) {
 
   // ── Encode & download ────────────────────────────────────────────────
   const stlBuffer = trianglesToBinarySTL(allTriangles);
+  validateBinarySTL(stlBuffer);
   const blob = new Blob([stlBuffer], { type: 'application/octet-stream' });
   downloadBlob(blob, 'true_coordinates_stars.stl');
 
   const connCount = Array.isArray(connections) ? connections.length : 0;
-  console.log(
+  logInfo(
     `STL export complete – ${mainStars.length} systems (from ${stars.length} stars), ` +
     `${connCount} connections, ${allTriangles.length} triangles ` +
     `(scale: 1 LY = ${MM_PER_LY} mm, standard star diameter = ${STANDARD_DIAMETER_MM} mm).`

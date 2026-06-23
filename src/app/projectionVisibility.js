@@ -1,7 +1,9 @@
+import { logError } from '../shared/logger.js';
+
 function requestMapSync(syncVisibleMaps) {
   if (typeof syncVisibleMaps !== 'function') return;
   Promise.resolve(syncVisibleMaps()).catch(error => {
-    console.error('Failed to sync visible projections:', error);
+    logError('Failed to sync visible projections:', error);
   });
 }
 

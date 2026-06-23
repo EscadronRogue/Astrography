@@ -73,7 +73,7 @@ function populateTooltip(tooltip, star) {
   } else {
     appendRow(tooltip, 'tooltip-distance', 'Distance', formatNumber(star.distance, 2, ' LY'));
   }
-  appendRow(tooltip, 'tooltip-constellation', 'Constellation', star.Constellation || 'N/A');
+  appendRow(tooltip, 'tooltip-constellation', 'Constellation', star.constellation || star.Constellation || 'N/A');
   appendRow(tooltip, 'tooltip-stellarClass', 'Stellar Class', star.stellarClass || star.Stellar_class || 'N/A');
   appendRow(tooltip, 'tooltip-mass', 'Mass', Number.isFinite(star.Mass) ? String(star.Mass) : 'N/A');
   appendRow(tooltip, 'tooltip-size', 'Size', Number.isFinite(star.Size) ? String(star.Size) : 'N/A');

@@ -3,6 +3,7 @@
 import { getStellarClassData } from './stellarClassData.js';
 import { getPrimaryClass } from '../../../shared/stellarClassUtils.js';
 import { DISTANCE_SIZE_SCALE } from '../../../shared/constants.js';
+import { getDisplayDistance } from './displayMetrics.js';
 
 function getDefaultClassSize(stellarClassData, primaryClass) {
   return stellarClassData[primaryClass]?.size ?? stellarClassData.Other?.size ?? 1;
@@ -39,7 +40,7 @@ export function applySizeFilter(stars, filters, displayStats = null) {
       distMin = Infinity;
       distMax = -Infinity;
       for (let i = 0; i < stars.length; i++) {
-        const d = stars[i].distance;
+        const d = getDisplayDistance(stars[i]);
         if (Number.isFinite(d)) {
           if (d < distMin) distMin = d;
           if (d > distMax) distMax = d;
@@ -55,7 +56,7 @@ export function applySizeFilter(stars, filters, displayStats = null) {
 
     // 1) Base size from selected mode
     if (filters.size === 'distance') {
-      star.displaySize = computeDistanceSize(star.distance, distMin, distMax);
+      star.displaySize = computeDistanceSize(getDisplayDistance(star), distMin, distMax);
     } else if (filters.size === 'stellar-class') {
       star.displaySize = defaultClassSize;
     } else if (typeof star.displaySize === 'undefined') {

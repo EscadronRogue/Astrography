@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from '../../../data/fetchWithTimeout.js';
 import { validateStellarClassData } from '../../../data/dataValidation.js';
+import { logError } from '../../../shared/logger.js';
 
 let stellarClassData = {};
 let stellarClassDataPromise = null;
@@ -17,7 +18,7 @@ export async function loadStellarClassData() {
     })
     .catch(error => {
       stellarClassDataPromise = null;
-      console.error('Error loading stellar class data:', error);
+      logError('Error loading stellar class data:', error);
       throw error;
     });
   return stellarClassDataPromise;

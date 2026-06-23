@@ -9,6 +9,7 @@ import { loadStarData } from '../data/loaders/loadStarData.js';
 import { MapManager } from './mapManager.js';
 import { UVMapManager } from './uvMapManager.js';
 import { createRenderRequester } from './renderFrame.js';
+import { createLoadingProgress } from './loadingProgress.js';
 import { setupMapProjectionToggles } from './projectionVisibility.js';
 import { debounce, createGlobeGrid } from './mapDecorations.js';
 import { maybeSavePresets, savePresets, loadPresets, clearSavedPresets } from './presets.js';
@@ -17,14 +18,12 @@ import { getStarTruePosition as getSharedStarTruePosition, getStarGlobePosition,
 import { buildAndApplyFilters as runFilterPipeline, updateMollweideView as refreshMollweideMap } from '../features/filters/pipeline/filterPipeline.js';
 import { initStarInteractions, setupStarInteractionToggle, updateSelectedStarHighlight } from '../render/interactions/starInteractions.js';
 import { setTooltipContext, invalidateTooltipCache } from '../render/interactions/tooltips.js';
-import { setRenderRequester, requestRenderIfAvailable, scheduleAfterPaint } from '../shared/renderScheduler.js';
-import { ExportManager } from '../features/export/exportManager.js';
-import { exportSceneSnapshot } from '../features/export/sceneSnapshotExporter.js';
-import { exportTrueCoordinatesSTL } from '../features/export/stlExporter.js';
-import { exportPrintableSTLKit } from '../features/export/stlKitExporter.js';
+import { setRenderRequester, requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { notifyError } from '../shared/userNotifications.js';
+import { logError } from '../shared/logger.js';
 import { EditManager } from '../features/editing/editManager.js';
 import { applyGlobeSurface } from './globeSurface.js';
+import { setupExportBindings } from './exportBindings.js';
 import { updateMollweidePosition, createMollweideScheduler } from './mollweideUpdater.js';
 import { preprocessStarData, reprojectAllStars } from './starPreprocessor.js';
 import { clearConnectionPositionCache } from '../features/connections/connectionPairs.js';
@@ -40,11 +39,16 @@ let mollweideMap;
 let uvMap;
 let uvGlobeMap;
 let editManager = null;
-let exportManager = null;
 
 const mapManagers = [];
 const requestRender = createRenderRequester(mapManagers, () => editManager);
 setRenderRequester(requestRender);
+const loadingProgress = createLoadingProgress();
+const PHASE_WEIGHTS = loadingProgress.weights;
+const updateProgress = loadingProgress.update;
+const hideProgress = loadingProgress.hide;
+const markProgressError = loadingProgress.markError;
+const yieldToUI = loadingProgress.yieldToUI;
 
 // ---------------------------------------------------------------------------
 // Thin wrappers that close over appContext
@@ -96,7 +100,7 @@ const appContext = {
 
     // Re-run full filter + render pipeline
     buildAndApplyFilters().catch(error => {
-      console.error('Viewpoint filter update failed:', error);
+      logError('Viewpoint filter update failed:', error);
     });
   }
 };
@@ -170,49 +174,6 @@ function updateViewpointDisabledControls(disabled) {
     el.disabled = disabled;
     const label = el.parentElement;
     if (label) label.style.opacity = disabled ? '0.4' : '1';
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Progress bar helpers
-// ---------------------------------------------------------------------------
-const PHASE_WEIGHTS = {
-  starData: 50,    // 0–50%: loading star data files
-  filterUI: 10,    // 50–60%: building filter UI
-  maps: 10,        // 60–70%: creating map managers
-  preprocessing: 5, // 70–75%: preprocessing star data
-  interactions: 5,  // 75–80%: star interactions
-  finalize: 20      // 80–100%: export/edit managers, final render
-};
-
-function updateProgress(percent, label) {
-  const fill = document.getElementById('progress-bar-fill');
-  const labelEl = document.getElementById('progress-bar-label');
-  if (fill) fill.style.width = `${Math.min(100, Math.round(percent))}%`;
-  if (labelEl) labelEl.textContent = label;
-}
-
-function hideProgress() {
-  const container = document.getElementById('progress-bar-container');
-  if (container) container.classList.add('hidden');
-}
-
-/** Yield to the browser so the UI can repaint between heavy phases. */
-function yieldToUI() {
-  return new Promise(resolve => scheduleAfterPaint(resolve));
-}
-
-function bindSceneSnapshotExport(id, manager, format, filenameBase) {
-  const button = document.getElementById(id);
-  if (!button || !manager) return;
-
-  button.addEventListener('click', async () => {
-    try {
-      await exportSceneSnapshot(manager, format, filenameBase);
-    } catch (error) {
-      console.error(`${filenameBase} ${format.toUpperCase()} export failed:`, error);
-      notifyError(`${format.toUpperCase()} export failed`, error);
-    }
   });
 }
 
@@ -294,7 +255,7 @@ export async function bootstrapApp() {
     // Wire form change listeners
     const debouncedApplyFilters = debounce(() => {
       buildAndApplyFilters().catch(error => {
-        console.error('Filter update failed:', error);
+        logError('Filter update failed:', error);
       });
     }, 150);
     if (form) {
@@ -366,51 +327,11 @@ export async function bootstrapApp() {
     const finBase = interBase + PHASE_WEIGHTS.interactions;
     updateProgress(finBase, 'Finalizing…');
 
-    exportManager = new ExportManager(mollweideMap);
-    exportManager.setup();
-    bindSceneSnapshotExport('export-true-png', trueCoordinatesMap, 'png', 'true_coordinates_map');
-    bindSceneSnapshotExport('export-true-pdf', trueCoordinatesMap, 'pdf', 'true_coordinates_map');
-    bindSceneSnapshotExport('export-uv-png', uvMap, 'png', 'uv_map');
-    bindSceneSnapshotExport('export-uv-pdf', uvMap, 'pdf', 'uv_map');
-    bindSceneSnapshotExport('export-globe-png', uvGlobeMap, 'png', 'globe_map');
-    bindSceneSnapshotExport('export-globe-pdf', uvGlobeMap, 'pdf', 'globe_map');
-    bindSceneSnapshotExport('export-legacy-globe-png', globeMap, 'png', 'legacy_globe_map');
-    bindSceneSnapshotExport('export-legacy-globe-pdf', globeMap, 'pdf', 'legacy_globe_map');
-
-    // STL export for the True Coordinates map
-    const stlBtn = document.getElementById('export-stl');
-    if (stlBtn) {
-      stlBtn.addEventListener('click', () => {
-        const stars = state.currentFilteredStars;
-        const connections = state.currentConnections;
-        exportTrueCoordinatesSTL(stars, connections);
-      });
-    }
-
-    // 3D-printable STL kit export
-    const stlKitBtn = document.getElementById('export-stl-kit');
-    if (stlKitBtn) {
-      stlKitBtn.addEventListener('click', () => {
-        const stars = state.currentFilteredStars;
-        const connections = state.currentConnections;
-        stlKitBtn.disabled = true;
-        stlKitBtn.textContent = 'Generating…';
-        // Yield to the browser so the button text updates before heavy work
-        setTimeout(() => {
-          exportPrintableSTLKit(stars, connections, { allStars: state.cachedStars })
-            .then(() => {
-              stlKitBtn.disabled = false;
-              stlKitBtn.textContent = 'STL for 3D Printing';
-            })
-            .catch(err => {
-              console.error('STL kit export failed:', err);
-              notifyError('STL kit export failed', err);
-              stlKitBtn.disabled = false;
-              stlKitBtn.textContent = 'STL for 3D Printing';
-            });
-        }, 50);
-      });
-    }
+    setupExportBindings({
+      state,
+      maps: { trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap },
+      yieldToUI
+    });
     editManager.setConstellationLinesMoll(getConstellationLinesMoll());
     editManager.setIsolationOverlay(state.isolationOverlay);
     editManager.setupAll();
@@ -422,12 +343,7 @@ export async function bootstrapApp() {
     setTimeout(hideProgress, 800);
   } catch (err) {
     const errorDetail = err?.message || String(err);
-    console.error('Starmap initialization failed:', err);
-    updateProgress(0, `Error: ${errorDetail}`);
-    const container = document.getElementById('progress-bar-container');
-    if (container) {
-      container.style.borderColor = 'rgba(255, 80, 60, 0.6)';
-      container.style.pointerEvents = 'auto';
-    }
+    logError('Starmap initialization failed:', err);
+    markProgressError(errorDetail);
   }
 }

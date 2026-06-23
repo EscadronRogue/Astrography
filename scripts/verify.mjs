@@ -11,11 +11,16 @@ import {
   validateStellarClassData
 } from '../src/data/dataValidation.js';
 import { applyDistanceFilter } from '../src/features/filters/logic/distanceFilter.js';
+import { applyOpacityFilter } from '../src/features/filters/logic/opacityFilter.js';
+import { applySizeFilter } from '../src/features/filters/logic/sizeFilter.js';
 import { applyStarsShownFilter } from '../src/features/filters/logic/starsShownFilter.js';
+import { getDisplayDistance, getStarDisplayOpacity, normalizeDisplayOpacity } from '../src/features/filters/logic/displayMetrics.js';
 import { computeDisplayStats, needsDisplayStats } from '../src/features/filters/logic/starDisplayStats.js';
 import { computeAdaptiveGridSize, readFilterState } from '../src/features/filters/state/filterStateReader.js';
+import { getSelectedDustCloudFiles } from '../src/features/filters/filterControls.js';
 import { getAngularProjectionStars, getFilterProjectionStarId, isDefaultProjectionViewpointStar } from '../src/features/filters/state/filterProjectionStars.js';
 import { normalizeCloudStarName } from '../src/features/clouds/cloudNameUtils.js';
+import { computeKNearestPairs } from '../src/features/connections/connectionSpatialIndex.js';
 import {
   buildConnectionBoundsSignature,
   buildConnectionVisualSignature,
@@ -25,6 +30,7 @@ import {
   resetConnectionDistanceBoundsCache
 } from '../src/features/connections/connectionRenderState.js';
 import { buildPrintableSTLKitFiles } from '../src/features/export/stlKitExporter.js';
+import { collectSceneSnapshotModel, normalizeExportFilename } from '../src/features/export/exportSceneModel.js';
 import { getMollweideCropPixels, getMollweideSvgViewBox, getSceneSnapshotSize } from '../src/features/export/exportSizing.js';
 import { EDIT_SCHEMA, EDIT_SCHEMA_VERSION, createEditExportPayload, normalizeLabelEdits } from '../src/features/editing/editSchema.js';
 import {
@@ -35,6 +41,13 @@ import {
   getDustCloudSignature
 } from '../src/app/uvLayerSignatures.js';
 import { clamp01 as clampUvAlpha, createLayerCanvas as createUvLayerCanvas, rgbaFromHex as uvRgbaFromHex } from '../src/app/uvCanvasLayers.js';
+import { DEFAULT_OVERLAY_MAX_CELLS, estimateOverlayGridCells, getBudgetedOverlayGridSettings } from '../src/features/overlays/gridBudget.js';
+import {
+  buildDistanceQueryIndex,
+  getNearestCellDistance,
+  populateCellDistanceCaches,
+  sumWeightedDistancesWithinRadius
+} from '../src/shared/cellDistanceCache.js';
 import {
   getAverageOverlayAlpha,
   getOverlayCellAlpha,
@@ -54,6 +67,7 @@ import { createEventListenerRegistry } from '../src/shared/eventListenerRegistry
 import { configureRendererForCanvas, getCanvasDisplaySize, getClampedDevicePixelRatio } from '../src/shared/canvasSizing.js';
 import { cancelScheduledAnimationFrame, scheduleAfterPaint, scheduleAnimationFrame } from '../src/shared/renderScheduler.js';
 import { createMeasuredTextCanvas, parseFontPixelSize } from '../src/shared/textCanvas.js';
+import { addWebGLContextLossHandlers, assertWebGLAvailable, isWebGLAvailable } from '../src/shared/webglSupport.js';
 import {
   clamp01 as clampShared01,
   hexToRgb255,
@@ -108,6 +122,7 @@ import {
   getSystemName,
   sanitizeSTLFilename
 } from '../src/features/export/stlKitMetadata.js';
+import { validateBinarySTL } from '../src/features/export/stlValidation.js';
 import {
   HOLE_CLUSTER_CLEARANCE,
   HOLE_RADIUS,
@@ -217,13 +232,17 @@ function checkRelativeImports(files) {
 
 function checkCentralizedThreeImport(files) {
   const cdnSpecifier = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
-  const allowedFile = join(root, 'src', 'vendor', 'three.js');
   for (const file of files) {
-    if (file === allowedFile) continue;
     const text = readFileSync(file, 'utf8');
     if (text.includes(cdnSpecifier)) {
-      addFailure(`Direct Three.js CDN import outside vendor shim: ${file}`);
+      addFailure(`Three.js should resolve through the local npm vendor file instead of a CDN: ${file}`);
     }
+  }
+
+  const vendor = join(root, 'src', 'vendor', 'three.js');
+  const vendorText = readFileSync(vendor, 'utf8');
+  if (!vendorText.includes("../../node_modules/three/build/three.module.js")) {
+    addFailure(`Three.js vendor shim should point at the local npm package: ${vendor}`);
   }
 }
 
@@ -241,6 +260,9 @@ function checkCssBraces(files) {
     }
     if (depth !== 0) {
       addFailure(`CSS has unbalanced braces: ${file}`);
+    }
+    if (text.includes('!important')) {
+      addFailure(`CSS should avoid !important overrides: ${file}`);
     }
   }
 }
@@ -268,6 +290,23 @@ function checkRequiredHtmlControls() {
         addFailure(`Missing required export control id: ${id}`);
       }
     });
+
+  [
+    'node_modules/jspdf/dist/jspdf.umd.min.js',
+    'node_modules/jszip/dist/jszip.min.js'
+  ].forEach(path => {
+    if (!html.includes(path)) {
+      addFailure(`HTML should load export dependencies locally from ${path}`);
+    }
+  });
+  if (html.includes('cdnjs.cloudflare.com')) {
+    addFailure('HTML should not load runtime dependencies from cdnjs.');
+  }
+
+  const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  assertEqual(packageJson.dependencies?.three, '0.128.0', 'Three.js dependency should be pinned locally');
+  assertEqual(packageJson.dependencies?.jspdf, '4.2.1', 'jsPDF dependency should be pinned to the audited local version');
+  assertEqual(packageJson.dependencies?.jszip, '3.10.1', 'JSZip dependency should be pinned locally');
 }
 
 function checkExportRendererConfiguration() {
@@ -342,13 +381,20 @@ function checkExportSizingSafety() {
   });
 
   const snapshotExporter = join(root, 'src', 'features', 'export', 'sceneSnapshotExporter.js');
+  const sceneModel = join(root, 'src', 'features', 'export', 'exportSceneModel.js');
   const snapshotText = readFileSync(snapshotExporter, 'utf8');
+  const sceneModelText = readFileSync(sceneModel, 'utf8');
   [
-    "from './exportSizing.js'",
-    'getSceneSnapshotSize(manager)'
+    "from './exportSceneModel.js'",
+    'collectSceneSnapshotModel'
   ].forEach(token => {
     if (!snapshotText.includes(token)) {
-      addFailure(`Scene snapshot sizing should use safe canvas display dimensions (${token}): ${snapshotExporter}`);
+      addFailure(`Scene snapshot exports should read sizing through the shared scene model (${token}): ${snapshotExporter}`);
+    }
+  });
+  ["from './exportSizing.js'", 'getSceneSnapshotSize(manager)'].forEach(token => {
+    if (!sceneModelText.includes(token)) {
+      addFailure(`Shared scene model should own safe snapshot sizing (${token}): ${sceneModel}`);
     }
   });
   ['manager?.canvas?.clientWidth', 'manager?.canvas?.clientHeight', 'getCanvasDisplaySize'].forEach(token => {
@@ -361,11 +407,23 @@ function checkExportSizingSafety() {
 function checkExportRuntimeDependencies() {
   const helper = join(root, 'src', 'features', 'export', 'pdfUtils.js');
   const helperText = readFileSync(helper, 'utf8');
-  ['getJsPdfConstructor', 'getJsZipConstructor', 'globalThis.jspdf?.jsPDF', 'globalThis.JSZip'].forEach(token => {
+  ['hasJsPdfConstructor', 'getJsPdfConstructor', 'hasJsZipConstructor', 'getJsZipConstructor', 'globalThis.jspdf?.jsPDF', 'globalThis.JSZip'].forEach(token => {
     if (!helperText.includes(token)) {
       addFailure(`Export runtime dependency helper is missing ${token}: ${helper}`);
     }
   });
+
+  const healthHelper = join(root, 'src', 'features', 'export', 'exportDependencyHealth.js');
+  const healthText = readFileSync(healthHelper, 'utf8');
+  ['applyExportDependencyHealth', 'hasJsPdfConstructor', 'hasJsZipConstructor', 'export-btn-unavailable', 'aria-disabled'].forEach(token => {
+    if (!healthText.includes(token)) {
+      addFailure(`Export dependency health helper is missing ${token}: ${healthHelper}`);
+    }
+  });
+  const exportBindings = join(root, 'src', 'app', 'exportBindings.js');
+  if (!readFileSync(exportBindings, 'utf8').includes('applyExportDependencyHealth(documentRef)')) {
+    addFailure(`Export bindings should disable unavailable export controls after wiring exports: ${exportBindings}`);
+  }
 
   const downloadHelper = join(root, 'src', 'features', 'export', 'downloadUtils.js');
   const downloadText = readFileSync(downloadHelper, 'utf8');
@@ -412,7 +470,13 @@ function checkExportRuntimeDependencies() {
 
 function checkSvgExportFidelity() {
   const exporter = join(root, 'src', 'features', 'export', 'exportManager.js');
+  const sceneModel = join(root, 'src', 'features', 'export', 'mollweideSvgSceneModel.js');
+  const sharedSceneModel = join(root, 'src', 'features', 'export', 'exportSceneModel.js');
+  const snapshotExporter = join(root, 'src', 'features', 'export', 'sceneSnapshotExporter.js');
   const text = readFileSync(exporter, 'utf8');
+  const modelText = readFileSync(sceneModel, 'utf8');
+  const sharedModelText = readFileSync(sharedSceneModel, 'utf8');
+  const snapshotText = readFileSync(snapshotExporter, 'utf8');
   [
     'getSvgStarLabelState',
     'labelManager?.sprites?.get',
@@ -424,6 +488,96 @@ function checkSvgExportFidelity() {
   ].forEach(token => {
     if (!text.includes(token)) {
       addFailure(`SVG export must preserve edited Mollweide label state (${token}): ${exporter}`);
+    }
+  });
+
+  [
+    'collectMollweideSvgSceneModel',
+    'appendSvgSceneModelLayers',
+    'appendSvgSceneModelLayer',
+    'sceneModel.clippedLayers',
+    'sceneModel.labelLayers',
+    'sceneModel.borderLayers',
+    'appendSvgLineSegments',
+    'appendSvgMeshTriangles',
+    'appendSvgOverlayCells',
+    'appendSvgCanvasImage',
+    'canvasToPngDataUrl(canvas)'
+  ].forEach(token => {
+    if (!text.includes(token)) {
+      addFailure(`Mollweide SVG export should render the collected scene model (${token}): ${exporter}`);
+    }
+  });
+
+  [
+    'createExportSceneModel',
+    'mollweide-svg-scene',
+    'vector-svg',
+    'collectMollweideSvgSceneModel',
+    'clippedLayers',
+    'labelLayers',
+    'borderLayers',
+    'state.constellationOverlayMoll',
+    'state.constellationLinesMoll',
+    'state.constellationLabelsMoll',
+    'state.galacticPlaneMoll',
+    'state.galacticDirectionLabelsMoll',
+    'state.eclipticPlaneMoll',
+    'state.celestialEquatorMoll',
+    'state.densityOverlay',
+    'state.isolationOverlay',
+    'state.cloudDensityOverlays',
+    'scene.userData.cloudOverlays',
+    'mollweideMap?.mollweideBorder',
+    "'constellation-overlay'",
+    "'constellation-boundaries'",
+    "'constellation-labels'",
+    "'galactic-plane'",
+    "'galactic-labels'",
+    "'ecliptic-plane'",
+    "'celestial-equator'",
+    "'density-heatmap'",
+    "'isolation-cells'",
+    "'isolation-lines'",
+    "'cloud-density-heatmap'",
+    "'cloud-density-cells'",
+    "'cloud-lines'",
+    "'mollweide-border'"
+  ].forEach(token => {
+    if (!modelText.includes(token)) {
+      addFailure(`Mollweide SVG scene model should include live overlay/state layer ${token}: ${sceneModel}`);
+    }
+  });
+
+  [
+    'createExportSceneModel',
+    'collectSceneSnapshotModel',
+    'normalizeExportFilename',
+    'scene-snapshot',
+    'raster-canvas',
+    'getSceneSnapshotSize(manager)'
+  ].forEach(token => {
+    if (!sharedModelText.includes(token)) {
+      addFailure(`Shared export scene model should cover raster/PDF snapshots (${token}): ${sharedSceneModel}`);
+    }
+  });
+  [
+    'collectSceneSnapshotModel',
+    'renderSnapshotCanvas(sceneModel)',
+    'sceneModel.metadata.filename',
+    'sceneModel.width',
+    'sceneModel.height'
+  ].forEach(token => {
+    if (!snapshotText.includes(token)) {
+      addFailure(`PNG/PDF snapshot export should use the shared scene model (${token}): ${snapshotExporter}`);
+    }
+  });
+
+  const decorations = join(root, 'src', 'app', 'mapDecorations.js');
+  const decorationText = readFileSync(decorations, 'utf8');
+  ['isMollweideBorder', 'baseRadius', 'baseColor', 'segments'].forEach(token => {
+    if (!decorationText.includes(token)) {
+      addFailure(`Mollweide border should expose export metadata ${token}: ${decorations}`);
     }
   });
 }
@@ -496,6 +650,53 @@ function checkProjectionVisibilityRobustness() {
   }
 }
 
+function checkFilterOverlayStateScoped() {
+  const overlayState = join(root, 'src', 'features', 'filters', 'state', 'filterOverlayState.js');
+  const pipelineIndex = join(root, 'src', 'features', 'filters', 'pipeline', 'index.js');
+  const runtimePipeline = join(root, 'src', 'features', 'filters', 'pipeline', 'filterPipeline.js');
+  const filterControls = join(root, 'src', 'features', 'filters', 'filterControls.js');
+  const overlayText = readFileSync(overlayState, 'utf8');
+  const pipelineText = readFileSync(pipelineIndex, 'utf8');
+  const runtimeText = readFileSync(runtimePipeline, 'utf8');
+  const controlsText = readFileSync(filterControls, 'utf8');
+  if (overlayText.includes('let isolationOverlay = null;') || overlayText.includes('let densityOverlay = null;')) {
+    addFailure(`Filter overlay instances should be app-scoped, not module globals: ${overlayState}`);
+  }
+  ['overlayState = {}', 'overlayState.isolationOverlay', 'overlayState.densityOverlay'].forEach(token => {
+    if (!overlayText.includes(token)) {
+      addFailure(`Filter overlay updater should read/write app-scoped overlay holder (${token}): ${overlayState}`);
+    }
+  });
+  if (!pipelineText.includes('context.overlayState')) {
+    addFailure(`Pure filter pipeline should pass app-scoped overlay state into overlay updater: ${pipelineIndex}`);
+  }
+  if (pipelineText.includes('let filterForm')) {
+    addFailure(`Filter form should be passed through context instead of cached in a module global: ${pipelineIndex}`);
+  }
+  if (!pipelineText.includes('context.form || getFilterForm(context)')) {
+    addFailure(`Filter pipeline should accept an explicit form through context: ${pipelineIndex}`);
+  }
+  ['FILTER_FORM_ID', 'getFilterForm', 'getStellarClassContainers', 'getSelectedDustCloudFiles'].forEach(token => {
+    if (!controlsText.includes(token)) {
+      addFailure(`Filter control lookup should be centralized (${token}): ${filterControls}`);
+    }
+  });
+  ["document.getElementById('filters-form')", "document.getElementById('stellar-class-selection-container')", "document.getElementById('stellar-class-preferences-container')"].forEach(token => {
+    if (runtimeText.includes(token)) {
+      addFailure(`Runtime filter pipeline should use centralized filter control lookup instead of ${token}: ${runtimePipeline}`);
+    }
+  });
+  if (!runtimeText.includes('getSelectedDustCloudFiles(options)')) {
+    addFailure(`Runtime cloud overlay refresh should use normalized filter state for dust cloud files: ${runtimePipeline}`);
+  }
+  if (!runtimeText.includes('form: filterForm')) {
+    addFailure(`Runtime filter pipeline should pass the current form explicitly: ${runtimePipeline}`);
+  }
+  if (!runtimeText.includes('overlayState: state')) {
+    addFailure(`Runtime filter pipeline should pass app state as overlay holder: ${runtimePipeline}`);
+  }
+}
+
 function checkUserNotificationsCentralized(files) {
   const helper = join(root, 'src', 'shared', 'userNotifications.js');
   const helperText = readFileSync(helper, 'utf8');
@@ -525,6 +726,82 @@ function checkUserNotificationsCentralized(files) {
     const text = readFileSync(file, 'utf8');
     if (text.includes('alert(') || text.includes('.alert(')) {
       addFailure(`Runtime code should use notifyError instead of direct alert calls: ${file}`);
+    }
+  });
+}
+
+function checkRuntimeLoggingCentralized(files) {
+  const loggerFile = resolve(join(root, 'src', 'shared', 'logger.js'));
+  const loggerText = readFileSync(loggerFile, 'utf8');
+  ['logWarn', 'logError', 'logInfo', 'isDebugLoggingEnabled'].forEach(token => {
+    if (!loggerText.includes(token)) {
+      addFailure(`Runtime logger should expose ${token}: ${loggerFile}`);
+    }
+  });
+
+  files.forEach(file => {
+    const resolved = resolve(file);
+    if (resolved === loggerFile) return;
+    const text = readFileSync(file, 'utf8');
+    if (/console\.(log|warn|error|info|debug)\s*\(/.test(text)) {
+      addFailure(`Runtime source should use shared logger instead of raw console calls: ${file}`);
+    }
+  });
+}
+
+function checkKeyboardMapAccessibility() {
+  const controlsFile = join(root, 'src', 'render', 'interactions', 'cameraControls.js');
+  const controlsText = readFileSync(controlsFile, 'utf8');
+  ['keydown', 'handleKeyboardInput', 'tabindex', 'KEYBOARD_ROTATION_STEP', 'KEYBOARD_PAN_STEP', 'zoomByFactor'].forEach(token => {
+    if (!controlsText.includes(token)) {
+      addFailure(`Camera controls should support keyboard map navigation (${token}): ${controlsFile}`);
+    }
+  });
+
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  ['map3D', 'uvMap', 'sphereMap', 'legacySphereMap', 'legacyMollweideMap'].forEach(id => {
+    const canvasPattern = new RegExp(`<canvas[^>]+id="${id}"[^>]+tabindex="0"[^>]+aria-label=`);
+    if (!canvasPattern.test(html)) {
+      addFailure(`Map canvas should be focusable and labelled for keyboard access: ${id}`);
+    }
+  });
+}
+
+function checkBrowserSmokeHarness() {
+  const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const harness = join(root, 'scripts', 'browserSmoke.mjs');
+  const harnessText = readFileSync(harness, 'utf8');
+  if (packageJson.scripts?.['test:browser'] !== 'node scripts/browserSmoke.mjs') {
+    addFailure('package.json should expose browser visual/export smoke tests as npm run test:browser');
+  }
+  [
+    "await import('playwright')",
+    'startStaticServer',
+    'viewportMatrix',
+    'assertCanvasNonblank',
+    'verifyDownload',
+    'ASTROGRAPHY_BROWSERS',
+    'ASTROGRAPHY_INCLUDE_STL_KIT',
+    'export-stl-kit'
+  ].forEach(token => {
+    if (!harnessText.includes(token)) {
+      addFailure(`Browser smoke harness should cover cross-browser canvas/export checks (${token}): ${harness}`);
+    }
+  });
+}
+
+function checkStellarClassLazyRendering() {
+  const uiFactory = join(root, 'src', 'shared', 'uiFactory.js');
+  const uiFactoryText = readFileSync(uiFactory, 'utf8');
+  if (!uiFactoryText.includes('onToggle') || !uiFactoryText.includes('options.onToggle')) {
+    addFailure(`Collapsible UI helper should expose onToggle for lazy content rendering: ${uiFactory}`);
+  }
+
+  const stellarFilter = join(root, 'src', 'features', 'filters', 'logic', 'stellarClassFilter.js');
+  const stellarText = readFileSync(stellarFilter, 'utf8');
+  ['renderIndividualStars', 'rowsRendered', 'checked: classCheckbox.checked', 'checked: nameCheckbox.checked'].forEach(token => {
+    if (!stellarText.includes(token)) {
+      addFailure(`Stellar class UI should lazy-render per-star rows and inherit class state (${token}): ${stellarFilter}`);
     }
   });
 }
@@ -605,6 +882,28 @@ function checkCanvasSizingCentralized() {
         addFailure(`Map manager should not use raw canvas sizing token ${token}: ${file}`);
       }
     });
+  });
+}
+
+function checkWebGLSupportGuardrails() {
+  const supportFile = join(root, 'src', 'shared', 'webglSupport.js');
+  const supportText = readFileSync(supportFile, 'utf8');
+  ['isWebGLAvailable', 'assertWebGLAvailable', 'addWebGLContextLossHandlers', 'webglcontextlost', 'webglcontextrestored'].forEach(token => {
+    if (!supportText.includes(token)) {
+      addFailure(`WebGL support helper should include ${token}: ${supportFile}`);
+    }
+  });
+
+  [
+    join(root, 'src', 'app', 'mapManager.js'),
+    join(root, 'src', 'app', 'uvMapManager.js'),
+    join(root, 'src', 'features', 'export', 'sceneSnapshotExporter.js'),
+    join(root, 'src', 'features', 'export', 'exportManager.js')
+  ].forEach(file => {
+    const text = readFileSync(file, 'utf8');
+    if (!text.includes('assertWebGLAvailable')) {
+      addFailure(`Renderer entry point should assert WebGL availability before creating a WebGLRenderer: ${file}`);
+    }
   });
 }
 
@@ -697,7 +996,7 @@ function checkTextCanvasCentralized() {
   });
 
   [
-    join(root, 'src', 'app', 'mapManager.js'),
+    join(root, 'src', 'app', 'mapConnectionLabels.js'),
     join(root, 'src', 'features', 'connections', 'connectionPairs.js'),
     join(root, 'src', 'features', 'planes', 'planeMeshes.js')
   ].forEach(file => {
@@ -780,6 +1079,7 @@ function checkSharedColorParsing() {
   const colorUtils = join(root, 'src', 'shared', 'colorUtils.js');
   const labelManager = join(root, 'src', 'features', 'labels', 'labelManager.js');
   const connectionPairs = join(root, 'src', 'features', 'connections', 'connectionPairs.js');
+  const connectionSpatialIndex = join(root, 'src', 'features', 'connections', 'connectionSpatialIndex.js');
   const exportManager = join(root, 'src', 'features', 'export', 'exportManager.js');
   const constellationStyle = join(root, 'src', 'features', 'constellations', 'constellationStyle.js');
   const helperText = readFileSync(helper, 'utf8');
@@ -788,6 +1088,7 @@ function checkSharedColorParsing() {
   const colorUtilsText = readFileSync(colorUtils, 'utf8');
   const labelText = readFileSync(labelManager, 'utf8');
   const connectionText = readFileSync(connectionPairs, 'utf8');
+  const connectionSpatialText = readFileSync(connectionSpatialIndex, 'utf8');
   const exportText = readFileSync(exportManager, 'utf8');
   const constellationText = readFileSync(constellationStyle, 'utf8');
 
@@ -830,6 +1131,17 @@ function checkSharedColorParsing() {
   if (!connectionText.includes("from '../../shared/colorParsing.js'") || !connectionText.includes('getStarThreeColor')) {
     addFailure(`Connection rendering should normalize star display colors through a shared helper: ${connectionPairs}`);
   }
+  ['buildSystemSpatialIndex', 'findKNearestSystemNeighbours', 'insertNearestSystem'].forEach(token => {
+    if (!connectionSpatialText.includes(token)) {
+      addFailure(`K-nearest connection mode should use bounded spatial lookup (${token}): ${connectionSpatialIndex}`);
+    }
+  });
+  if (!connectionText.includes('computeKNearestPairsFromSpatialIndex')) {
+    addFailure(`Connection pairs module should delegate k-nearest mode to dependency-light spatial index: ${connectionPairs}`);
+  }
+  if (connectionSpatialText.includes('brute-force')) {
+    addFailure(`K-nearest connection mode should not be documented as brute-force: ${connectionSpatialIndex}`);
+  }
   if (!exportText.includes("from '../../shared/colorParsing.js'") || !exportText.includes('normalizeHexColor(value, fallback)')) {
     addFailure(`Mollweide SVG export should normalize colors through shared color parsing: ${exportManager}`);
   }
@@ -870,6 +1182,7 @@ function checkSharedOpacityClamping() {
     labelManager: join(root, 'src', 'features', 'labels', 'labelManager.js'),
     filterPipeline: join(root, 'src', 'features', 'filters', 'pipeline', 'filterPipeline.js'),
     connectionPairs: join(root, 'src', 'features', 'connections', 'connectionPairs.js'),
+    mapConnectionLabels: join(root, 'src', 'app', 'mapConnectionLabels.js'),
     exportManager: join(root, 'src', 'features', 'export', 'exportManager.js'),
     constellationRenderer: join(root, 'src', 'features', 'constellations', 'constellationMapRenderer.js')
   };
@@ -881,6 +1194,7 @@ function checkSharedOpacityClamping() {
     ['mapManager', 'clamp01, normalizeHexColor'],
     ['labelManager', 'clamp01, normalizeHexColor'],
     ['connectionPairs', 'clamp01, normalizeHexColor'],
+    ['mapConnectionLabels', 'clamp01, normalizeHexColor'],
     ['exportManager', 'clamp01, normalizeHexColor'],
     ['filterPipeline', 'clamp01'],
     ['constellationRenderer', 'clamp01']
@@ -892,12 +1206,21 @@ function checkSharedOpacityClamping() {
   if (!texts.uvMapManager.includes("from './uvCanvasLayers.js'") || !texts.uvMapManager.includes('clamp01(opacity)')) {
     addFailure(`UV map opacity setters should use shared clamp via uvCanvasLayers: ${files.uvMapManager}`);
   }
+  if (!texts.mapManager.includes('customOpacity') || !texts.mapManager.includes('instanceOpacity')) {
+    addFailure(`Map manager should pass per-star displayOpacity into both point and instanced star renderers: ${files.mapManager}`);
+  }
+  if (!texts.uvMapManager.includes('getStarDisplayOpacity(star, this.starOpacity)')) {
+    addFailure(`UV map star drawing should combine global and per-star opacity: ${files.uvMapManager}`);
+  }
+  if (!texts.exportManager.includes('getStarDisplayOpacity(star, starOpacity)')) {
+    addFailure(`Mollweide SVG export should combine global and per-star opacity: ${files.exportManager}`);
+  }
   [
     [texts.mapManager, files.mapManager, 'this.starOpacity = safeOpacity'],
     [texts.mapManager, files.mapManager, 'this.connectionOpacity = safeOpacity'],
     [texts.mapManager, files.mapManager, 'this.labelOpacity = safeOpacity'],
     [texts.mapManager, files.mapManager, 'clamp01(relativeOpacity * opacityFactor)'],
-    [texts.mapManager, files.mapManager, 'clamp01(lineOpacityScale * safeOpacityFactor)'],
+    [texts.mapConnectionLabels, files.mapConnectionLabels, 'clamp01(lineOpacityScale * clamp01(opacityFactor))'],
     [texts.uvMapManager, files.uvMapManager, 'this.starOpacity = clamp01(opacity)'],
     [texts.uvMapManager, files.uvMapManager, 'this.connectionOpacity = clamp01(opacity)'],
     [texts.uvMapManager, files.uvMapManager, 'this.labelOpacity = clamp01(opacity)'],
@@ -905,7 +1228,7 @@ function checkSharedOpacityClamping() {
     [texts.filterPipeline, files.filterPipeline, 'normalizeFilterOpacityOptions(filters)'],
     [texts.filterPipeline, files.filterPipeline, 'filters[key] = clamp01(filters[key])'],
     [texts.connectionPairs, files.connectionPairs, 'const safeOpacityFactor = clamp01(opacityFactor)'],
-    [texts.exportManager, files.exportManager, 'clamp01(this.mollweideMap.connectionOpacity'],
+    [texts.exportManager, files.exportManager, 'clamp01(sceneModel.connectionOpacity)'],
     [texts.exportManager, files.exportManager, 'obj.material.opacity = clamp01'],
     [texts.constellationRenderer, files.constellationRenderer, 'clamp01(baseOpacity)'],
     [texts.constellationRenderer, files.constellationRenderer, 'clamp01(opacity)']
@@ -943,13 +1266,111 @@ function checkAppStateFactoryDecoupledFromRenderer() {
   }
 }
 
+function checkExportBindingsExtracted() {
+  const createApp = join(root, 'src', 'app', 'createApp.js');
+  const exportBindings = join(root, 'src', 'app', 'exportBindings.js');
+  const createAppText = readFileSync(createApp, 'utf8');
+  const exportBindingsText = readFileSync(exportBindings, 'utf8');
+
+  if (!createAppText.includes("from './exportBindings.js'") || !createAppText.includes('setupExportBindings({')) {
+    addFailure(`App bootstrap should delegate export wiring to exportBindings: ${createApp}`);
+  }
+  ['ExportManager', 'exportSceneSnapshot', 'exportTrueCoordinatesSTL', 'exportPrintableSTLKit'].forEach(token => {
+    if (createAppText.includes(token)) {
+      addFailure(`App bootstrap should not own export wiring token ${token}: ${createApp}`);
+    }
+    if (!exportBindingsText.includes(token)) {
+      addFailure(`Export bindings module should own export wiring token ${token}: ${exportBindings}`);
+    }
+  });
+}
+
+function checkLoadingProgressExtracted() {
+  const createApp = join(root, 'src', 'app', 'createApp.js');
+  const loadingProgress = join(root, 'src', 'app', 'loadingProgress.js');
+  const createAppText = readFileSync(createApp, 'utf8');
+  const loadingText = readFileSync(loadingProgress, 'utf8');
+
+  ['createLoadingProgress', 'loadingProgress.weights', 'loadingProgress.update', 'loadingProgress.yieldToUI'].forEach(token => {
+    if (!createAppText.includes(token)) {
+      addFailure(`App bootstrap should use the loading progress helper (${token}): ${createApp}`);
+    }
+  });
+  ['LOADING_PHASE_WEIGHTS', 'progress-bar-fill', 'progress-bar-label', 'progress-bar-container', 'markError'].forEach(token => {
+    if (!loadingText.includes(token)) {
+      addFailure(`Loading progress helper should own progress UI token ${token}: ${loadingProgress}`);
+    }
+  });
+  ['function updateProgress', 'function hideProgress', 'scheduleAfterPaint', 'progress-bar-fill'].forEach(token => {
+    if (createAppText.includes(token)) {
+      addFailure(`App bootstrap should not own loading-progress implementation token ${token}: ${createApp}`);
+    }
+  });
+}
+
+function checkMapStarMaterialExtraction() {
+  const manager = join(root, 'src', 'app', 'mapManager.js');
+  const helper = join(root, 'src', 'app', 'mapStarMaterials.js');
+  const managerText = readFileSync(manager, 'utf8');
+  const helperText = readFileSync(helper, 'utf8');
+
+  if (!managerText.includes("from './mapStarMaterials.js'")) {
+    addFailure(`MapManager should import star material factories from helper: ${manager}`);
+  }
+  ['createStarTexture()', 'createStarMaterial(texture', 'createInstancedStarMaterial(this.starOpacity)'].forEach(token => {
+    if (!managerText.includes(token)) {
+      addFailure(`MapManager should use extracted star material helper token ${token}: ${manager}`);
+    }
+  });
+  ['createStarTexture', 'createStarMaterial', 'createInstancedStarMaterial', 'STAR_TEXTURE_SIZE', 'new THREE.ShaderMaterial'].forEach(token => {
+    if (!helperText.includes(token)) {
+      addFailure(`Star material helper should own star rendering token ${token}: ${helper}`);
+    }
+  });
+  ['STAR_TEXTURE_SIZE', 'new THREE.ShaderMaterial'].forEach(token => {
+    if (managerText.includes(token)) {
+      addFailure(`MapManager should not own star material implementation token ${token}: ${manager}`);
+    }
+  });
+}
+
+function checkMapConnectionLabelExtraction() {
+  const manager = join(root, 'src', 'app', 'mapManager.js');
+  const helper = join(root, 'src', 'app', 'mapConnectionLabels.js');
+  const managerText = readFileSync(manager, 'utf8');
+  const helperText = readFileSync(helper, 'utf8');
+
+  if (!managerText.includes("from './mapConnectionLabels.js'") || !managerText.includes('addTrueCoordinateDistanceLabels(')) {
+    addFailure(`MapManager should delegate true-coordinate connection labels to helper: ${manager}`);
+  }
+  [
+    'createTrueCoordinateDistanceLabel',
+    'addTrueCoordinateDistanceLabels',
+    'CONNECTION_LABEL_BASE_FONT',
+    'createMeasuredTextCanvas',
+    'new THREE.CanvasTexture',
+    'new THREE.SpriteMaterial'
+  ].forEach(token => {
+    if (!helperText.includes(token)) {
+      addFailure(`Map connection label helper should own label rendering token ${token}: ${helper}`);
+    }
+  });
+  ['CONNECTION_LABEL_BASE_FONT', 'createMeasuredTextCanvas', 'new THREE.CanvasTexture(canvas)', 'addTCDistanceLabels'].forEach(token => {
+    if (managerText.includes(token)) {
+      addFailure(`MapManager should not own true-coordinate label implementation token ${token}: ${manager}`);
+    }
+  });
+}
+
 function checkStlKitWorkerSplit() {
   const exporter = join(root, 'src', 'features', 'export', 'stlKitExporter.js');
   const worker = join(root, 'src', 'features', 'export', 'stlKitWorker.js');
   const payload = join(root, 'src', 'features', 'export', 'stlKitWorkerPayload.js');
+  const progress = join(root, 'src', 'features', 'export', 'stlKitProgress.js');
   const exporterText = readFileSync(exporter, 'utf8');
   const workerText = readFileSync(worker, 'utf8');
   const payloadText = readFileSync(payload, 'utf8');
+  const progressText = readFileSync(progress, 'utf8');
 
   const buildIndex = exporterText.indexOf('export async function buildPrintableSTLKitFiles');
   const workerIndex = exporterText.indexOf('buildPrintableSTLKitFilesInWorker');
@@ -976,7 +1397,47 @@ function checkStlKitWorkerSplit() {
       addFailure(`STL kit export wrapper is missing worker token ${token}: ${exporter}`);
     }
   });
-  ['buildPrintableSTLKitFiles', 'postMessage', 'getSTLKitTransferableBuffers'].forEach(token => {
+  ['reportExportProgress', 'reportBuildProgress', 'onBuildProgress', 'zip.generateAsync({ type: \'blob\', compression: \'DEFLATE\' }, metadata'].forEach(token => {
+    if (!exporterText.includes(token)) {
+      addFailure(`STL kit export wrapper should report progress (${token}): ${exporter}`);
+    }
+  });
+  if (!progressText.includes('options?.onProgress')) {
+    addFailure(`STL kit progress helper should own progress callback dispatch: ${progress}`);
+  }
+  ['createAbortError', 'assertNotAborted', 'options.signal', "signal?.addEventListener?.('abort'", 'worker.terminate()'].forEach(token => {
+    if (!exporterText.includes(token)) {
+      addFailure(`STL kit export wrapper should support cancellation (${token}): ${exporter}`);
+    }
+  });
+  ['createAbortError', 'assertNotAborted', 'yieldToBrowser', 'reportExportProgress', 'reportBuildProgress'].forEach(token => {
+    if (!progressText.includes(`export function ${token}`)) {
+      addFailure(`STL kit progress helper should export ${token}: ${progress}`);
+    }
+  });
+  ['function createAbortError', 'function yieldToBrowser', 'function reportExportProgress', 'function reportBuildProgress'].forEach(token => {
+    if (exporterText.includes(token)) {
+      addFailure(`STL kit exporter should import progress/cancellation helper instead of owning ${token}: ${exporter}`);
+    }
+  });
+  const exportBindings = join(root, 'src', 'app', 'exportBindings.js');
+  const exportBindingsText = readFileSync(exportBindings, 'utf8');
+  ['setStlKitProgress', 'aria-busy', 'onProgress: setStlKitProgress', 'stlKitIdleLabel'].forEach(token => {
+    if (!exportBindingsText.includes(token)) {
+      addFailure(`STL kit UI should expose progress and busy state (${token}): ${exportBindings}`);
+    }
+  });
+  ['AbortController', 'stlKitAbortController', '.abort()', 'signal: stlKitAbortController.signal', 'AbortError', 'data-exporting'].forEach(token => {
+    if (!exportBindingsText.includes(token)) {
+      addFailure(`STL kit UI should expose cancellation controls (${token}): ${exportBindings}`);
+    }
+  });
+  ["type === 'progress'", '0.08 + 0.62 * progress'].forEach(token => {
+    if (!exporterText.includes(token)) {
+      addFailure(`STL kit worker bridge should forward fine-grained build progress (${token}): ${exporter}`);
+    }
+  });
+  ['buildPrintableSTLKitFiles', 'postMessage', 'getSTLKitTransferableBuffers', 'onBuildProgress', "type: 'progress'"].forEach(token => {
     if (!workerText.includes(token)) {
       addFailure(`STL kit worker is missing ${token}: ${worker}`);
     }
@@ -989,6 +1450,11 @@ function checkStlKitWorkerSplit() {
   if (!exporterText.includes("from './stlKitWorkerPayload.js'") || !exporterText.includes('createSTLKitWorkerPayload(stars, connections, options)')) {
     addFailure(`STL kit exporter must create worker payloads through the shared helper: ${exporter}`);
   }
+  ['...safeOptions', 'onProgress', 'signal'].forEach(token => {
+    if (payloadText.includes(token)) {
+      addFailure(`STL kit worker payload must stay structured-clone safe and exclude ${token}: ${payload}`);
+    }
+  });
   ['function cloneVectorLike', 'function serializeStarForWorker', 'function serializeStarsForWorker', 'function serializeConnectionsForWorker'].forEach(token => {
     if (exporterText.includes(token)) {
       addFailure(`STL kit exporter must not keep inline worker payload helper ${token}: ${exporter}`);
@@ -1455,6 +1921,87 @@ function checkUvCanvasLayerUtilityExtraction() {
   });
 }
 
+function checkUvSurfaceFactoryExtraction() {
+  const manager = join(root, 'src', 'app', 'uvMapManager.js');
+  const factory = join(root, 'src', 'app', 'uvSurfaceFactory.js');
+  const managerText = readFileSync(manager, 'utf8');
+  const factoryText = readFileSync(factory, 'utf8');
+
+  if (!managerText.includes("from './uvSurfaceFactory.js'") || !managerText.includes('createUvSurface({')) {
+    addFailure(`UV map manager should use the extracted UV surface factory: ${manager}`);
+  }
+  ['createUvSurface', 'createEquirectangularSurface', 'createUvGlobeSurface', 'TwoDControls', 'ThreeDControls', 'EQUIRECT_WIDTH', 'GLOBE_RADIUS'].forEach(token => {
+    if (!factoryText.includes(token)) {
+      addFailure(`UV surface factory should own projection surface token ${token}: ${factory}`);
+    }
+  });
+  ['TwoDControls', 'ThreeDControls', 'new THREE.PlaneGeometry', 'new THREE.SphereGeometry(GLOBE_RADIUS'].forEach(token => {
+    if (managerText.includes(token)) {
+      addFailure(`UV map manager should not own projection surface implementation token ${token}: ${manager}`);
+    }
+  });
+}
+
+function checkUvPlaneDrawingExtraction() {
+  const manager = join(root, 'src', 'app', 'uvMapManager.js');
+  const helper = join(root, 'src', 'app', 'uvPlaneDrawing.js');
+  const managerText = readFileSync(manager, 'utf8');
+  const helperText = readFileSync(helper, 'utf8');
+
+  if (!managerText.includes("from './uvPlaneDrawing.js'") || !managerText.includes('drawUvPlanes(ctx, this.state')) {
+    addFailure(`UV map manager should delegate plane drawing to helper: ${manager}`);
+  }
+  [
+    'drawUvPlanes',
+    'drawUvEquatorialCurve',
+    'galacticToEquatorial',
+    'eclipticToEquatorial',
+    'normalizeRightAscension',
+    'PLANE_SAMPLES',
+    '#7effb2',
+    '#ffcb6b',
+    '#8fb5ff'
+  ].forEach(token => {
+    if (!helperText.includes(token)) {
+      addFailure(`UV plane drawing helper should own plane rendering token ${token}: ${helper}`);
+    }
+  });
+  ['galacticToEquatorial', 'eclipticToEquatorial', 'drawEquatorialCurve', 'PLANE_SAMPLES', 'const TAU'].forEach(token => {
+    if (managerText.includes(token)) {
+      addFailure(`UV map manager should not own plane rendering token ${token}: ${manager}`);
+    }
+  });
+}
+
+function checkUvCloudOverlayDrawingExtraction() {
+  const manager = join(root, 'src', 'app', 'uvMapManager.js');
+  const helper = join(root, 'src', 'app', 'uvCloudOverlayDrawing.js');
+  const managerText = readFileSync(manager, 'utf8');
+  const helperText = readFileSync(helper, 'utf8');
+
+  if (!managerText.includes("from './uvCloudOverlayDrawing.js'") || !managerText.includes('drawUvCloudsOverlay(ctx, {')) {
+    addFailure(`UV map manager should delegate cloud overlay drawing to helper: ${manager}`);
+  }
+  [
+    'drawUvCloudsOverlay',
+    'sourceScene?.userData?.cloudOverlays',
+    'spherePositionToUv(startPoint, GLOBE_RADIUS)',
+    'splitWrappedSegment',
+    'strokeUvSegment',
+    '#ff6600',
+    'ctx.lineWidth = 1.6'
+  ].forEach(token => {
+    if (!helperText.includes(token)) {
+      addFailure(`UV cloud overlay drawing helper should own cloud rendering token ${token}: ${helper}`);
+    }
+  });
+  ['sourceGlobeScene?.userData?.cloudOverlays', 'spherePositionToUv(_a, 100)', 'lineWidth = 1.6'].forEach(token => {
+    if (managerText.includes(token)) {
+      addFailure(`UV map manager should not own cloud overlay rendering token ${token}: ${manager}`);
+    }
+  });
+}
+
 function checkUvOverlayCellUtilityExtraction() {
   const manager = join(root, 'src', 'app', 'uvMapManager.js');
   const helper = join(root, 'src', 'app', 'uvOverlayCells.js');
@@ -1681,6 +2228,54 @@ function checkRuntimeDataValidation() {
       }
     });
   });
+  ['x_coordinate', 'y_coordinate', 'z_coordinate'].forEach(token => {
+    if (!validatorText.includes(token)) {
+      addFailure(`Star data validation should require finite cartesian coordinate field ${token}: ${validators}`);
+    }
+  });
+}
+
+function checkAuditQuickFixes() {
+  const tooltipFile = join(root, 'src', 'render', 'interactions', 'tooltips.js');
+  const tooltipText = readFileSync(tooltipFile, 'utf8');
+  if (!tooltipText.includes('star.constellation || star.Constellation')) {
+    addFailure(`Tooltip constellation display should support normalized lowercase constellation data: ${tooltipFile}`);
+  }
+
+  const stlExporter = join(root, 'src', 'features', 'export', 'stlExporter.js');
+  const stlText = readFileSync(stlExporter, 'utf8');
+  [
+    'Standard star (G-class) diameter = 16 mm',
+    'Tube diameter = 4 mm'
+  ].forEach(token => {
+    if (!stlText.includes(token)) {
+      addFailure(`Simple STL exporter scale documentation should match runtime constants (${token}): ${stlExporter}`);
+    }
+  });
+  if (!stlText.includes('validateBinarySTL(stlBuffer)')) {
+    addFailure(`Simple STL export should validate generated mesh buffers before download: ${stlExporter}`);
+  }
+  const stlKitExporter = join(root, 'src', 'features', 'export', 'stlKitExporter.js');
+  const stlKitText = readFileSync(stlKitExporter, 'utf8');
+  if (!stlKitText.includes('validateBuiltStlFiles(built)')) {
+    addFailure(`STL kit export should validate generated STL buffers before ZIP packaging: ${stlKitExporter}`);
+  }
+
+  const exportManager = join(root, 'src', 'features', 'export', 'exportManager.js');
+  const exportManagerText = readFileSync(exportManager, 'utf8');
+  ['this.exportInProgress = false', 'A Mollweide export is already in progress', 'this.exportInProgress = true'].forEach(token => {
+    if (!exportManagerText.includes(token)) {
+      addFailure(`Mollweide raster/PDF export should be guarded against overlapping live-scene mutations (${token}): ${exportManager}`);
+    }
+  });
+
+  const filterPipeline = join(root, 'src', 'features', 'filters', 'pipeline', 'filterPipeline.js');
+  const filterPipelineText = readFileSync(filterPipeline, 'utf8');
+  ['cloudDensityUpdateRequestId', 'overlay.dispose?.()', 'state.cloudDensityUpdateRequestId !== requestId'].forEach(token => {
+    if (!filterPipelineText.includes(token)) {
+      addFailure(`Cloud-density async rebuilds should discard stale overlay results (${token}): ${filterPipeline}`);
+    }
+  });
 }
 
 function readJson(path) {
@@ -1730,6 +2325,70 @@ function checkRuntimeDataFiles() {
 }
 
 async function checkBehavioralInvariants() {
+  const originalConsoleWarn = console.warn;
+  let validationWarningCount = 0;
+  console.warn = () => { validationWarningCount += 1; };
+  try {
+    assertEqual(
+      validateStarBatch([
+      {
+        Common_name_of_the_star: 'Valid',
+        distance: 1,
+        RA_in_degrees: 2,
+        DEC_in_degrees: 3,
+        x_coordinate: 1,
+        y_coordinate: 2,
+        z_coordinate: 3
+      },
+      {
+        Common_name_of_the_star: 'Missing Z',
+        distance: 1,
+        RA_in_degrees: 2,
+        DEC_in_degrees: 3,
+        x_coordinate: 1,
+        y_coordinate: 2
+      }
+      ], 'test stars').length,
+      1,
+      'Star validation should reject records without finite cartesian coordinates'
+    );
+  } finally {
+    console.warn = originalConsoleWarn;
+  }
+  assertEqual(validationWarningCount, 1, 'Star validation should warn once for the invalid coordinate record');
+
+  const fakeWebGlContext = {
+    getExtension: name => (name === 'WEBGL_lose_context' ? { loseContext: () => {} } : null)
+  };
+  assert(isWebGLAvailable({
+    createElement: () => ({
+      getContext: kind => (kind === 'webgl2' ? fakeWebGlContext : null)
+    })
+  }), 'WebGL support helper should detect available WebGL contexts');
+  try {
+    assertWebGLAvailable({ createElement: () => ({ getContext: () => null }) });
+    addFailure('WebGL support helper should throw when no WebGL context is available');
+  } catch (error) {
+    assert(error.message.includes('WebGL is unavailable'), 'WebGL unavailable error should be actionable');
+  }
+  const webglEvents = [];
+  const fakeWebGlCanvas = {
+    addEventListener: (type, handler) => webglEvents.push(['add', type, handler]),
+    removeEventListener: (type, handler) => webglEvents.push(['remove', type, handler])
+  };
+  const disposeWebGlHandlers = addWebGLContextLossHandlers(fakeWebGlCanvas, {});
+  disposeWebGlHandlers();
+  assertArrayEqual(
+    webglEvents.map(([action, type]) => [action, type]),
+    [
+      ['add', 'webglcontextlost'],
+      ['add', 'webglcontextrestored'],
+      ['remove', 'webglcontextlost'],
+      ['remove', 'webglcontextrestored']
+    ],
+    'WebGL context loss helper should register and clean up both listeners'
+  );
+
   assertEqual(
     formatUserError('PNG export failed', new Error('Renderer unavailable')),
     'PNG export failed: Renderer unavailable',
@@ -1827,6 +2486,27 @@ async function checkBehavioralInvariants() {
     }),
     { width: 7680, height: 1920 },
     'Scene snapshot exports should preserve display aspect instead of stale backing-buffer aspect'
+  );
+  assertEqual(normalizeExportFilename(' True Coordinates Map!.PDF '), 'true_coordinates_map_pdf', 'Export filename normalization');
+  const snapshotModel = collectSceneSnapshotModel({
+    mapType: 'TrueCoordinates',
+    renderer: { domElement: { width: 100, height: 100 } },
+    canvas: {
+      clientWidth: 320,
+      clientHeight: 160,
+      width: 100,
+      height: 100
+    },
+    camera: { type: 'PerspectiveCamera' },
+    labelManager: {}
+  }, { filenameBase: 'True Coordinates Map' });
+  assertEqual(snapshotModel.kind, 'scene-snapshot', 'Scene snapshot model kind');
+  assertEqual(snapshotModel.formatFamily, 'raster-canvas', 'Scene snapshot model format family');
+  assertEqual(snapshotModel.metadata.filename, 'true_coordinates_map', 'Scene snapshot model filename');
+  assertArrayEqual(
+    { width: snapshotModel.width, height: snapshotModel.height },
+    { width: 7680, height: 3840 },
+    'Scene snapshot model should carry export dimensions'
   );
   try {
     getSceneSnapshotSize({});
@@ -2126,6 +2806,7 @@ async function checkBehavioralInvariants() {
     ['a', 'b'],
     'Distance filter must prefer viewpointDistance and include range bounds'
   );
+  assertEqual(getDisplayDistance(stars[0]), 3, 'Display distance helper should prefer viewpointDistance');
 
   assertArrayEqual(
     applyStarsShownFilter(stars, { starsShown: 'visible', visibleMagnitudeLimit: 5 }).map(star => star.starId),
@@ -2160,14 +2841,54 @@ async function checkBehavioralInvariants() {
   assert(!needsDisplayStats({ size: 'fixed', color: 'stellar-class', opacity: '1' }), 'Display stats should not be required for fixed/non-range modes');
 
   const stats = computeDisplayStats(stars);
-  assertEqual(stats.distanceMin, 1, 'Display stats distanceMin');
-  assertEqual(stats.distanceMax, 22, 'Display stats distanceMax');
+  assertEqual(stats.distanceMin, 3, 'Display stats distanceMin should use display distance');
+  assertEqual(stats.distanceMax, 12, 'Display stats distanceMax should use display distance');
   assertEqual(stats.maxAbsZ, 5, 'Display stats maxAbsZ');
   assertEqual(stats.absoluteMagnitudeMin, 1, 'Display stats absoluteMagnitudeMin');
   assertEqual(stats.absoluteMagnitudeMax, 9, 'Display stats absoluteMagnitudeMax');
+  const sizedStars = stars.map(star => ({ ...star }));
+  applySizeFilter(sizedStars, { size: 'distance' }, stats);
+  assert(
+    sizedStars[0].displaySize > sizedStars[2].displaySize,
+    'Distance sizing should use viewpoint-relative display distance'
+  );
+  assertEqual(normalizeDisplayOpacity('75'), 0.75, 'Display opacity helper should parse percentage-like fixed values');
+  assertEqual(getStarDisplayOpacity({ displayOpacity: 0.5 }, 0.5), 0.25, 'Display opacity helper should combine per-star and global opacity');
+  const opacityStars = stars.map(star => ({ ...star }));
+  applyOpacityFilter(opacityStars, { opacity: '75' }, stats);
+  assertEqual(opacityStars[0].displayOpacity, 0.75, 'Fixed opacity filter should parse 75 as 75 percent');
 
   assertEqual(computeAdaptiveGridSize(3), 5, 'Positive adaptive grid size');
   assertEqual(computeAdaptiveGridSize(-3), 0.5, 'Negative adaptive grid size');
+  const unsafeGridEstimate = estimateOverlayGridCells(100, computeAdaptiveGridSize(-10));
+  assert(unsafeGridEstimate > DEFAULT_OVERLAY_MAX_CELLS, 'Tiny overlay grid estimate should exceed the default cell budget');
+  const budgetedGrid = getBudgetedOverlayGridSettings(0, 100, computeAdaptiveGridSize(-10));
+  assert(budgetedGrid.wasClamped, 'Overlay grid budget should clamp unsafe tiny grid sizes');
+  assert(
+    budgetedGrid.estimatedCellCount <= DEFAULT_OVERLAY_MAX_CELLS,
+    'Overlay grid budget should keep estimated cells within the default budget'
+  );
+
+  const cacheCell = { tcPos: { x: 0, y: 0, z: 0 } };
+  const cache = populateCellDistanceCaches([cacheCell], [
+    { x: 1, y: 0, z: 0 },
+    { x: 2, y: 0, z: 0 },
+    { x: 10, y: 0, z: 0 }
+  ]);
+  assert(!Array.isArray(cacheCell.distances), 'Cell distance cache should not store full sorted per-cell distance arrays');
+  assertEqual(getNearestCellDistance(cacheCell, 0), 1, 'Nearest cell distance should return closest star');
+  assertEqual(getNearestCellDistance(cacheCell, 1), 2, 'Nearest cell distance should honor tolerance index');
+  const queryIndex = buildDistanceQueryIndex(cache, 3);
+  assertEqual(
+    Number(sumWeightedDistancesWithinRadius(cacheCell, 3, 0, queryIndex).toFixed(6)),
+    1,
+    'Radius density query should sum weighted nearby distances'
+  );
+  assertEqual(
+    Number(sumWeightedDistancesWithinRadius(cacheCell, 3, 1, queryIndex).toFixed(6)),
+    Number((1 / 3).toFixed(6)),
+    'Radius density query should skip tolerated nearest distances'
+  );
 
   const formData = new FormData();
   formData.set('size', 'distance');
@@ -2196,6 +2917,12 @@ async function checkBehavioralInvariants() {
   assertEqual(filters.cloudDensityOpacity, 0.75, 'Filter state cloud-density opacity');
   assertEqual(filters.enableDensityFilter, true, 'Filter state density toggle');
   assertEqual(filters.densityOpacity, 0.6, 'Filter state density opacity');
+  const invertedRange = new FormData();
+  invertedRange.set('min-distance', '30');
+  invertedRange.set('max-distance', '2');
+  const normalizedRangeFilters = readFilterState(invertedRange);
+  assertEqual(normalizedRangeFilters.minDistance, 2, 'Filter state should normalize inverted minimum distance');
+  assertEqual(normalizedRangeFilters.maxDistance, 30, 'Filter state should normalize inverted maximum distance');
 
   const connectionA = {
     pairKey: 'a|b',
@@ -2243,6 +2970,17 @@ async function checkBehavioralInvariants() {
     { largestDistance: 0, smallestDistance: 0 },
     'Connection distance bounds should tolerate malformed distances'
   );
+  const nearestPairs = computeKNearestPairs([
+    { starId: 'ka', Common_name_of_the_star_system: 'A', x_coordinate: 0, y_coordinate: 0, z_coordinate: 0 },
+    { starId: 'kb', Common_name_of_the_star_system: 'B', x_coordinate: 1, y_coordinate: 0, z_coordinate: 0 },
+    { starId: 'kc', Common_name_of_the_star_system: 'C', x_coordinate: 4, y_coordinate: 0, z_coordinate: 0 },
+    { starId: 'kd', Common_name_of_the_star_system: 'D', x_coordinate: 9, y_coordinate: 0, z_coordinate: 0 }
+  ], 1);
+  assertArrayEqual(
+    nearestPairs.map(pair => pair.pairKey),
+    ['ka|kb', 'kb|kc', 'kc|kd'],
+    'K-nearest connections should use spatial lookup and deduplicate nearest system pairs'
+  );
 
   const uvStars = [
     { starId: 'uv-a', displayColor: '#ffffff', displaySize: 1, displayName: 'Alpha', displayLabelSize: 1 },
@@ -2280,6 +3018,11 @@ async function checkBehavioralInvariants() {
     getDustCloudSignature({ selectedDustClouds: ['a', 'b'], dustCloudMode: 'legacy' }),
     'legacy:a|b',
     'UV dust cloud signature'
+  );
+  assertArrayEqual(
+    getSelectedDustCloudFiles({ selectedDustClouds: ['cloud-a.json', 'cloud-b.json'] }),
+    ['cloud-a.json', 'cloud-b.json'],
+    'Filter control helper should read dust clouds from normalized filter state'
   );
   assertEqual(clampUvAlpha(-1), 0, 'UV alpha clamp lower bound');
   assertEqual(clampUvAlpha(2), 1, 'UV alpha clamp upper bound');
@@ -2375,6 +3118,13 @@ async function checkBehavioralInvariants() {
     'UV star signature should include star opacity'
   );
   assert(
+    buildStarLayerSignature(uvStars, uvSignatureContext) !== buildStarLayerSignature([
+      { ...uvStars[0], displayOpacity: 0.5 },
+      uvStars[1]
+    ], uvSignatureContext),
+    'UV star signature should include per-star display opacity'
+  );
+  assert(
     buildLabelLayerSignature(uvStars, uvSignatureContext) !== buildLabelLayerSignature(uvStars, {
       ...uvSignatureContext,
       state: { ...uvState, showConstellationNamesFlag: true }
@@ -2408,14 +3158,42 @@ async function checkBehavioralInvariants() {
     distance: 0,
     truePosition: { x: 0, y: 0, z: 0 }
   };
-  const kit = await buildPrintableSTLKitFiles([printableStar], [], { allStars: [printableStar] });
+  const stlBuildProgress = [];
+  const kit = await buildPrintableSTLKitFiles([printableStar], [], {
+    allStars: [printableStar],
+    onBuildProgress(update) {
+      stlBuildProgress.push(update);
+    }
+  });
   assert(kit, 'STL kit builder should return a result for printable stars');
+  assert(stlBuildProgress.some(update => update.label === 'Preparing printable systems'), 'STL kit builder should report system-preparation progress');
+  assert(stlBuildProgress.some(update => update.progress >= 0.98), 'STL kit builder should report near-complete build progress');
   assertEqual(kit.summary.starCount, 1, 'STL kit star count');
   assertEqual(kit.summary.tubeCount, 0, 'STL kit tube count');
   assert(kit.files.some(file => file.path === 'README.txt' && file.text.includes('Astrography 3D Print Kit')), 'STL kit should include README metadata');
   const stlFile = kit.files.find(file => file.path === 'stars/1_Sol.stl');
   assert(stlFile?.buffer instanceof ArrayBuffer, 'STL kit should include a star STL ArrayBuffer');
   assert(stlFile?.buffer?.byteLength > 84, 'STL star buffer should contain binary STL data');
+  const stlSummary = validateBinarySTL(stlFile.buffer);
+  assert(stlSummary.triangleCount > 0, 'STL validation should report triangles for generated star mesh');
+  assert(stlSummary.nonZeroAreaTriangles > 0, 'STL validation should report non-degenerate triangles');
+  const stlAbortController = new AbortController();
+  stlAbortController.abort();
+  try {
+    await buildPrintableSTLKitFiles([printableStar], [], {
+      allStars: [printableStar],
+      signal: stlAbortController.signal
+    });
+    addFailure('STL kit builder should reject an already-aborted export signal');
+  } catch (error) {
+    assertEqual(error.name, 'AbortError', 'STL kit builder aborted-signal error');
+  }
+  try {
+    validateBinarySTL(new ArrayBuffer(84));
+    addFailure('STL validation should reject empty triangle buffers by default');
+  } catch (error) {
+    assert(error.message.includes('mesh contains no triangles'), 'STL validation empty-buffer error');
+  }
 
   assertEqual(sanitizeSTLFilename('Alpha / Beta:*?'), 'Alpha_Beta', 'STL filename sanitizer');
   assertEqual(
@@ -2615,6 +3393,13 @@ async function checkBehavioralInvariants() {
   const workerPayload = createSTLKitWorkerPayload([workerStar], [], {});
   assertEqual(workerPayload.stars[0].starId, 'worker-a', 'STL worker payload stars');
   assertEqual(workerPayload.options.allStars[0].starId, 'worker-a', 'STL worker payload allStars fallback');
+  const unsafeWorkerPayload = createSTLKitWorkerPayload([workerStar], [], {
+    allStars: [workerStar],
+    onProgress() {},
+    signal: new AbortController().signal
+  });
+  assert(!('onProgress' in unsafeWorkerPayload.options), 'STL worker payload should strip progress callbacks');
+  assert(!('signal' in unsafeWorkerPayload.options), 'STL worker payload should strip abort signals');
   const transferable = new ArrayBuffer(8);
   const transferableBuffers = getSTLKitTransferableBuffers({ files: [{ buffer: transferable }, { text: 'README' }, { buffer: 'not-a-buffer' }] });
   assertEqual(transferableBuffers.length, 1, 'STL worker transferable buffer count');
@@ -2748,10 +3533,16 @@ checkSvgExportFidelity();
 checkFullscreenCompatibility();
 checkSidebarAccessibility();
 checkProjectionVisibilityRobustness();
+checkFilterOverlayStateScoped();
 checkUserNotificationsCentralized(jsFiles);
+checkRuntimeLoggingCentralized(jsFiles);
+checkKeyboardMapAccessibility();
+checkBrowserSmokeHarness();
+checkStellarClassLazyRendering();
 checkTooltipStylesCentralized();
 checkCssEscapeCompatibility(jsFiles);
 checkCanvasSizingCentralized();
+checkWebGLSupportGuardrails();
 checkCentralizedObjectChildDisposal();
 checkRenderSchedulingCentralized(jsFiles);
 checkTextCanvasCentralized();
@@ -2761,6 +3552,10 @@ checkCentralizedHashing();
 checkSharedColorParsing();
 checkSharedOpacityClamping();
 checkAppStateFactoryDecoupledFromRenderer();
+checkExportBindingsExtracted();
+checkLoadingProgressExtracted();
+checkMapStarMaterialExtraction();
+checkMapConnectionLabelExtraction();
 checkStlKitWorkerSplit();
 checkStlTextGlyphExtraction();
 checkStlFeatureDirectionExtraction();
@@ -2775,6 +3570,9 @@ checkEditControlLifecycle();
 checkUvMapFilterDecoupling();
 checkUvLayerSignatureExtraction();
 checkUvCanvasLayerUtilityExtraction();
+checkUvSurfaceFactoryExtraction();
+checkUvPlaneDrawingExtraction();
+checkUvCloudOverlayDrawingExtraction();
 checkUvOverlayCellUtilityExtraction();
 checkFilterDisplayStatsCentralized();
 checkFilterProjectionConsistency();
@@ -2782,6 +3580,7 @@ checkConnectionSignatureCoverage();
 checkOverlayFilterOptionDecoupling();
 checkOverlayInstancing();
 checkRuntimeDataValidation();
+checkAuditQuickFixes();
 checkRuntimeDataFiles();
 await checkBehavioralInvariants();
 checkNoOrphanSourceFiles(jsFiles);

@@ -2,6 +2,7 @@
  * @file Applies opacity to stars based on fixed value or absolute magnitude.
  */
 import { EPSILON, MIN_MAGNITUDE_OPACITY } from '../../../shared/constants.js';
+import { normalizeDisplayOpacity } from './displayMetrics.js';
 
 /**
  * Sets displayOpacity on each star based on the selected opacity mode.
@@ -14,7 +15,7 @@ export function applyOpacityFilter(stars, filters, displayStats = null) {
   const fixedOpacity = Number.parseFloat(filters.opacity);
 
   if (Number.isFinite(fixedOpacity)) {
-    const clamped = Math.max(0, Math.min(1, fixedOpacity));
+    const clamped = normalizeDisplayOpacity(fixedOpacity);
     stars.forEach(star => { star.displayOpacity = clamped; });
     return stars;
   }

@@ -1,5 +1,4 @@
 ﻿import * as THREE from '../vendor/three.js';
-import { ThreeDControls, TwoDControls } from '../render/interactions/cameraControls.js';
 import { LabelManager } from '../features/labels/labelManager.js';
 import { clearObject3DChildren, disposeObject3D } from '../render/engine/renderUtils.js';
 import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
@@ -25,10 +24,11 @@ import {
 import { getConstellationLabelAnchors } from '../features/constellations/constellationLabelPlacement.js';
 import { applyCanvasConstellationLabelStyle, constellationLineCss } from '../features/constellations/constellationStyle.js';
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
-import { galacticToEquatorial, eclipticToEquatorial } from '../features/planes/planeDefinitions.js';
 import { getViewpointStarId } from '../shared/viewpoint.js';
 import { GLOBE_RADIUS, ATLAS_WIDTH, ATLAS_HEIGHT } from '../shared/constants.js';
 import { configureRendererForCanvas } from '../shared/canvasSizing.js';
+import { addWebGLContextLossHandlers, assertWebGLAvailable } from '../shared/webglSupport.js';
+import { logWarn } from '../shared/logger.js';
 import {
   drawWrappedCircle,
   strokeUvSegment,
@@ -44,6 +44,9 @@ import {
   buildStarTopologySignature
 } from './uvLayerSignatures.js';
 import { clamp01, createLayerCanvas, rgbaFromHex } from './uvCanvasLayers.js';
+import { createUvSurface } from './uvSurfaceFactory.js';
+import { drawUvPlanes } from './uvPlaneDrawing.js';
+import { drawUvCloudsOverlay } from './uvCloudOverlayDrawing.js';
 import {
   getAverageOverlayAlpha,
   getOverlayCellAlpha,
@@ -52,10 +55,7 @@ import {
   getOverlayCellRaDec,
   getScaledOverlayRadius
 } from './uvOverlayCells.js';
-
-const PLANE_WIDTH = EQUIRECT_WIDTH;
-const PLANE_HEIGHT = EQUIRECT_HEIGHT;
-const TAU = Math.PI * 2;
+import { getStarDisplayOpacity } from '../features/filters/logic/displayMetrics.js';
 
 function createHiddenPointsMaterial() {
   return new THREE.PointsMaterial({
@@ -73,6 +73,7 @@ export class UVMapManager {
     this.mapType = mapType;
     this.state = state;
     this.scene = new THREE.Scene();
+    assertWebGLAvailable();
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: true });
     const initialSize = configureRendererForCanvas(this.renderer, this.canvas);
     const initialAspect = initialSize.width / initialSize.height;
@@ -90,6 +91,7 @@ export class UVMapManager {
     this.boundaryData = null;
     this.constellationMetaPromise = null;
     this.sourceGlobeScene = null;
+    this.updateToken = 0;
 
     this.atlasCanvas = document.createElement('canvas');
     this.atlasCanvas.width = ATLAS_WIDTH;
@@ -114,55 +116,31 @@ export class UVMapManager {
     };
     this.redrawBaseLayer();
 
-    if (mapType === 'Equirectangular') {
-      this.frustumSize = 130;
-      this.camera = new THREE.OrthographicCamera(
-        (-this.frustumSize * initialAspect) / 2,
-        (this.frustumSize * initialAspect) / 2,
-        this.frustumSize / 2,
-        -this.frustumSize / 2,
-        -1000,
-        1000
-      );
-      this.camera.position.set(0, 0, 10);
-      this.controls = new TwoDControls(this.camera, this.renderer.domElement, {
-        requestRender: () => requestRenderIfAvailable(this),
-        panSpeed: 0.3,
-        minZoom: 0.5,
-        maxZoom: 12
-      });
-      const plane = new THREE.Mesh(
-        new THREE.PlaneGeometry(PLANE_WIDTH, PLANE_HEIGHT),
-        new THREE.MeshBasicMaterial({ map: this.atlasTexture, transparent: true })
-      );
-      plane.renderOrder = 0;
-      this.surfaceMesh = plane;
-      this.scene.add(plane);
-    } else {
-      this.camera = new THREE.PerspectiveCamera(60, initialAspect, 0.1, 10000);
-      this.camera.position.set(0, 0, 220);
-      this.controls = new ThreeDControls(this.camera, this.renderer.domElement, {
-        requestRender: () => requestRenderIfAvailable(this),
-        minDistance: 120,
-        maxDistance: 700,
-        target: new THREE.Vector3(0, 0, 0)
-      });
-      this.scene.add(new THREE.AmbientLight(0xffffff, 0.85));
-      const pointLight = new THREE.PointLight(0xffffff, 0.6);
-      pointLight.position.set(160, 140, 220);
-      this.scene.add(pointLight);
-      const sphere = new THREE.Mesh(
-        new THREE.SphereGeometry(GLOBE_RADIUS, 96, 64),
-        new THREE.MeshBasicMaterial({ map: this.atlasTexture, side: THREE.FrontSide })
-      );
-      sphere.renderOrder = 0;
-      this.surfaceMesh = sphere;
-      this.scene.add(sphere);
-    }
+    const surface = createUvSurface({
+      mapType,
+      initialAspect,
+      atlasTexture: this.atlasTexture,
+      rendererElement: this.renderer.domElement,
+      requestRender: () => requestRenderIfAvailable(this)
+    });
+    this.frustumSize = surface.frustumSize;
+    this.camera = surface.camera;
+    this.controls = surface.controls;
+    this.surfaceMesh = surface.surfaceMesh;
+    surface.sceneObjects.forEach(object => this.scene.add(object));
 
     this.scene.add(this.camera);
     this.boundResize = () => this.onResize();
     window.addEventListener('resize', this.boundResize, false);
+    this.webglContextDisposer = addWebGLContextLossHandlers(this.canvas, {
+      onLost: () => {
+        this.renderDirty = false;
+      },
+      onRestored: () => {
+        this.renderDirty = true;
+        requestRenderIfAvailable(this);
+      }
+    });
   }
 
   setLegacySourceScene(scene) {
@@ -175,7 +153,7 @@ export class UVMapManager {
       loadConstellationCenters(),
       loadConstellationFullNames()
     ]).catch(err => {
-      console.warn('UV constellation metadata loading failed:', err);
+      logWarn('UV constellation metadata loading failed:', err);
     });
     return this.constellationMetaPromise;
   }
@@ -189,7 +167,7 @@ export class UVMapManager {
           return this.boundaryData;
         })
         .catch(err => {
-          console.warn('UV boundary loading failed:', err);
+          logWarn('UV boundary loading failed:', err);
           this.boundaryData = [];
           return this.boundaryData;
         });
@@ -286,10 +264,12 @@ export class UVMapManager {
   }
 
   async updateMap(stars, connectionObjs, filterOptions = this.filterOptions) {
+    const token = ++this.updateToken;
     this.setFilterOptions(filterOptions);
     this.lastStars = stars;
     this.lastConnections = connectionObjs;
     await Promise.all([this.ensureBoundaryData(), this.ensureConstellationMeta()]);
+    if (token !== this.updateToken) return;
     const safeStars = stars || [];
     const safeConnections = connectionObjs || [];
     const signatureContext = this.getLayerSignatureContext();
@@ -425,7 +405,6 @@ export class UVMapManager {
   }
 
   drawStars(ctx, stars) {
-    const opacity = clamp01(this.starOpacity);
     stars.forEach(star => {
       if (!star.displayVisible) return;
       const { ra, dec } = getStarCoordinates(star);
@@ -434,7 +413,7 @@ export class UVMapManager {
       const y = v * ATLAS_HEIGHT;
       const radius = THREE.MathUtils.clamp((star.displaySize || 1) * 1.6, 1.2, 10);
       ctx.save();
-      ctx.fillStyle = rgbaFromHex(star.displayColor || '#ffffff', opacity);
+      ctx.fillStyle = rgbaFromHex(star.displayColor || '#ffffff', getStarDisplayOpacity(star, this.starOpacity));
       drawWrappedCircle(ctx, x, y, radius);
       ctx.restore();
     });
@@ -575,7 +554,7 @@ export class UVMapManager {
       const point = getOverlayCellAtlasPoint(cell, { raDecToUV, spherePositionToUv });
       if (!point) return;
       const color = getOverlayCellColor(cell, 'tcMesh', '#ff8844');
-      const alpha = getOverlayCellAlpha(cell, { meshKey: 'tcMesh', fallbackOpacity: 0.15, opacityFactor });
+      const alpha = getOverlayCellAlpha(cell, { meshKey: 'tcMesh', fallbackOpacity: 0.15 });
       const radius = getScaledOverlayRadius(cell, overlay, { minRadius: 4, radiusFactor: 0.6 });
       const grd = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
       grd.addColorStop(0, rgbaFromHex(color, alpha));
@@ -592,7 +571,7 @@ export class UVMapManager {
       const c1 = cell1.tcMesh?.material?.color;
       const c2 = cell2.tcMesh?.material?.color;
       const avgColor = c1 ? `#${c1.clone().lerp(c2 || c1, 0.5).getHexString()}` : '#ff8844';
-      const avgAlpha = getAverageOverlayAlpha(cell1, cell2, { meshKey: 'tcMesh', opacityFactor });
+      const avgAlpha = getAverageOverlayAlpha(cell1, cell2, { meshKey: 'tcMesh' });
       ctx.strokeStyle = rgbaFromHex(avgColor, avgAlpha);
       ctx.lineWidth = 1.5;
       const raDec1 = getOverlayCellRaDec(cell1);
@@ -671,11 +650,14 @@ export class UVMapManager {
       (overlay?.cubesData || []).forEach(cell => {
         if (!cell?.active || !cell?.globeMesh) return;
         const color = getOverlayCellColor(cell, 'globeMesh', '#ff6600');
-        const alpha = getOverlayCellAlpha(cell, { meshKey: 'globeMesh', fallbackOpacity: 0.2, opacityFactor: cdOpacity });
+        const alpha = getOverlayCellAlpha(cell, { meshKey: 'globeMesh', fallbackOpacity: 0.2 });
         // Use native UV from globe position
         const point = getOverlayCellAtlasPoint(cell, { raDecToUV, spherePositionToUv });
         if (!point) return;
-        const radius = Math.max(6, 18);
+        const radius = getScaledOverlayRadius(cell, overlay, {
+          minRadius: 6,
+          radiusFactor: Math.max(0.4, this.getFilterNumber('cloudDensityRadius', 5) / 8)
+        });
         const grd = ctx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
         grd.addColorStop(0, rgbaFromHex(color, alpha));
         grd.addColorStop(0.6, rgbaFromHex(color, alpha * 0.4));
@@ -689,60 +671,15 @@ export class UVMapManager {
   }
 
   drawCloudsOverlay(ctx) {
-    const overlays = this.sourceGlobeScene?.userData?.cloudOverlays;
-    if (!this.state.showCloudsFlag || !Array.isArray(overlays)) return;
-    const cloudOpacity = clamp01(this.getFilterNumber('cloudOpacity', 1));
-    if (cloudOpacity <= 0.001) return;
-    overlays.forEach(lineSegments => {
-      const geometry = lineSegments?.geometry;
-      const pos = geometry?.getAttribute?.('position');
-      if (!pos) return;
-      const color = lineSegments.material?.color ? `#${lineSegments.material.color.getHexString()}` : '#ff6600';
-      const baseAlpha = lineSegments.material?.opacity ?? 0.8;
-      const alpha = clamp01(baseAlpha * cloudOpacity);
-      ctx.save();
-      ctx.strokeStyle = rgbaFromHex(color, alpha);
-      ctx.lineWidth = 1.6;
-      const _a = new THREE.Vector3();
-      const _b = new THREE.Vector3();
-      for (let i = 0; i <= pos.count - 2; i += 2) {
-        _a.fromBufferAttribute(pos, i);
-        _b.fromBufferAttribute(pos, i + 1);
-        splitWrappedSegment(spherePositionToUv(_a, 100), spherePositionToUv(_b, 100)).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
-      }
-      ctx.restore();
+    drawUvCloudsOverlay(ctx, {
+      sourceScene: this.sourceGlobeScene,
+      showClouds: this.state.showCloudsFlag,
+      cloudOpacity: this.getFilterNumber('cloudOpacity', 1)
     });
   }
 
   drawPlanes(ctx) {
-    const planeOpacity = clamp01(this.getFilterNumber('planeOpacity', 0.5));
-    if (planeOpacity <= 0.001) return;
-    if (this.state.showGalacticPlaneFlag) {
-      this.drawEquatorialCurve(ctx, angle => galacticToEquatorial(angle, 0), '#7effb2', planeOpacity);
-    }
-    if (this.state.showEclipticPlaneFlag) {
-      this.drawEquatorialCurve(ctx, angle => eclipticToEquatorial(angle, 0), '#ffcb6b', planeOpacity);
-    }
-    if (this.state.showCelestialEquatorFlag) {
-      this.drawEquatorialCurve(ctx, angle => ({ ra: normalizeRightAscension(angle), dec: 0 }), '#8fb5ff', planeOpacity);
-    }
-  }
-
-  drawEquatorialCurve(ctx, curveFn, color, opacity) {
-    ctx.save();
-    ctx.strokeStyle = rgbaFromHex(color, opacity * 0.95);
-    ctx.lineWidth = 2.25;
-    const samples = 256;
-    let prev = null;
-    for (let i = 0; i <= samples; i++) {
-      const t = (i / samples) * TAU;
-      const current = raDecToUV(curveFn(t).ra, curveFn(t).dec);
-      if (prev) {
-        splitWrappedSegment(prev, current).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
-      }
-      prev = current;
-    }
-    ctx.restore();
+    drawUvPlanes(ctx, this.state, this.getFilterNumber('planeOpacity', 0.5));
   }
 
 
@@ -798,6 +735,7 @@ export class UVMapManager {
     this.starInteractionDisposer?.();
     this.controls?.dispose?.();
     this.labelManager?.removeAllLabels?.();
+    this.webglContextDisposer?.();
 
     if (this.atlasTexture) {
       this.atlasTexture.dispose();

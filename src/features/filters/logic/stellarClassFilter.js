@@ -19,6 +19,11 @@ import {
   sanitizeName
 } from '../../../shared/uiFactory.js';
 import { getStellarClassData } from './stellarClassData.js';
+import {
+  getFilterForm,
+  getStellarClassContainers,
+  resolveFilterDocument
+} from '../filterControls.js';
 
 function formatLabelDistance(distance) {
   if (!Number.isFinite(distance)) return '';
@@ -90,7 +95,7 @@ export function applyStellarClassLogic(stars, form, filters = {}) {
   return stars.filter(star => star.displayVisible);
 }
 
-function createSubcategoryShell(title) {
+function createSubcategoryShell(title, onExpand = null) {
   const subcategory = document.createElement('div');
   subcategory.classList.add('stellar-class-subcategory');
 
@@ -99,7 +104,11 @@ function createSubcategoryShell(title) {
   subcontent.style.maxHeight = '0';
   subcontent.style.overflowY = 'hidden';
 
-  const header = createSubcategoryHeader(title, subcontent, SUBCATEGORY_MAX_HEIGHT);
+  const header = createSubcategoryHeader(title, subcontent, SUBCATEGORY_MAX_HEIGHT, {
+    onToggle: ({ isActive }) => {
+      if (isActive) onExpand?.();
+    }
+  });
   subcategory.appendChild(header);
   return { subcategory, subcontent };
 }
@@ -120,7 +129,7 @@ function createStarRow(starName, checkboxConfig) {
     checkboxConfig.id,
     checkboxConfig.name,
     checkboxConfig.label,
-    true,
+    checkboxConfig.checked ?? true,
     checkboxConfig.value
   );
   checkboxRow.appendChild(container);
@@ -133,37 +142,43 @@ function buildSelectionSubcategory(cls, commonName, starsInClass, container) {
   const title = commonName
     ? `${cls} (${commonName}) - ${starsInClass.length}`
     : `${cls} - ${starsInClass.length}`;
-  const { subcategory, subcontent } = createSubcategoryShell(title);
+  let renderIndividualStars = () => {};
+  const { subcategory, subcontent } = createSubcategoryShell(title, () => renderIndividualStars());
 
   const classControls = document.createElement('div');
   classControls.classList.add('class-level-checkboxes');
-  classControls.appendChild(
-    createCheckbox(
-      `class-${cls}-star`,
-      'stellar-class-show-star',
-      'Show Stars',
-      true,
-      cls
-    ).container
+  const { container: classCheckboxContainer, checkbox: classCheckbox } = createCheckbox(
+    `class-${cls}-star`,
+    'stellar-class-show-star',
+    'Show Stars',
+    true,
+    cls
   );
+  classControls.appendChild(classCheckboxContainer);
   subcategory.appendChild(classControls);
 
   const individualStars = document.createElement('div');
   individualStars.classList.add('individual-stars');
 
-  starsInClass.forEach(star => {
-    const starId = getStarId(star);
-    const starName = star.Common_name_of_the_star || star.Common_name_of_the_star_system || starId;
-    const safeName = sanitizeName(starId);
-    individualStars.appendChild(
-      createStarRow(starName, {
-        id: `star-${safeName}-star`,
-        name: 'star-show-star',
-        label: 'Show Star',
-        value: starId
-      })
-    );
-  });
+  let rowsRendered = false;
+  renderIndividualStars = () => {
+    if (rowsRendered) return;
+    rowsRendered = true;
+    starsInClass.forEach(star => {
+      const starId = getStarId(star);
+      const starName = star.Common_name_of_the_star || star.Common_name_of_the_star_system || starId;
+      const safeName = sanitizeName(starId);
+      individualStars.appendChild(
+        createStarRow(starName, {
+          id: `star-${safeName}-star`,
+          name: 'star-show-star',
+          label: 'Show Star',
+          value: starId,
+          checked: classCheckbox.checked
+        })
+      );
+    });
+  };
 
   subcontent.appendChild(individualStars);
   subcategory.appendChild(subcontent);
@@ -174,19 +189,19 @@ function buildPreferencesSubcategory(cls, commonName, starsInClass, defaultSize,
   const title = commonName
     ? `${cls} (${commonName}) - ${starsInClass.length}`
     : `${cls} - ${starsInClass.length}`;
-  const { subcategory, subcontent } = createSubcategoryShell(title);
+  let renderIndividualStars = () => {};
+  const { subcategory, subcontent } = createSubcategoryShell(title, () => renderIndividualStars());
 
   const classControls = document.createElement('div');
   classControls.classList.add('class-level-checkboxes');
-  classControls.appendChild(
-    createCheckbox(
-      `class-${cls}-name`,
-      'stellar-class-show-name',
-      'Show Names',
-      true,
-      cls
-    ).container
+  const { container: nameCheckboxContainer, checkbox: nameCheckbox } = createCheckbox(
+    `class-${cls}-name`,
+    'stellar-class-show-name',
+    'Show Names',
+    true,
+    cls
   );
+  classControls.appendChild(nameCheckboxContainer);
 
   classControls.appendChild(
     createRangeControl({
@@ -217,19 +232,25 @@ function buildPreferencesSubcategory(cls, commonName, starsInClass, defaultSize,
   const individualStars = document.createElement('div');
   individualStars.classList.add('individual-stars');
 
-  starsInClass.forEach(star => {
-    const starId = getStarId(star);
-    const starName = star.Common_name_of_the_star || star.Common_name_of_the_star_system || starId;
-    const safeName = sanitizeName(starId);
-    individualStars.appendChild(
-      createStarRow(starName, {
-        id: `star-${safeName}-name`,
-        name: 'star-show-name',
-        label: 'Show Name',
-        value: starId
-      })
-    );
-  });
+  let rowsRendered = false;
+  renderIndividualStars = () => {
+    if (rowsRendered) return;
+    rowsRendered = true;
+    starsInClass.forEach(star => {
+      const starId = getStarId(star);
+      const starName = star.Common_name_of_the_star || star.Common_name_of_the_star_system || starId;
+      const safeName = sanitizeName(starId);
+      individualStars.appendChild(
+        createStarRow(starName, {
+          id: `star-${safeName}-name`,
+          name: 'star-show-name',
+          label: 'Show Name',
+          value: starId,
+          checked: nameCheckbox.checked
+        })
+      );
+    });
+  };
 
   subcontent.appendChild(individualStars);
   subcategory.appendChild(subcontent);
@@ -278,9 +299,10 @@ function appendClassSubcategories(classMap, stellarClassData, selectionContainer
   }
 }
 
-export function generateStellarClassFilters(stars) {
-  const selectionContainer = document.getElementById('stellar-class-selection-container');
-  const preferencesContainer = document.getElementById('stellar-class-preferences-container');
+export function generateStellarClassFilters(stars, context = {}) {
+  const documentRef = resolveFilterDocument(context);
+  const form = getFilterForm(context);
+  const { selectionContainer, preferencesContainer } = getStellarClassContainers(context);
   if (!selectionContainer && !preferencesContainer) return;
 
   if (selectionContainer) {
@@ -310,19 +332,20 @@ export function generateStellarClassFilters(stars) {
 
   appendClassSubcategories(classMap, stellarClassData, selectionContainer, preferencesContainer);
 
-  const form = document.getElementById('filters-form');
+  const controlScope = form || documentRef;
+  const EventCtor = documentRef?.defaultView?.Event || globalThis.Event;
 
   if (allStarsCheckbox) {
     allStarsCheckbox.addEventListener('change', () => {
       const checked = allStarsCheckbox.checked;
-      document
+      controlScope
         .querySelectorAll('input[name="stellar-class-show-star"], input[name="star-show-star"]')
         .forEach(checkbox => {
           checkbox.checked = checked;
         });
 
       if (form) {
-        form.dispatchEvent(new Event('change', { bubbles: true }));
+        form.dispatchEvent(new EventCtor('change', { bubbles: true }));
       }
     });
   }
@@ -330,14 +353,14 @@ export function generateStellarClassFilters(stars) {
   if (allNamesCheckbox) {
     allNamesCheckbox.addEventListener('change', () => {
       const checked = allNamesCheckbox.checked;
-      document
+      controlScope
         .querySelectorAll('input[name="stellar-class-show-name"], input[name="star-show-name"]')
         .forEach(checkbox => {
           checkbox.checked = checked;
         });
 
       if (form) {
-        form.dispatchEvent(new Event('change', { bubbles: true }));
+        form.dispatchEvent(new EventCtor('change', { bubbles: true }));
       }
     });
   }

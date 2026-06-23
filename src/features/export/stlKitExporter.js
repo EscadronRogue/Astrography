@@ -17,6 +17,8 @@
 import { CSG } from '../../vendor/csg.js';
 import { downloadBlob } from './downloadUtils.js';
 import { getJsZipConstructor } from './pdfUtils.js';
+import { logInfo, logWarn } from '../../shared/logger.js';
+import { validateBinarySTL } from './stlValidation.js';
 import {
   filterMainStars,
   buildSphereTriangles,
@@ -87,6 +89,13 @@ import {
   getTubeLabelMaxHeight,
   getTubeLabelMaxWidth
 } from './stlTubeLabelLayout.js';
+import {
+  assertNotAborted,
+  createAbortError,
+  reportBuildProgress,
+  reportExportProgress,
+  yieldToBrowser
+} from './stlKitProgress.js';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Physical dimensions (mm)
@@ -122,10 +131,6 @@ const STAR_ENGRAVE_HEIGHT_FACTOR = 0.72;
 // ═══════════════════════════════════════════════════════════════════════════
 // Utility helpers
 // ═══════════════════════════════════════════════════════════════════════════
-
-function yieldToBrowser() {
-  return new Promise(resolve => globalThis.setTimeout(resolve, 0));
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Vector math
@@ -650,6 +655,9 @@ function buildTubeComponentCSG(component) {
  * @param {Array}  [options.allStars] Full heliocentric dataset for global numbering.
  */
 export async function buildPrintableSTLKitFiles(stars, connections, options = {}) {
+  const signal = options.signal;
+  assertNotAborted(signal);
+
   if (!stars || stars.length === 0) {
     return null;
   }
@@ -658,6 +666,8 @@ export async function buildPrintableSTLKitFiles(stars, connections, options = {}
   const mainStars = filterMainStars(stars);
   const rankMap = buildSystemRankMap(options.allStars?.length ? options.allStars : stars);
   const systemInfo = new Map();
+  const mainStarTotal = Math.max(1, mainStars.length);
+  reportBuildProgress(options, 0.02, 'Preparing printable systems');
 
   let processedSystems = 0;
   for (const star of mainStars) {
@@ -675,8 +685,12 @@ export async function buildPrintableSTLKitFiles(stars, connections, options = {}
     });
 
     processedSystems += 1;
-    if (processedSystems % EXPORT_YIELD_INTERVAL === 0) await yieldToBrowser();
+    if (processedSystems % EXPORT_YIELD_INTERVAL === 0) {
+      reportBuildProgress(options, 0.02 + 0.12 * (processedSystems / mainStarTotal), 'Preparing printable systems');
+      await yieldToBrowser(signal);
+    }
   }
+  reportBuildProgress(options, 0.16, 'Preparing printable systems');
 
   // ── Build all connection pairs ───────────────────────────────────────
   const candidateConnections = [];
@@ -684,11 +698,15 @@ export async function buildPrintableSTLKitFiles(stars, connections, options = {}
 
   if (Array.isArray(connections)) {
     const seenPairs = new Set();
+    const connectionTotal = Math.max(1, connections.length);
 
     let processedConnections = 0;
     for (const { starA, starB } of connections) {
       processedConnections += 1;
-      if (processedConnections % (EXPORT_YIELD_INTERVAL * 16) === 0) await yieldToBrowser();
+      if (processedConnections % (EXPORT_YIELD_INTERVAL * 16) === 0) {
+        reportBuildProgress(options, 0.16 + 0.12 * (processedConnections / connectionTotal), 'Planning printable connections');
+        await yieldToBrowser(signal);
+      }
 
       if (!starA || !starB) continue;
 
@@ -738,6 +756,7 @@ export async function buildPrintableSTLKitFiles(stars, connections, options = {}
       });
     }
   }
+  reportBuildProgress(options, 0.30, 'Planning printable connections');
 
   // Build printable file buffers.
   const allConnections = candidateConnections;
@@ -755,7 +774,8 @@ export async function buildPrintableSTLKitFiles(stars, connections, options = {}
     forcedMergeMap = nextForcedMergeMap;
     socketPlans = buildSystemSocketPlans(systemInfo, allConnections, forcedMergeMap);
     tubeComponents = buildTubeComponents(systemInfo, socketPlans, allConnections);
-    await yieldToBrowser();
+    reportBuildProgress(options, 0.30 + 0.05 * ((pass + 1) / 6), 'Resolving printable socket merges');
+    await yieldToBrowser(signal);
   }
 
   const files = [];
@@ -766,6 +786,9 @@ export async function buildPrintableSTLKitFiles(stars, connections, options = {}
 
   let starCount = 0;
   let tubeCount = 0;
+  const exportedSystemTotal = Math.max(1, systemInfo.size);
+  const tubeComponentTotal = Math.max(1, tubeComponents.length);
+  reportBuildProgress(options, 0.36, 'Building star STL files');
 
   // ── Stars ────────────────────────────────────────────────────────────
   for (const [systemName, info] of systemInfo) {
@@ -817,8 +840,12 @@ export async function buildPrintableSTLKitFiles(stars, connections, options = {}
       buffer: stlBuffer
     });
     starCount += 1;
-    if (starCount % EXPORT_HEAVY_YIELD_INTERVAL === 0) await yieldToBrowser();
+    if (starCount % EXPORT_HEAVY_YIELD_INTERVAL === 0) {
+      reportBuildProgress(options, 0.36 + 0.42 * (starCount / exportedSystemTotal), 'Building star STL files');
+      await yieldToBrowser(signal);
+    }
   }
+  reportBuildProgress(options, 0.78, 'Building tube STL files');
 
   // ── Tubes ────────────────────────────────────────────────────────────
   for (const component of tubeComponents) {
@@ -835,8 +862,14 @@ export async function buildPrintableSTLKitFiles(stars, connections, options = {}
       buffer: stlBuffer
     });
     tubeCount += 1;
-    if (tubeCount % EXPORT_HEAVY_YIELD_INTERVAL === 0) await yieldToBrowser();
+    if (tubeCount % EXPORT_HEAVY_YIELD_INTERVAL === 0) {
+      reportBuildProgress(options, 0.78 + 0.18 * (tubeCount / tubeComponentTotal), 'Building tube STL files');
+      await yieldToBrowser(signal);
+    }
   }
+
+  assertNotAborted(signal);
+  reportBuildProgress(options, 0.98, 'Writing STL kit manifest');
 
   const manifest = buildKitManifest({
     sourceStarCount: stars.length,
@@ -872,54 +905,101 @@ function addBuiltFilesToZip(zip, built) {
   });
 }
 
+function validateBuiltStlFiles(built) {
+  built.files
+    .filter(file => file.path?.toLowerCase?.().endsWith('.stl'))
+    .forEach(file => validateBinarySTL(file.buffer));
+}
+
 async function buildPrintableSTLKitFilesInWorker(stars, connections, options = {}) {
+  assertNotAborted(options.signal);
   if (typeof Worker !== 'function') return null;
 
   const worker = new Worker(new URL('./stlKitWorker.js', import.meta.url), { type: 'module' });
   const payload = createSTLKitWorkerPayload(stars, connections, options);
 
   return new Promise((resolve, reject) => {
-    worker.onmessage = event => {
-      const { type, result, error } = event.data || {};
+    const cleanup = () => options.signal?.removeEventListener?.('abort', onAbort);
+    const settle = callback => value => {
+      cleanup();
       worker.terminate();
+      callback(value);
+    };
+    const resolveDone = settle(resolve);
+    const rejectDone = settle(reject);
+    const onAbort = () => rejectDone(createAbortError());
+
+    options.signal?.addEventListener?.('abort', onAbort, { once: true });
+
+    worker.onmessage = event => {
+      const { type, result, error, progress, label } = event.data || {};
+      if (type === 'progress') {
+        reportExportProgress(options, 0.08 + 0.62 * progress, label || 'Building printable geometry');
+        return;
+      }
       if (type === 'success') {
-        resolve(result);
+        resolveDone(result);
       } else {
-        reject(new Error(error || 'STL kit worker failed.'));
+        rejectDone(new Error(error || 'STL kit worker failed.'));
       }
     };
     worker.onerror = event => {
-      worker.terminate();
-      reject(new Error(event.message || 'STL kit worker failed.'));
+      rejectDone(new Error(event.message || 'STL kit worker failed.'));
     };
     worker.postMessage(payload);
   });
 }
 
 export async function exportPrintableSTLKit(stars, connections, options = {}) {
+  assertNotAborted(options.signal);
   if (!stars || stars.length === 0) {
-    console.warn('STL kit export: no stars to export.');
+    logWarn('STL kit export: no stars to export.');
     return;
   }
 
   const JSZip = getJsZipConstructor();
+  reportExportProgress(options, 0.02, 'Preparing STL kit');
+  assertNotAborted(options.signal);
 
   let built = null;
   try {
+    reportExportProgress(options, 0.08, 'Building printable geometry');
     built = await buildPrintableSTLKitFilesInWorker(stars, connections, options);
   } catch (error) {
-    console.warn('STL kit worker export failed; falling back to main-thread build.', error);
+    if (error?.name === 'AbortError') throw error;
+    logWarn('STL kit worker export failed; falling back to main-thread build.', error);
   }
   if (!built) {
-    built = await buildPrintableSTLKitFiles(stars, connections, options);
+    reportExportProgress(options, 0.12, 'Building printable geometry');
+    built = await buildPrintableSTLKitFiles(stars, connections, {
+      ...options,
+      onBuildProgress(update) {
+        reportExportProgress(
+          options,
+          0.12 + 0.58 * (update?.progress || 0),
+          update?.label || 'Building printable geometry'
+        );
+      }
+    });
   }
   if (!built) return;
+  assertNotAborted(options.signal);
+  reportExportProgress(options, 0.72, 'Validating STL files');
+  validateBuiltStlFiles(built);
+  assertNotAborted(options.signal);
 
   const zip = new JSZip();
   addBuiltFilesToZip(zip, built);
 
-  await yieldToBrowser();
-  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  await yieldToBrowser(options.signal);
+  reportExportProgress(options, 0.82, 'Compressing ZIP');
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }, metadata => {
+    assertNotAborted(options.signal);
+    reportExportProgress(options, 0.82 + 0.16 * ((metadata?.percent || 0) / 100), 'Compressing ZIP');
+  });
+  assertNotAborted(options.signal);
+  reportExportProgress(options, 0.99, 'Downloading ZIP');
   downloadBlob(blob, 'star_map_3d_print_kit.zip');
-  console.log(built.logMessage);
+  reportExportProgress(options, 1, 'STL kit ready');
+  logInfo(built.logMessage);
 }

@@ -41,9 +41,10 @@
 :fullscreen {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
 }
 :-webkit-full-screen {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
 }
-

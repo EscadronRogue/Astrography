@@ -13,6 +13,7 @@ import {
 } from './lineEditor.js';
 import { undoLastEdit } from './editCommands.js';
 import { setupEditOverlay, handleRotateMove, handleRotateUp, handleScaleMove, handleScaleUp } from './transformControls.js';
+import { logWarn } from '../../shared/logger.js';
 
 export class EditManager {
   constructor(mollweideMap, cachedStars, constellationLabelsMoll, galacticDirectionLabelsMoll, getStarId, buildAndApplyFilters, maybePersistPresets, requestRender) {
@@ -25,7 +26,7 @@ export class EditManager {
     this.maybePersistPresets = maybePersistPresets;
     this.requestRender = requestRender;
     this._eventListeners = createEventListenerRegistry({
-      onError: error => console.warn('Failed to remove edit UI listener:', error)
+      onError: error => logWarn('Failed to remove edit UI listener:', error)
     });
     initializeEditState(this);
   }

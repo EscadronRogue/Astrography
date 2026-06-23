@@ -16,6 +16,7 @@ import {
   loadConstellationFullNames
 } from '../../features/constellations/constellationRenderer.js';
 import { DUST_CLOUDS } from '../../shared/constants.js';
+import { logError, logWarn } from '../../shared/logger.js';
 
 function bindCollapsibleLegend(legend) {
   const content = legend?.nextElementSibling;
@@ -211,7 +212,7 @@ function bindFullscreenControls() {
       const activeElement = getFullscreenElement();
       const action = activeElement ? exitDocumentFullscreen() : requestElementFullscreen(canvas);
       action.catch(error => {
-        console.error('Error toggling fullscreen:', error);
+        logError('Error toggling fullscreen:', error);
       });
     };
     button.addEventListener('click', handler);
@@ -366,7 +367,7 @@ function initSliderSync() {
 export async function setupFilterUI(allStars) {
   const filterForm = document.getElementById('filters-form');
   if (!filterForm) {
-    console.warn('[setupFilterUI] No #filters-form found in DOM.');
+    logWarn('[setupFilterUI] No #filters-form found in DOM.');
     return;
   }
 
@@ -384,7 +385,7 @@ export async function setupFilterUI(allStars) {
       loadConstellationFullNames()
     ]);
   } catch (error) {
-    console.error('[setupFilterUI] Failed to initialize filter UI:', error);
+    logError('[setupFilterUI] Failed to initialize filter UI:', error);
     throw error;
   }
 }

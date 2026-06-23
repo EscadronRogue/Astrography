@@ -2,6 +2,7 @@
  * @file Shared form state capture/restore utilities.
  * Consolidates duplicated logic from app/presets.js and app/stellarClassState.js.
  */
+import { logWarn } from './logger.js';
 
 export function getElementByIdWithin(container, id) {
   if (!container || !id) return null;
@@ -24,7 +25,7 @@ export function getElementByIdWithin(container, id) {
  */
 export function captureFormState(container) {
   if (!container) {
-    console.warn('[captureFormState] Container element not found.');
+    logWarn('[captureFormState] Container element not found.');
     return {};
   }
   const state = {};
@@ -49,7 +50,7 @@ export function captureFormState(container) {
  */
 export function restoreFormState(container, state, { dispatchEvents = false } = {}) {
   if (!container || !state) {
-    console.warn('[restoreFormState] Missing container or state.');
+    logWarn('[restoreFormState] Missing container or state.');
     return;
   }
   Object.entries(state).forEach(([id, value]) => {

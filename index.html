@@ -473,7 +473,7 @@
         <h2>True Coordinates</h2>
         <p class="map-subtitle">Primary 3D cartesian star layout</p>
         <button class="fullscreen-btn" aria-label="Fullscreen True Coordinates Map">&#x2922;</button>
-        <canvas id="map3D"></canvas>
+        <canvas id="map3D" tabindex="0" aria-label="True coordinates 3D star map"></canvas>
         <div class="export-controls">
           <button id="export-true-png" class="export-btn">PNG</button>
           <button id="export-true-pdf" class="export-btn">PDF</button>
@@ -485,7 +485,7 @@
         <h2>Map</h2>
         <p class="map-subtitle">Primary UV / equirectangular source map</p>
         <button class="fullscreen-btn" aria-label="Fullscreen UV Map">&#x2922;</button>
-        <canvas id="uvMap"></canvas>
+        <canvas id="uvMap" tabindex="0" aria-label="UV equirectangular star map"></canvas>
         <div class="export-controls">
           <button id="export-uv-png" class="export-btn">PNG</button>
           <button id="export-uv-pdf" class="export-btn">PDF</button>
@@ -495,7 +495,7 @@
         <h2>Globe</h2>
         <p class="map-subtitle">Primary globe projected from the UV map</p>
         <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">&#x2922;</button>
-        <canvas id="sphereMap"></canvas>
+        <canvas id="sphereMap" tabindex="0" aria-label="UV globe star map"></canvas>
         <div class="export-controls">
           <button id="export-globe-png" class="export-btn">PNG</button>
           <button id="export-globe-pdf" class="export-btn">PDF</button>
@@ -505,7 +505,7 @@
         <h2>Legacy Globe</h2>
         <p class="map-subtitle">Legacy scene-based 3D plotting workflow</p>
         <button class="fullscreen-btn" aria-label="Fullscreen Legacy Globe Map">&#x2922;</button>
-        <canvas id="legacySphereMap"></canvas>
+        <canvas id="legacySphereMap" tabindex="0" aria-label="Legacy globe star map"></canvas>
         <div class="export-controls">
           <button id="export-legacy-globe-png" class="export-btn">PNG</button>
           <button id="export-legacy-globe-pdf" class="export-btn">PDF</button>
@@ -515,7 +515,7 @@
         <h2>Legacy Mollweide</h2>
         <p class="map-subtitle">Legacy flat-sky projection and editing workflow</p>
         <button class="fullscreen-btn" aria-label="Fullscreen Legacy Mollweide Map">&#x2922;</button>
-        <canvas id="legacyMollweideMap"></canvas>
+        <canvas id="legacyMollweideMap" tabindex="0" aria-label="Legacy Mollweide star map"></canvas>
         <div class="export-controls">
           <button id="export-mollweide" class="export-btn">Export</button>
           <button id="export-png" class="export-btn hidden-control">PNG</button>
@@ -535,23 +535,15 @@
 
   <div id="tooltip" class="tooltip" hidden></div>
 
-  <div id="viewpoint-banner" hidden
-       style="position:fixed;top:48px;left:50%;transform:translateX(-50%);
-              background:rgba(20,20,20,0.92);color:#ff6f61;
-              padding:6px 18px;border-radius:0 0 6px 6px;z-index:1100;
-              font-family:'Oswald',sans-serif;font-size:14px;
-              display:flex;align-items:center;gap:10px;
-              border:1px solid rgba(255,111,97,0.3);border-top:none;">
+  <div id="viewpoint-banner" hidden>
     <span id="viewpoint-banner-text">Viewing from: -</span>
-    <button id="viewpoint-banner-reset" type="button"
-            style="background:#ff6f61;color:#fff;border:none;border-radius:3px;
-                   padding:3px 10px;cursor:pointer;font-size:12px;font-family:inherit;">
+    <button id="viewpoint-banner-reset" type="button">
       Return to Sol
     </button>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="node_modules/jspdf/dist/jspdf.umd.min.js"></script>
+  <script src="node_modules/jszip/dist/jszip.min.js"></script>
   <script type="module" src="src/main.js"></script>
   <script src="src/ui/enhance.js" defer></script>
 </body>

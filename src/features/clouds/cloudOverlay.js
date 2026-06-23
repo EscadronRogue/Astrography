@@ -15,6 +15,7 @@ import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '
 import { uniqueColorFromName, getCloudNameFromFileUrl } from '../../shared/colorUtils.js';
 import { GLOBE_RADIUS, CIRCLE_SEGMENTS } from '../../shared/constants.js';
 import { normalizeCloudStarName } from './cloudNameUtils.js';
+import { logError } from '../../shared/logger.js';
 
 /**
  * Loads a cloud data file (JSON) from the provided URL.
@@ -284,7 +285,7 @@ export async function updateCloudsOverlay(completeStarList, scene, mapType, clou
         scene.userData.cloudOverlays.push(overlayLine);
       }
     } catch (e) {
-      console.error(e);
+      logError(e);
     }
   }
 }

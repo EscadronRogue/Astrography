@@ -11,7 +11,7 @@ import {
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { lightenColor } from './densityColorScale.js';
 import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../../render/engine/renderUtils.js';
-import { populateCellDistanceCaches, sumWeightedDistancesWithinRadius } from '../../shared/cellDistanceCache.js';
+import { buildDistanceQueryIndex, populateCellDistanceCaches, sumWeightedDistancesWithinRadius } from '../../shared/cellDistanceCache.js';
 import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
 import { InstancedCellLayer, createCellVisualState } from '../overlays/instancedCellLayer.js';
 
@@ -169,8 +169,8 @@ class DensityGridOverlay {
     });
   }
 
-  computeCellDensity(cell, radius = 10, tolerance = 0) {
-    cell.density = sumWeightedDistancesWithinRadius(cell, radius, tolerance);
+  computeCellDensity(cell, radius = 10, tolerance = 0, queryIndex = null) {
+    cell.density = sumWeightedDistancesWithinRadius(cell, radius, tolerance, queryIndex);
   }
 
   computeAdjacentLines() {
@@ -284,8 +284,9 @@ class DensityGridOverlay {
       this.refreshMollweide();
     }
 
+    const queryIndex = buildDistanceQueryIndex(this.cubesData[0]?.distanceCache, radius);
     this.cubesData.forEach(cell => {
-      this.computeCellDensity(cell, radius, tolerance);
+      this.computeCellDensity(cell, radius, tolerance, queryIndex);
     });
 
     const densities = this.cubesData.map(c => c.density);

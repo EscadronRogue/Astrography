@@ -1,6 +1,7 @@
 import * as THREE from '../../vendor/three.js';
 import { downloadBlob } from '../export/downloadUtils.js';
 import { createEditExportPayload, normalizeLabelEdits } from './editSchema.js';
+import { logError } from '../../shared/logger.js';
 
 export { normalizeLabelEdits } from './editSchema.js';
 
@@ -52,7 +53,7 @@ export function applyLabelEdits(manager, edits) {
     });
   }
   Promise.resolve(manager.buildAndApplyFilters()).catch(error => {
-    console.error('Failed to refresh after applying label edits:', error);
+    logError('Failed to refresh after applying label edits:', error);
   });
   if (typeof manager.registerMollweideEditableLines === 'function') {
     manager.registerMollweideEditableLines();

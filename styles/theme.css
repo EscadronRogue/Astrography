@@ -53,6 +53,7 @@ html, body {
 
 body {
   /* override inline overflow:hidden allowance */
+  background: var(--bg);
   background:
     radial-gradient(1200px 600px at 80% -10%, color-mix(in oklab, var(--accent) 6%, transparent), transparent 60%),
     radial-gradient(900px 500px at -10% 110%, color-mix(in oklab, var(--accent) 4%, transparent), transparent 60%),
@@ -91,6 +92,7 @@ input[type="number"],
 /* ---------- Header ---------------------------------------------------- */
 header {
   height: var(--header-height);
+  background: var(--bg-elev-2);
   background: linear-gradient(to bottom,
     color-mix(in oklab, var(--bg-elev-2) 95%, transparent),
     color-mix(in oklab, var(--bg-elev-1) 95%, transparent));
@@ -152,6 +154,7 @@ header h1::before {
 .main-container {
   margin-top: var(--header-height);
   height: calc(100vh - var(--header-height));
+  height: calc(100dvh - var(--header-height));
 }
 
 /* ---------- Maps section & cards -------------------------------------- */
@@ -258,6 +261,7 @@ header h1::before {
 }
 .fullscreen-btn:hover {
   color: var(--accent);
+  border-color: var(--accent);
   border-color: color-mix(in oklab, var(--accent) 40%, var(--hairline));
   background: var(--bg-elev-2);
 }
@@ -290,6 +294,17 @@ header h1::before {
   color: var(--fg);
   background: var(--hairline);
 }
+.export-controls button:disabled,
+.export-btn:disabled,
+.export-btn-unavailable {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+.export-controls button:disabled:hover,
+.export-btn:disabled:hover {
+  color: var(--muted);
+  background: transparent;
+}
 .export-controls button.active,
 .export-btn.active {
   background: var(--accent);
@@ -302,6 +317,7 @@ header h1::before {
   top: var(--header-height);
   width: 328px;
   padding: 0;
+  background: var(--bg-elev-1);
   background: color-mix(in oklab, var(--bg-elev-1) 92%, transparent);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
@@ -343,6 +359,7 @@ header h1::before {
 }
 .ag-filter-search input::placeholder { color: var(--fg-dim); }
 .ag-filter-search input:focus {
+  border-color: var(--accent);
   border-color: color-mix(in oklab, var(--accent) 55%, var(--hairline));
   background: var(--bg-elev-1);
 }
@@ -496,6 +513,7 @@ header h1::before {
 .sidebar .filter-item input[type="radio"]    { border-radius: 50%; }
 .sidebar .filter-item input[type="checkbox"]:hover,
 .sidebar .filter-item input[type="radio"]:hover {
+  border-color: var(--accent);
   border-color: color-mix(in oklab, var(--accent) 60%, var(--hairline-strong));
 }
 .sidebar .filter-item input[type="checkbox"]:checked,
@@ -523,6 +541,7 @@ header h1::before {
 }
 .sidebar .filter-item input[type="checkbox"]:focus-visible,
 .sidebar .filter-item input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
   outline: 2px solid color-mix(in oklab, var(--accent) 50%, transparent);
   outline-offset: 2px;
 }
@@ -577,6 +596,7 @@ header h1::before {
   outline: none;
 }
 .filter-item input[type="number"]:focus {
+  border-color: var(--accent);
   border-color: color-mix(in oklab, var(--accent) 55%, var(--hairline));
 }
 /* Hide spinner arrows */
@@ -635,18 +655,19 @@ header h1::before {
 #download-edits:hover,
 #upload-edits:hover {
   color: var(--accent);
+  border-color: var(--accent);
   border-color: color-mix(in oklab, var(--accent) 55%, var(--hairline-strong));
 }
 
-.filter-toggle-button {
+.filter-item .filter-toggle-button {
   width: 100%;
-  padding: 9px 10px !important;
+  padding: 9px 10px;
   text-align: center;
 }
-.filter-toggle-button.is-active {
-  background: var(--accent) !important;
-  color: var(--accent-ink) !important;
-  border-color: var(--accent) !important;
+.filter-item .filter-toggle-button.is-active {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
 }
 
 /* Stellar class subcategory */
@@ -711,11 +732,12 @@ header h1::before {
 fieldset.ag-hidden,
 .filter-item.ag-hidden,
 .stellar-class-subcategory.ag-hidden {
-  display: none !important;
+  display: none;
 }
 
 /* ---------- Tooltip --------------------------------------------------- */
 #tooltip {
+  background: var(--bg-elev-2);
   background: color-mix(in oklab, var(--bg-elev-2) 92%, transparent);
   color: var(--fg);
   border: 1px solid var(--hairline-strong);
@@ -782,6 +804,7 @@ fieldset.ag-hidden,
   font-size: 12px;
 }
 .tooltip-action-primary:not(:disabled):hover {
+  background: var(--accent);
   background: color-mix(in oklab, var(--accent) 88%, white 12%);
 }
 .tooltip-action-secondary {
@@ -799,26 +822,37 @@ fieldset.ag-hidden,
 
 /* ---------- Viewpoint banner ----------------------------------------- */
 #viewpoint-banner {
-  top: var(--header-height) !important;
-  background: color-mix(in oklab, var(--bg-elev-2) 95%, transparent) !important;
-  border: 1px solid var(--hairline-strong) !important;
-  border-top: none !important;
-  color: var(--accent) !important;
-  font-family: var(--font-ui) !important;
-  font-size: 12px !important;
+  position: fixed;
+  top: var(--header-height);
+  left: 50%;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(-50%);
+  background: rgba(20, 20, 20, 0.92);
+  background: color-mix(in oklab, var(--bg-elev-2) 95%, transparent);
+  border: 1px solid var(--hairline-strong);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 8px 18px !important;
+  padding: 8px 18px;
 }
 #viewpoint-banner-reset {
-  background: var(--accent) !important;
-  color: var(--accent-ink) !important;
-  border-radius: 4px !important;
-  padding: 4px 10px !important;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
   font-weight: 600;
   letter-spacing: 0.1em;
-  font-family: var(--font-ui) !important;
-  font-size: 10px !important;
+  font-family: var(--font-ui);
+  font-size: 10px;
   text-transform: uppercase;
 }
 
@@ -847,6 +881,7 @@ fieldset.ag-hidden,
 /* ---------- Export selection rect ------------------------------------ */
 #export-selection-rect {
   border: 1.5px dashed var(--accent);
+  background: rgba(240, 182, 75, 0.14);
   background: color-mix(in oklab, var(--accent) 14%, transparent);
 }
 
@@ -869,6 +904,7 @@ fieldset.ag-hidden,
   border-left: 3px solid var(--accent);
   border-radius: 8px;
   padding: 12px 40px 12px 14px;
+  background: var(--panel);
   background: color-mix(in oklab, var(--panel) 94%, black 6%);
   color: var(--fg);
   box-shadow: 0 10px 30px rgba(0,0,0,0.35);

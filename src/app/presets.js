@@ -1,5 +1,6 @@
 import { captureFormState, getElementByIdWithin, restoreFormState } from '../shared/formUtils.js';
 import { readStorageItem, removeStorageItem, writeStorageItem } from '../shared/storageUtils.js';
+import { logWarn } from '../shared/logger.js';
 
 export const PRESET_KEY = 'astrography-presets';
 export const PRESET_SCHEMA_VERSION = 3;
@@ -106,7 +107,7 @@ export function savePresets({
   };
 
   writeStorageItem(PRESET_KEY, JSON.stringify(payload), {
-    onError: error => console.warn('[savePresets] Failed to persist presets:', error)
+    onError: error => logWarn('[savePresets] Failed to persist presets:', error)
   });
 }
 
@@ -121,7 +122,7 @@ export function loadPresets({
   hiddenLineKeys
 }) {
   const serialized = readStorageItem(PRESET_KEY, {
-    onError: error => console.warn('[loadPresets] Failed to read saved presets:', error)
+    onError: error => logWarn('[loadPresets] Failed to read saved presets:', error)
   });
   if (!serialized) return false;
 
@@ -166,6 +167,6 @@ export function loadPresets({
 
 export function clearSavedPresets() {
   removeStorageItem(PRESET_KEY, {
-    onError: error => console.warn('[clearSavedPresets] Failed to clear presets:', error)
+    onError: error => logWarn('[clearSavedPresets] Failed to clear presets:', error)
   });
 }

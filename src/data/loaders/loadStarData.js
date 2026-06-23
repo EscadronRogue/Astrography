@@ -1,5 +1,6 @@
 import { fetchWithTimeout } from '../fetchWithTimeout.js';
 import { validateManifestFiles, validateStarBatch } from '../dataValidation.js';
+import { logError, logWarn } from '../../shared/logger.js';
 
 function normalizeNumber(value) {
   const num = typeof value === 'string' ? Number.parseFloat(value) : value;
@@ -15,15 +16,40 @@ function buildStableStarId(star) {
   );
 }
 
+function getCoordinateRadians(star) {
+  const raRad = normalizeNumber(star.RA_in_radian);
+  const decRad = normalizeNumber(star.DEC_in_radian);
+  if (Number.isFinite(raRad) && Number.isFinite(decRad)) {
+    return { ra: raRad, dec: decRad };
+  }
+  return {
+    ra: normalizeNumber(star.RA_in_degrees) * Math.PI / 180,
+    dec: normalizeNumber(star.DEC_in_degrees) * Math.PI / 180
+  };
+}
+
+function deriveCartesianCoordinates(star, distance) {
+  const { ra, dec } = getCoordinateRadians(star);
+  if (!Number.isFinite(distance) || !Number.isFinite(ra) || !Number.isFinite(dec)) {
+    return { x: undefined, y: undefined, z: undefined };
+  }
+  return {
+    x: -distance * Math.cos(dec) * Math.cos(ra),
+    y: distance * Math.sin(dec),
+    z: -distance * Math.cos(dec) * Math.sin(ra)
+  };
+}
+
 export function normalizeStarRecord(star) {
   const distance = normalizeNumber(star.distance ?? star.Distance_from_the_Sun);
   const apparentMagnitude = normalizeNumber(star.apparentMagnitude ?? star.Apparent_magnitude);
   const absoluteMagnitude = normalizeNumber(star.absoluteMagnitude ?? star.Absolute_magnitude);
   const stellarClass = star.stellarClass ?? star.Stellar_class ?? '';
   const constellation = star.constellation ?? star.Constellation ?? '';
-  const x = normalizeNumber(star.x_coordinate);
-  const y = normalizeNumber(star.y_coordinate);
-  const z = normalizeNumber(star.z_coordinate);
+  const derivedCoordinates = deriveCartesianCoordinates(star, distance);
+  const x = normalizeNumber(star.x_coordinate) ?? derivedCoordinates.x;
+  const y = normalizeNumber(star.y_coordinate) ?? derivedCoordinates.y;
+  const z = normalizeNumber(star.z_coordinate) ?? derivedCoordinates.z;
   return {
     ...star,
     distance,
@@ -55,7 +81,7 @@ export async function loadStarData({ onProgress, onBatchReady } = {}) {
   try {
     const manifestResp = await fetchWithTimeout(manifestUrl);
     if (!manifestResp.ok) {
-      console.warn(`Could not load manifest at ${manifestUrl} (HTTP ${manifestResp.status})`);
+      logWarn(`Could not load manifest at ${manifestUrl} (HTTP ${manifestResp.status})`);
       return [];
     }
 
@@ -71,14 +97,14 @@ export async function loadStarData({ onProgress, onBatchReady } = {}) {
       try {
         const resp = await fetchWithTimeout(`data/${name}`);
         if (!resp.ok) {
-          console.warn(`Missing star data file: data/${name} (HTTP ${resp.status})`);
+          logWarn(`Missing star data file: data/${name} (HTTP ${resp.status})`);
         } else {
           const batch = validateStarBatch(await resp.json(), `data/${name}`);
           const normalized = batch.map(normalizeStarRecord);
           allStars.push(...normalized);
         }
       } catch (fileErr) {
-        console.warn(`Error loading data/${name}:`, fileErr);
+        logWarn(`Error loading data/${name}:`, fileErr);
       }
 
       if (onProgress) onProgress(i + 1, total);
@@ -87,7 +113,7 @@ export async function loadStarData({ onProgress, onBatchReady } = {}) {
 
     return allStars;
   } catch (error) {
-    console.error('Error loading star data:', error);
+    logError('Error loading star data:', error);
     return [];
   }
 }

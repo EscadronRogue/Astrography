@@ -4,10 +4,8 @@
  */
 import { initIsolationFilter, updateIsolationFilter } from '../../isolation/isolationOverlay.js';
 import { initDensityFilter, updateDensityFilter } from '../../density/densityOverlay.js';
+import { getBudgetedOverlayGridSettings } from '../../overlays/gridBudget.js';
 import { disposeObject3D } from '../../../render/engine/renderUtils.js';
-
-let isolationOverlay = null;
-let densityOverlay = null;
 
 function normalizeScenes(scenes = {}) {
   return {
@@ -155,18 +153,27 @@ function addDensityToScenes(overlay, scenes) {
  * @param {Array} allStars - Complete star array.
  * @param {Object} filters - Current filter state.
  * @param {Function} computeAdaptiveGridSize - Grid size computation function.
+ * @param {Object} overlayState - App-scoped holder for overlay instances.
  * @returns {{ isolationOverlay: Object|null, densityOverlay: Object|null }}
  */
-export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize, scenes) {
+export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize, scenes, overlayState = {}) {
   const normalizedScenes = normalizeScenes(scenes);
+  let isolationOverlay = overlayState.isolationOverlay ?? null;
+  let densityOverlay = overlayState.densityOverlay ?? null;
 
   // --- Isolation overlay ---
   if (filters.enableIsolationFilter) {
-    const gridSize = computeAdaptiveGridSize(filters.isolationGridSize);
+    const gridSettings = getBudgetedOverlayGridSettings(
+      filters.minDistance,
+      filters.maxDistance,
+      computeAdaptiveGridSize(filters.isolationGridSize)
+    );
+    const { gridSize } = gridSettings;
 
     if (needsRebuild(isolationOverlay, filters, gridSize)) {
       removeOverlayFromScenes(isolationOverlay, ISOLATION_MESH_CONFIG, normalizedScenes);
       isolationOverlay = initIsolationFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
+      isolationOverlay.gridBudget = gridSettings;
       addIsolationToScenes(isolationOverlay, normalizedScenes);
     }
 
@@ -178,11 +185,17 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
 
   // --- Density overlay ---
   if (filters.enableDensityFilter) {
-    const gridSize = computeAdaptiveGridSize(filters.densityGridSize);
+    const gridSettings = getBudgetedOverlayGridSettings(
+      filters.minDistance,
+      filters.maxDistance,
+      computeAdaptiveGridSize(filters.densityGridSize)
+    );
+    const { gridSize } = gridSettings;
 
     if (needsRebuild(densityOverlay, filters, gridSize)) {
       removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG, normalizedScenes);
       densityOverlay = initDensityFilter(filters.minDistance, filters.maxDistance, allStars, gridSize);
+      densityOverlay.gridBudget = gridSettings;
       addDensityToScenes(densityOverlay, normalizedScenes);
     }
 
@@ -191,6 +204,9 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
     removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG, normalizedScenes);
     densityOverlay = null;
   }
+
+  overlayState.isolationOverlay = isolationOverlay;
+  overlayState.densityOverlay = densityOverlay;
 
   return { isolationOverlay, densityOverlay };
 }

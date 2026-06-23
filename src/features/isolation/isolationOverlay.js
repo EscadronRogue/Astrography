@@ -5,9 +5,10 @@ import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from '../dens
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, vectorToRaDec } from '../../shared/geometryUtils.js';
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries, loadConstellationFullNames } from '../constellations/constellationRenderer.js';
-import { populateCellDistanceCaches } from '../../shared/cellDistanceCache.js';
+import { getNearestCellDistance, populateCellDistanceCaches } from '../../shared/cellDistanceCache.js';
 import { disposeObject3D } from '../../render/engine/renderUtils.js';
 import { InstancedCellLayer, createCellVisualState } from '../overlays/instancedCellLayer.js';
+import { logWarn } from '../../shared/logger.js';
 
 // Helper to create line materials that support color and opacity gradients.
 function createGradientLineMaterial() {
@@ -270,10 +271,7 @@ class IsolationGridOverlay {
     // Compute isolation distances and min/max for color/opacity scaling
     const isoDistances = [];
     this.cubesData.forEach(cell => {
-      let isoDist = Infinity;
-      if (cell.distances && cell.distances.length > toleranceVal) {
-        isoDist = cell.distances[toleranceVal];
-      }
+      const isoDist = getNearestCellDistance(cell, toleranceVal);
       cell.isoDist = isoDist;
       isoDistances.push(isoDist);
     });
@@ -448,7 +446,7 @@ class IsolationGridOverlay {
     const centers = getConstellationCenters();
     const boundaries = getConstellationBoundaries();
     if (!boundaries.length) {
-      console.warn("No constellation boundaries available!");
+      logWarn('No constellation boundaries available!');
       return;
     }
     function minAngularDistanceToSegment(cellPos, p1, p2) {

@@ -1,6 +1,12 @@
 {
   "type": "module",
   "scripts": {
-    "test": "node scripts/verify.mjs"
+    "test": "node scripts/verify.mjs",
+    "test:browser": "node scripts/browserSmoke.mjs"
+  },
+  "dependencies": {
+    "jspdf": "4.2.1",
+    "jszip": "3.10.1",
+    "three": "0.128.0"
   }
 }

@@ -9,6 +9,10 @@ import { configureExportRenderer } from './rendererExportSettings.js';
 import { notifyError } from '../../shared/userNotifications.js';
 import { getMollweideCropPixels, getMollweideSvgViewBox } from './exportSizing.js';
 import { clamp01, normalizeHexColor } from '../../shared/colorParsing.js';
+import { getStarDisplayOpacity } from '../filters/logic/displayMetrics.js';
+import { assertWebGLAvailable } from '../../shared/webglSupport.js';
+import { logError, logWarn } from '../../shared/logger.js';
+import { collectMollweideSvgSceneModel } from './mollweideSvgSceneModel.js';
 
 function escapeXml(value) {
   return String(value ?? '').replace(/[&<>"']/g, char => ({
@@ -81,6 +85,214 @@ function getSvgStarLabelState(mollweideMap, star, radius) {
   return { transform };
 }
 
+function getPrimaryMaterial(object) {
+  const material = object?.material;
+  return Array.isArray(material) ? material[0] : material;
+}
+
+function getMaterialColorValue(material, fallback = '#ffffff') {
+  const uniformColor = material?.uniforms?.color?.value;
+  const color = uniformColor || material?.color;
+  if (color?.isColor || color instanceof THREE.Color) return `#${color.getHexString()}`;
+  return colorToHex(color, fallback);
+}
+
+function getMaterialOpacityValue(material, fallback = 1) {
+  const uniformOpacity = material?.uniforms?.opacity?.value;
+  if (Number.isFinite(uniformOpacity)) return clamp01(uniformOpacity);
+  const uniformOpacityFactor = material?.uniforms?.opacityFactor?.value;
+  if (Number.isFinite(uniformOpacityFactor)) return clamp01(uniformOpacityFactor);
+  if (Number.isFinite(material?.opacity)) return clamp01(material.opacity);
+  return clamp01(fallback);
+}
+
+function getWorldPoint(object, positionAttr, index, target = new THREE.Vector3()) {
+  target.fromBufferAttribute(positionAttr, index);
+  object.updateWorldMatrix?.(true, false);
+  return target.applyMatrix4(object.matrixWorld);
+}
+
+function getAttributeColorHex(attribute, indexA, indexB, fallback) {
+  if (!attribute) return fallback;
+  const color = new THREE.Color(
+    (attribute.getX(indexA) + attribute.getX(indexB)) / 2,
+    (attribute.getY(indexA) + attribute.getY(indexB)) / 2,
+    (attribute.getZ(indexA) + attribute.getZ(indexB)) / 2
+  );
+  return `#${color.getHexString()}`;
+}
+
+function getAttributeOpacity(attribute, indexA, indexB, fallback) {
+  if (!attribute) return fallback;
+  return clamp01((attribute.getX(indexA) + attribute.getX(indexB)) / 2);
+}
+
+function getSvgStrokeWidth(object, options = {}) {
+  if (Number.isFinite(options.strokeWidth)) return Math.max(0.01, options.strokeWidth);
+  const userData = object?.userData || {};
+  if (Number.isFinite(userData.baseLineWidth)) {
+    return Math.max(0.01, userData.baseLineWidth * (userData.exportLineWidthFactor || 1));
+  }
+  const materialWidth = getPrimaryMaterial(object)?.linewidth;
+  if (Number.isFinite(materialWidth)) {
+    return Math.max(0.04, materialWidth * (options.lineWidthScale || 0.025));
+  }
+  return 0.35;
+}
+
+function appendSvgLineSegments(parts, object, options = {}) {
+  if (!object || object.visible === false) return;
+  const geometry = object.geometry;
+  const positionAttr = geometry?.getAttribute?.('position');
+  if (!positionAttr || positionAttr.count < 2) return;
+
+  const material = getPrimaryMaterial(object);
+  const fallbackColor = getMaterialColorValue(material, options.color || '#ffffff');
+  const fallbackOpacity = options.opacity !== undefined
+    ? clamp01(options.opacity)
+    : getMaterialOpacityValue(material, object.userData?.baseOpacity ?? 1);
+  const colorAttr = geometry.getAttribute?.('color');
+  const alphaAttr = geometry.getAttribute?.('alpha');
+  const strokeWidth = getSvgStrokeWidth(object, options);
+  const step = object.isLineSegments || object.type === 'LineSegments' ? 2 : 1;
+  const pointA = new THREE.Vector3();
+  const pointB = new THREE.Vector3();
+  const layerAttr = options.layer ? ` data-layer="${escapeXml(options.layer)}"` : '';
+
+  for (let i = 0; i + 1 < positionAttr.count; i += step) {
+    const a = getWorldPoint(object, positionAttr, i, pointA);
+    const b = getWorldPoint(object, positionAttr, i + 1, pointB);
+    if (
+      !Number.isFinite(a.x) || !Number.isFinite(a.y) ||
+      !Number.isFinite(b.x) || !Number.isFinite(b.y)
+    ) {
+      continue;
+    }
+    if (a.lengthSq() < 1e-12 && b.lengthSq() < 1e-12) continue;
+    const svgA = getSvgPoint(a);
+    const svgB = getSvgPoint(b);
+    const stroke = getAttributeColorHex(colorAttr, i, i + 1, fallbackColor);
+    const opacity = getAttributeOpacity(alphaAttr, i, i + 1, fallbackOpacity);
+    if (opacity <= 0.001) continue;
+    parts.push(`<line${layerAttr} x1="${formatSvgNumber(svgA.x)}" y1="${formatSvgNumber(svgA.y)}" x2="${formatSvgNumber(svgB.x)}" y2="${formatSvgNumber(svgB.y)}" stroke="${stroke}" stroke-width="${formatSvgNumber(strokeWidth)}" stroke-opacity="${formatSvgNumber(opacity)}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`);
+  }
+}
+
+function appendSvgMeshTriangles(parts, mesh, options = {}) {
+  if (!mesh || mesh.visible === false) return;
+  const geometry = mesh.geometry;
+  const positionAttr = geometry?.getAttribute?.('position');
+  if (!positionAttr || positionAttr.count < 3) return;
+
+  const material = getPrimaryMaterial(mesh);
+  const fill = getMaterialColorValue(material, options.color || '#ffffff');
+  const opacity = options.opacity !== undefined
+    ? clamp01(options.opacity)
+    : getMaterialOpacityValue(material, 1);
+  if (opacity <= 0.001) return;
+
+  const indexAttr = geometry.index;
+  const point = new THREE.Vector3();
+  const layerAttr = options.layer ? ` data-layer="${escapeXml(options.layer)}"` : '';
+  const getIndex = index => (indexAttr ? indexAttr.getX(index) : index);
+  const count = indexAttr ? indexAttr.count : positionAttr.count;
+
+  for (let i = 0; i + 2 < count; i += 3) {
+    const svgPoints = [];
+    for (let j = 0; j < 3; j += 1) {
+      const worldPoint = getWorldPoint(mesh, positionAttr, getIndex(i + j), point);
+      if (!Number.isFinite(worldPoint.x) || !Number.isFinite(worldPoint.y)) {
+        svgPoints.length = 0;
+        break;
+      }
+      const svgPoint = getSvgPoint(worldPoint);
+      svgPoints.push(`${formatSvgNumber(svgPoint.x)},${formatSvgNumber(svgPoint.y)}`);
+    }
+    if (svgPoints.length === 3) {
+      parts.push(`<polygon${layerAttr} points="${svgPoints.join(' ')}" fill="${fill}" fill-opacity="${formatSvgNumber(opacity)}"/>`);
+    }
+  }
+}
+
+function appendSvgSpriteLabels(parts, labels, options = {}) {
+  if (!Array.isArray(labels)) return;
+  const layerAttr = options.layer ? ` data-layer="${escapeXml(options.layer)}"` : '';
+  labels.forEach(label => {
+    if (!label || label.visible === false) return;
+    const text = label.userData?.displayName || label.userData?.name || label.userData?.label;
+    if (!text) return;
+    const material = getPrimaryMaterial(label);
+    const opacity = getMaterialOpacityValue(material, options.opacity ?? 1);
+    if (opacity <= 0.001) return;
+    const point = getSvgPoint(label.position);
+    const fontSize = Number.isFinite(options.fontSize)
+      ? options.fontSize
+      : THREE.MathUtils.clamp((label.userData?.fontSize || 300) / 100, 2.2, 6);
+    const fill = options.color || getMaterialColorValue(material, '#ffffff');
+    parts.push(`<text${layerAttr} x="${formatSvgNumber(point.x)}" y="${formatSvgNumber(point.y)}" fill="${fill}" fill-opacity="${formatSvgNumber(opacity)}" font-family="Inter, Oswald, system-ui, sans-serif" font-size="${formatSvgNumber(fontSize)}" text-anchor="middle" dominant-baseline="central">${escapeXml(text)}</text>`);
+  });
+}
+
+async function appendSvgCanvasImage(parts, overlay, layer) {
+  const canvas = overlay?.canvas;
+  if (!canvas) return;
+  try {
+    const href = await canvasToPngDataUrl(canvas);
+    parts.push(`<image data-layer="${escapeXml(layer)}" href="${href}" x="-200" y="-100" width="400" height="200"/>`);
+  } catch (err) {
+    logWarn(`Skipping ${layer} SVG image layer: ${err?.message || err}`);
+  }
+}
+
+function appendSvgOverlayCells(parts, overlay, options = {}) {
+  const cells = Array.isArray(overlay?.cubesData) ? overlay.cubesData : [];
+  const gridSize = Number.isFinite(overlay?.gridSize) ? overlay.gridSize : 1;
+  const shape = options.shape || 'circle';
+  const layerAttr = options.layer ? ` data-layer="${escapeXml(options.layer)}"` : '';
+
+  cells.forEach(cell => {
+    const visual = cell?.mollweideMesh;
+    if (!cell?.active || !visual?.visible) return;
+    const opacity = clamp01(visual.material?.opacity ?? 1);
+    if (opacity <= 0.001) return;
+    const color = `#${(visual.material?.color || new THREE.Color(0xffffff)).getHexString()}`;
+    const point = getSvgPoint(visual.position);
+    const scaleX = Number.isFinite(visual.scale?.x) ? Math.abs(visual.scale.x) : 1;
+    const scaleY = Number.isFinite(visual.scale?.y) ? Math.abs(visual.scale.y) : scaleX;
+
+    if (shape === 'rect') {
+      const width = Math.max(0.05, gridSize * scaleX);
+      const height = Math.max(0.05, gridSize * scaleY);
+      parts.push(`<rect${layerAttr} x="${formatSvgNumber(point.x - width / 2)}" y="${formatSvgNumber(point.y - height / 2)}" width="${formatSvgNumber(width)}" height="${formatSvgNumber(height)}" fill="${color}" fill-opacity="${formatSvgNumber(opacity)}"/>`);
+      return;
+    }
+
+    const radius = Math.max(0.05, (gridSize / 2) * scaleX);
+    parts.push(`<circle${layerAttr} cx="${formatSvgNumber(point.x)}" cy="${formatSvgNumber(point.y)}" r="${formatSvgNumber(radius)}" fill="${color}" fill-opacity="${formatSvgNumber(opacity)}"/>`);
+  });
+}
+
+async function appendSvgSceneModelLayer(parts, layer) {
+  if (!layer) return;
+  if (layer.kind === 'meshTriangles') {
+    appendSvgMeshTriangles(parts, layer.mesh, layer);
+  } else if (layer.kind === 'canvasImage') {
+    await appendSvgCanvasImage(parts, layer.overlay, layer.layer);
+  } else if (layer.kind === 'overlayCells') {
+    appendSvgOverlayCells(parts, layer.overlay, layer);
+  } else if (layer.kind === 'lineSegments') {
+    appendSvgLineSegments(parts, layer.object, layer);
+  } else if (layer.kind === 'spriteLabels') {
+    appendSvgSpriteLabels(parts, layer.labels, layer);
+  }
+}
+
+async function appendSvgSceneModelLayers(parts, layers) {
+  for (const layer of layers || []) {
+    await appendSvgSceneModelLayer(parts, layer);
+  }
+}
+
 export class ExportManager {
   constructor(mollweideMap) {
     this.mollweideMap = mollweideMap;
@@ -93,6 +305,7 @@ export class ExportManager {
     this.exportStart = null;
     this.exportCurrentRect = null;
     this.isSelecting = false;
+    this.exportInProgress = false;
   }
 
   scaleMollweideSceneForExport(scale) {
@@ -163,94 +376,104 @@ export class ExportManager {
   }
 
   async exportMollweideMap(format = 'png', rect = null) {
-    const baseWidth = this.mollweideMap.renderer.domElement.width;
-    const baseHeight = this.mollweideMap.renderer.domElement.height;
-    if (baseWidth <= 0 || baseHeight <= 0) {
-      throw new Error('Mollweide canvas has no exportable size.');
+    if (this.exportInProgress) {
+      throw new Error('A Mollweide export is already in progress.');
     }
-
-    const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
-    exportRenderer.setPixelRatio(1);
-    configureExportRenderer(exportRenderer, this.mollweideMap.renderer);
-    const maxSize = exportRenderer.capabilities.maxTextureSize || EXPORT_MAX_TILE_SIZE;
-    const requestedScale = Math.max(1, EXPORT_TARGET_WIDTH / baseWidth, EXPORT_TARGET_HEIGHT / baseHeight);
-    const scale = Math.min(requestedScale, Math.max(1, maxSize));
-    if (scale < requestedScale) {
-      console.warn(`Export scale capped from ${requestedScale.toFixed(2)} to ${scale.toFixed(2)} by WebGL texture limits.`);
-    }
-
-    if (rect && (rect.width < 2 || rect.height < 2)) {
-      rect = null;
-    }
-
-    this.scaleMollweideSceneForExport(scale);
-    const exportWidth = Math.round(baseWidth * scale);
-    const exportHeight = Math.round(baseHeight * scale);
-    const { cropX, cropY, cropW, cropH } = getMollweideCropPixels(rect, this.mollweideMap.canvas, baseWidth, baseHeight);
-    const exportCropW = Math.round(cropW * scale);
-    const exportCropH = Math.round(cropH * scale);
-    const finalCanvas = document.createElement('canvas');
-    finalCanvas.width = exportCropW;
-    finalCanvas.height = exportCropH;
-    const ctx = finalCanvas.getContext('2d');
-    if (!ctx) {
-      this.restoreMollweideScene(scale);
-      exportRenderer.dispose();
-      throw new Error('2D canvas context unavailable');
-    }
-    const tile = Math.max(1, Math.min(Math.floor(maxSize / scale), EXPORT_MAX_TILE_SIZE));
+    this.exportInProgress = true;
 
     try {
-      for (let y = cropY; y < cropY + cropH; y += tile) {
-        for (let x = cropX; x < cropX + cropW; x += tile) {
-          const tileW = Math.min(tile, cropW - (x - cropX));
-          const tileH = Math.min(tile, cropH - (y - cropY));
-          const tileWScaled = Math.max(1, Math.round(tileW * scale));
-          const tileHScaled = Math.max(1, Math.round(tileH * scale));
-          exportRenderer.setSize(tileWScaled, tileHScaled, false);
-          const cam = this.mollweideMap.camera.clone();
-          const aspect = baseWidth / baseHeight;
-          cam.left = (-this.mollweideMap.frustumSize * aspect) / 2;
-          cam.right = (this.mollweideMap.frustumSize * aspect) / 2;
-          cam.top = this.mollweideMap.frustumSize / 2;
-          cam.bottom = -this.mollweideMap.frustumSize / 2;
-          cam.updateProjectionMatrix();
-          cam.setViewOffset(
-            exportWidth,
-            exportHeight,
-            Math.round(x * scale),
-            Math.round(y * scale),
-            tileWScaled,
-            tileHScaled
-          );
-          exportRenderer.render(this.mollweideMap.scene, cam);
-          cam.clearViewOffset();
-          ctx.drawImage(
-            exportRenderer.domElement,
-            Math.round((x - cropX) * scale),
-            Math.round((y - cropY) * scale),
-            tileWScaled,
-            tileHScaled
-          );
+      const baseWidth = this.mollweideMap.renderer.domElement.width;
+      const baseHeight = this.mollweideMap.renderer.domElement.height;
+      if (baseWidth <= 0 || baseHeight <= 0) {
+        throw new Error('Mollweide canvas has no exportable size.');
+      }
+
+      assertWebGLAvailable();
+      const exportRenderer = new THREE.WebGLRenderer({ antialias: true });
+      exportRenderer.setPixelRatio(1);
+      configureExportRenderer(exportRenderer, this.mollweideMap.renderer);
+      const maxSize = exportRenderer.capabilities.maxTextureSize || EXPORT_MAX_TILE_SIZE;
+      const requestedScale = Math.max(1, EXPORT_TARGET_WIDTH / baseWidth, EXPORT_TARGET_HEIGHT / baseHeight);
+      const scale = Math.min(requestedScale, Math.max(1, maxSize));
+      if (scale < requestedScale) {
+        logWarn(`Export scale capped from ${requestedScale.toFixed(2)} to ${scale.toFixed(2)} by WebGL texture limits.`);
+      }
+
+      if (rect && (rect.width < 2 || rect.height < 2)) {
+        rect = null;
+      }
+
+      this.scaleMollweideSceneForExport(scale);
+      const exportWidth = Math.round(baseWidth * scale);
+      const exportHeight = Math.round(baseHeight * scale);
+      const { cropX, cropY, cropW, cropH } = getMollweideCropPixels(rect, this.mollweideMap.canvas, baseWidth, baseHeight);
+      const exportCropW = Math.round(cropW * scale);
+      const exportCropH = Math.round(cropH * scale);
+      const finalCanvas = document.createElement('canvas');
+      finalCanvas.width = exportCropW;
+      finalCanvas.height = exportCropH;
+      const ctx = finalCanvas.getContext('2d');
+      if (!ctx) {
+        this.restoreMollweideScene(scale);
+        exportRenderer.dispose();
+        throw new Error('2D canvas context unavailable');
+      }
+      const tile = Math.max(1, Math.min(Math.floor(maxSize / scale), EXPORT_MAX_TILE_SIZE));
+
+      try {
+        for (let y = cropY; y < cropY + cropH; y += tile) {
+          for (let x = cropX; x < cropX + cropW; x += tile) {
+            const tileW = Math.min(tile, cropW - (x - cropX));
+            const tileH = Math.min(tile, cropH - (y - cropY));
+            const tileWScaled = Math.max(1, Math.round(tileW * scale));
+            const tileHScaled = Math.max(1, Math.round(tileH * scale));
+            exportRenderer.setSize(tileWScaled, tileHScaled, false);
+            const cam = this.mollweideMap.camera.clone();
+            const aspect = baseWidth / baseHeight;
+            cam.left = (-this.mollweideMap.frustumSize * aspect) / 2;
+            cam.right = (this.mollweideMap.frustumSize * aspect) / 2;
+            cam.top = this.mollweideMap.frustumSize / 2;
+            cam.bottom = -this.mollweideMap.frustumSize / 2;
+            cam.updateProjectionMatrix();
+            cam.setViewOffset(
+              exportWidth,
+              exportHeight,
+              Math.round(x * scale),
+              Math.round(y * scale),
+              tileWScaled,
+              tileHScaled
+            );
+            exportRenderer.render(this.mollweideMap.scene, cam);
+            cam.clearViewOffset();
+            ctx.drawImage(
+              exportRenderer.domElement,
+              Math.round((x - cropX) * scale),
+              Math.round((y - cropY) * scale),
+              tileWScaled,
+              tileHScaled
+            );
+          }
         }
+      } finally {
+        this.restoreMollweideScene(scale);
+        exportRenderer.dispose();
+      }
+
+      if (format === 'pdf') {
+        const imgData = await canvasToPngDataUrl(finalCanvas);
+        const JsPDF = getJsPdfConstructor();
+        const pdf = new JsPDF({
+          orientation: exportCropW >= exportCropH ? 'landscape' : 'portrait',
+          unit: 'px',
+          format: [exportCropW, exportCropH]
+        });
+        pdf.addImage(imgData, 'PNG', 0, 0, exportCropW, exportCropH);
+        pdf.save('mollweide_map.pdf');
+      } else {
+        await downloadCanvasAsPng(finalCanvas, 'mollweide_map.png');
       }
     } finally {
-      this.restoreMollweideScene(scale);
-      exportRenderer.dispose();
-    }
-
-    if (format === 'pdf') {
-      const imgData = await canvasToPngDataUrl(finalCanvas);
-      const JsPDF = getJsPdfConstructor();
-      const pdf = new JsPDF({
-        orientation: exportCropW >= exportCropH ? 'landscape' : 'portrait',
-        unit: 'px',
-        format: [exportCropW, exportCropH]
-      });
-      pdf.addImage(imgData, 'PNG', 0, 0, exportCropW, exportCropH);
-      pdf.save('mollweide_map.pdf');
-    } else {
-      await downloadCanvasAsPng(finalCanvas, 'mollweide_map.png');
+      this.exportInProgress = false;
     }
   }
 
@@ -262,14 +485,14 @@ export class ExportManager {
     return getMollweideSvgViewBox(rect, this.mollweideMap.canvas, this.mollweideMap.frustumSize, this.mollweideMap.camera.position);
   }
 
-  exportMollweideSvg(rect = null) {
+  async exportMollweideSvg(rect = null) {
     const viewBox = this.getSvgViewBox(rect);
-    const stars = Array.isArray(this.mollweideMap.starObjects) ? this.mollweideMap.starObjects : [];
-    const connections = Array.isArray(this.mollweideMap.connectionObjects) ? this.mollweideMap.connectionObjects : [];
+    const sceneModel = collectMollweideSvgSceneModel(this.mollweideMap);
+    const { stars, connections } = sceneModel;
     const { connectionMaxWidth } = getConnectionLineParams();
-    const connectionOpacity = clamp01(this.mollweideMap.connectionOpacity ?? 0.5);
-    const starOpacity = clamp01(this.mollweideMap.starOpacity ?? 1);
-    const labelOpacity = clamp01(this.mollweideMap.labelOpacity ?? 1);
+    const connectionOpacity = clamp01(sceneModel.connectionOpacity);
+    const starOpacity = clamp01(sceneModel.starOpacity);
+    const labelOpacity = clamp01(sceneModel.labelOpacity);
     const largestDistance = connections.reduce((largest, pair) => Math.max(largest, pair.distance || 0), 0);
     const smallestDistance = connections.reduce((smallest, pair) => Math.min(smallest, pair.distance || Infinity), Infinity);
     const distanceRange = largestDistance - smallestDistance || 1;
@@ -282,6 +505,8 @@ export class ExportManager {
       '<rect x="-220" y="-120" width="440" height="240" fill="#070a12"/>',
       '<g clip-path="url(#mollweide-clip)">'
     ];
+
+    await appendSvgSceneModelLayers(parts, sceneModel.clippedLayers);
 
     connections.forEach(pair => {
       if (!pair.starA?.mollweidePosition || !pair.starB?.mollweidePosition) return;
@@ -299,8 +524,10 @@ export class ExportManager {
       if (!star.mollweidePosition) return;
       const point = getSvgPoint(star.mollweidePosition);
       const radius = Math.max(0.16, Math.min(3, (star.displaySize ?? 1) * 0.45));
-      parts.push(`<circle cx="${formatSvgNumber(point.x)}" cy="${formatSvgNumber(point.y)}" r="${formatSvgNumber(radius)}" fill="${colorToHex(star.displayColor)}" fill-opacity="${formatSvgNumber(starOpacity)}"/>`);
+      parts.push(`<circle cx="${formatSvgNumber(point.x)}" cy="${formatSvgNumber(point.y)}" r="${formatSvgNumber(radius)}" fill="${colorToHex(star.displayColor)}" fill-opacity="${formatSvgNumber(getStarDisplayOpacity(star, starOpacity))}"/>`);
     });
+
+    await appendSvgSceneModelLayers(parts, sceneModel.labelLayers);
 
     stars.forEach(star => {
       if (!star.mollweidePosition || !star.displayName) return;
@@ -309,11 +536,9 @@ export class ExportManager {
       parts.push(`<text transform="${label.transform}" fill="${colorToHex(star.displayColor)}" fill-opacity="${formatSvgNumber(labelOpacity)}" font-family="Inter, Oswald, system-ui, sans-serif" font-size="2.4" text-anchor="middle" dominant-baseline="central">${escapeXml(star.displayName)}</text>`);
     });
 
-    parts.push(
-      '</g>',
-      '<ellipse cx="0" cy="0" rx="200" ry="100" fill="none" stroke="#f0b64b" stroke-width="0.35" vector-effect="non-scaling-stroke"/>',
-      '</svg>'
-    );
+    parts.push('</g>');
+    await appendSvgSceneModelLayers(parts, sceneModel.borderLayers);
+    parts.push('</svg>');
 
     downloadBlob(new Blob([parts.join('\n')], { type: 'image/svg+xml;charset=utf-8' }), 'mollweide_map.svg');
   }
@@ -389,7 +614,7 @@ export class ExportManager {
       try {
         await this.exportMollweideMap('png', this.exportCurrentRect);
       } catch (error) {
-        console.error('PNG export failed:', error);
+        logError('PNG export failed:', error);
         notifyError('PNG export failed', error);
       } finally {
         this.exitExportSelection();
@@ -399,17 +624,17 @@ export class ExportManager {
       try {
         await this.exportMollweideMap('pdf', this.exportCurrentRect);
       } catch (error) {
-        console.error('PDF export failed:', error);
+        logError('PDF export failed:', error);
         notifyError('PDF export failed', error);
       } finally {
         this.exitExportSelection();
       }
     };
-    this._onSvgClick = () => {
+    this._onSvgClick = async () => {
       try {
-        this.exportMollweideSvg(this.exportCurrentRect);
+        await this.exportMollweideSvg(this.exportCurrentRect);
       } catch (error) {
-        console.error('SVG export failed:', error);
+        logError('SVG export failed:', error);
         notifyError('SVG export failed', error);
       } finally {
         this.exitExportSelection();

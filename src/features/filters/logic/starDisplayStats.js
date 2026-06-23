@@ -1,4 +1,5 @@
 import { EPSILON } from '../../../shared/constants.js';
+import { getDisplayDistance } from './displayMetrics.js';
 
 export function needsDisplayStats(filters) {
   return filters?.size === 'distance' ||
@@ -17,7 +18,7 @@ export function computeDisplayStats(stars) {
 
   for (let index = 0; index < stars.length; index += 1) {
     const star = stars[index];
-    const distance = star.distance;
+    const distance = getDisplayDistance(star);
     if (Number.isFinite(distance)) {
       if (distance < stats.distanceMin) stats.distanceMin = distance;
       if (distance > stats.distanceMax) stats.distanceMax = distance;

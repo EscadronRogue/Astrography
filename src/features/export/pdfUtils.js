@@ -1,9 +1,17 @@
+export function hasJsPdfConstructor() {
+  return Boolean(globalThis.jspdf?.jsPDF);
+}
+
 export function getJsPdfConstructor() {
   const constructor = globalThis.jspdf?.jsPDF;
   if (!constructor) {
     throw new Error('PDF export requires jsPDF, but it is not loaded.');
   }
   return constructor;
+}
+
+export function hasJsZipConstructor() {
+  return Boolean(globalThis.JSZip);
 }
 
 export function getJsZipConstructor() {

@@ -43,6 +43,7 @@ export function buildStarLayerSignature(stars, { starOpacity = 1, viewpointStarI
     hash = mixHash(hash, hashString(getStarRenderKey(star)));
     hash = mixHash(hash, hashString(star.displayColor || '#ffffff'));
     hash = mixHash(hash, hashNumber(star.displaySize ?? 1, 100));
+    hash = mixHash(hash, hashNumber(star.displayOpacity ?? 1, 1000));
   });
   return `${stars?.length || 0}:${hash}`;
 }

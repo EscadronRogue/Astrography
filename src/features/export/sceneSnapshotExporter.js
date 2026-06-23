@@ -2,7 +2,8 @@ import * as THREE from '../../vendor/three.js';
 import { canvasToPngDataUrl, downloadCanvasAsPng } from './downloadUtils.js';
 import { getJsPdfConstructor } from './pdfUtils.js';
 import { configureExportRenderer } from './rendererExportSettings.js';
-import { getSceneSnapshotSize } from './exportSizing.js';
+import { assertWebGLAvailable } from '../../shared/webglSupport.js';
+import { collectSceneSnapshotModel } from './exportSceneModel.js';
 
 function cloneCameraForSnapshot(manager, width, height) {
   const sourceCamera = manager.camera;
@@ -30,8 +31,11 @@ function cloneCameraForSnapshot(manager, width, height) {
   return camera;
 }
 
-function renderSnapshotCanvas(manager) {
-  const { width, height } = getSceneSnapshotSize(manager);
+function renderSnapshotCanvas(sceneModel) {
+  const manager = sceneModel.source;
+  const width = sceneModel.width;
+  const height = sceneModel.height;
+  assertWebGLAvailable();
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(1);
   configureExportRenderer(renderer, manager.renderer);
@@ -51,8 +55,12 @@ function renderSnapshotCanvas(manager) {
 }
 
 export async function exportSceneSnapshot(manager, format, filenameBase) {
-  const snapshot = renderSnapshotCanvas(manager);
-  const filename = filenameBase.replace(/[^a-z0-9_-]+/gi, '_').replace(/^_+|_+$/g, '').toLowerCase();
+  const sceneModel = collectSceneSnapshotModel(manager, {
+    formats: ['png', 'pdf'],
+    filenameBase
+  });
+  const snapshot = renderSnapshotCanvas(sceneModel);
+  const filename = sceneModel.metadata.filename;
 
   if (format === 'pdf') {
     try {

@@ -1,1 +1,1 @@
-export * from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+export * from '../../node_modules/three/build/three.module.js';

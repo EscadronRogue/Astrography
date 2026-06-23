@@ -21,7 +21,7 @@ function refreshAncestorCollapsibleHeights(startNode) {
   }
 }
 
-function bindCollapsibleTrigger(trigger, contentDiv, { maxScrollHeight = null } = {}) {
+function bindCollapsibleTrigger(trigger, contentDiv, { maxScrollHeight = null, onToggle = null } = {}) {
   if (!trigger || !contentDiv || trigger.dataset.collapsibleBound === 'true') return;
 
   trigger.dataset.collapsibleBound = 'true';
@@ -29,6 +29,7 @@ function bindCollapsibleTrigger(trigger, contentDiv, { maxScrollHeight = null } 
     trigger.classList.toggle('active');
     const isActive = trigger.classList.contains('active');
     trigger.setAttribute('aria-expanded', String(isActive));
+    onToggle?.({ isActive, trigger, contentDiv });
 
     if (isActive) {
       const contentHeight = contentDiv.scrollHeight;
@@ -196,7 +197,7 @@ export function syncSliderPair(sliderId, numberId, displayId) {
  * @param {number} [maxScrollHeight=300] - Max height before scrolling.
  * @returns {HTMLHeadingElement}
  */
-export function createSubcategoryHeader(text, subcontentDiv, maxScrollHeight = 300) {
+export function createSubcategoryHeader(text, subcontentDiv, maxScrollHeight = 300, options = {}) {
   const header = document.createElement('h3');
   header.classList.add('collapsible-subcategory', 'subcategory-header');
   header.textContent = text;
@@ -204,7 +205,7 @@ export function createSubcategoryHeader(text, subcontentDiv, maxScrollHeight = 3
   subcontentDiv.style.maxHeight = '0px';
   subcontentDiv.style.overflowY = 'hidden';
 
-  bindCollapsibleTrigger(header, subcontentDiv, { maxScrollHeight });
+  bindCollapsibleTrigger(header, subcontentDiv, { maxScrollHeight, onToggle: options.onToggle });
 
   return header;
 }

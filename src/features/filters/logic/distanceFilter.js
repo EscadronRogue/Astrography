@@ -4,6 +4,8 @@
  * the original star.distance.  When viewing from another star,
  * viewpointDistance is the Euclidean distance to that star.
  */
+import { getDisplayDistance } from './displayMetrics.js';
+
 
 /**
  * Filters stars to only include those within the specified distance range
@@ -16,7 +18,7 @@ export function applyDistanceFilter(stars, filters) {
   const minDist = filters.minDistance ?? 0;
   const maxDist = filters.maxDistance ?? 20;
   return stars.filter(star => {
-    const d = star.viewpointDistance ?? star.distance;
+    const d = getDisplayDistance(star);
     return Number.isFinite(d) && d >= minDist && d <= maxDist;
   });
 }

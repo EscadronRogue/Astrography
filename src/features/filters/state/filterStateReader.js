@@ -12,6 +12,14 @@ function readCheckboxValue(formData, name) {
   return formData.get(name) !== null;
 }
 
+function normalizeDistanceRange(minDistance, maxDistance) {
+  const safeMin = Number.isFinite(minDistance) ? minDistance : 0;
+  const safeMax = Number.isFinite(maxDistance) ? maxDistance : 20;
+  return safeMin <= safeMax
+    ? { minDistance: safeMin, maxDistance: safeMax }
+    : { minDistance: safeMax, maxDistance: safeMin };
+}
+
 function readClassScaleMap(formData, suffix) {
   return [...STELLAR_CLASSES, 'Other'].reduce((accumulator, stellarClass) => {
     accumulator[stellarClass] = readNumericValue(
@@ -36,6 +44,10 @@ export function readFilterState(filterForm) {
     : new FormData(filterForm);
   const selectedDustClouds = formData.getAll('dust-clouds');
   const dustCloudMode = formData.get('dust-cloud-mode') === 'legacy' ? 'legacy' : 'density';
+  const { minDistance, maxDistance } = normalizeDistanceRange(
+    readNumericValue(formData, 'min-distance', 0),
+    readNumericValue(formData, 'max-distance', 20)
+  );
 
   return {
     size: formData.get('size'),
@@ -60,8 +72,8 @@ export function readFilterState(filterForm) {
     densityTolerance: readNumericValue(formData, 'density-tolerance', 0, Number.parseInt),
     enableIsolationLabeling: readCheckboxValue(formData, 'enable-isolation-labeling'),
     enableDensityLabeling: readCheckboxValue(formData, 'enable-density-labeling'),
-    minDistance: readNumericValue(formData, 'min-distance', 0),
-    maxDistance: readNumericValue(formData, 'max-distance', 20),
+    minDistance,
+    maxDistance,
     showDistanceInLabels: readCheckboxValue(formData, 'show-distance-in-labels'),
     isolationGridSize: readNumericValue(formData, 'isolation-grid-size', 1),
     densityGridSize: readNumericValue(formData, 'density-grid-size', 1),

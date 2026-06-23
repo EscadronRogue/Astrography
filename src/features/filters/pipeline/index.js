@@ -15,20 +15,12 @@ import { setupFilterUI, generateStellarClassFilters } from '../../../ui/sidebar/
 import { updateDerivedOverlays } from '../state/filterOverlayState.js';
 import { isDefaultViewpoint, getViewpointStarId } from '../../../shared/viewpoint.js';
 import { getAngularProjectionStars } from '../state/filterProjectionStars.js';
-
-let filterForm = null;
-
-function getFilterForm() {
-  if (!filterForm) {
-    filterForm = document.getElementById('filters-form');
-  }
-  return filterForm;
-}
+import { getFilterForm } from '../filterControls.js';
 
 export { setupFilterUI, generateStellarClassFilters };
 
 export function applyFilters(allStars, context = {}) {
-  const form = getFilterForm();
+  const form = context.form || getFilterForm(context);
   if (!form) {
     return createDefaultFilterResult(allStars);
   }
@@ -69,7 +61,8 @@ export function applyFilters(allStars, context = {}) {
     allStars,
     filters,
     computeAdaptiveGridSize,
-    context.scenes
+    context.scenes,
+    context.overlayState
   );
 
   return {

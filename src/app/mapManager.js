@@ -7,11 +7,12 @@ import { LabelManager } from '../features/labels/labelManager.js';
 import { getMollweideLambda0, setMollweideLambda0, splitMollweideWrap } from '../shared/geometryUtils.js';
 import { requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { createMollweideBackground, createMollweideBorder, createMollweideMask, debounce } from './mapDecorations.js';
-import { STAR_TEXTURE_SIZE, CONNECTION_LABEL_BASE_FONT } from '../shared/constants.js';
+import { createInstancedStarMaterial, createStarMaterial, createStarTexture } from './mapStarMaterials.js';
+import { addTrueCoordinateDistanceLabels } from './mapConnectionLabels.js';
 import { getViewpointStarId } from '../shared/viewpoint.js';
 import { configureRendererForCanvas } from '../shared/canvasSizing.js';
-import { createMeasuredTextCanvas } from '../shared/textCanvas.js';
 import { clamp01, normalizeHexColor, writeUnitRgb } from '../shared/colorParsing.js';
+import { addWebGLContextLossHandlers, assertWebGLAvailable } from '../shared/webglSupport.js';
 import {
   buildConnectionVisualSignature,
   getConnectionDistanceBounds,
@@ -19,57 +20,6 @@ import {
   haveSameKeys,
   resetConnectionDistanceBoundsCache
 } from '../features/connections/connectionRenderState.js';
-
-function createStarTexture() {
-  const size = STAR_TEXTURE_SIZE;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, 'rgba(255,255,255,1)');
-  gradient.addColorStop(0.6, 'rgba(255,255,255,0.8)');
-  gradient.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.needsUpdate = true;
-  return texture;
-}
-
-function createStarMaterial(texture, opacity, sizeAttenuation, cameraZoom) {
-  return new THREE.ShaderMaterial({
-    uniforms: {
-      pointTexture: { value: texture },
-      opacity: { value: opacity },
-      cameraZoom: { value: cameraZoom ?? 1.0 }
-    },
-    vertexShader: `
-      attribute float size;
-      attribute vec3 customColor;
-      varying vec3 vColor;
-      uniform float cameraZoom;
-      void main() {
-        vColor = customColor;
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = size * cameraZoom;
-        gl_Position = projectionMatrix * mvPosition;
-      }
-    `,
-    fragmentShader: `
-      uniform sampler2D pointTexture;
-      uniform float opacity;
-      varying vec3 vColor;
-      void main() {
-        vec4 texColor = texture2D(pointTexture, gl_PointCoord);
-        if (texColor.a < 0.01) discard;
-        gl_FragColor = vec4(vColor, texColor.a * opacity);
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-    vertexColors: true
-  });
-}
 
 export class MapManager {
   constructor({ canvasId, mapType, state, scheduleMollweideUpdate, getEditManager }) {
@@ -79,6 +29,7 @@ export class MapManager {
     this.scheduleMollweideUpdate = scheduleMollweideUpdate;
     this.getEditManager = getEditManager;
     this.scene = new THREE.Scene();
+    assertWebGLAvailable();
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
       antialias: true
@@ -152,6 +103,15 @@ export class MapManager {
     this.scene.add(this.starGroup);
     this.debouncedResize = debounce(() => this.onResize(), 200);
     window.addEventListener('resize', this.debouncedResize, false);
+    this.webglContextDisposer = addWebGLContextLossHandlers(this.canvas, {
+      onLost: () => {
+        this.renderDirty = false;
+      },
+      onRestored: () => {
+        this.renderDirty = true;
+        requestRenderIfAvailable(this);
+      }
+    });
   }
 
   clearStarGroup() {
@@ -171,10 +131,12 @@ export class MapManager {
         const positions = new Float32Array(count * 3);
         const colors = new Float32Array(count * 3);
         const sizes = new Float32Array(count);
+        const opacities = new Float32Array(count);
         const geometry = new THREE.BufferGeometry();
         geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         geometry.setAttribute('customColor', new THREE.BufferAttribute(colors, 3));
         geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+        geometry.setAttribute('customOpacity', new THREE.BufferAttribute(opacities, 1));
         const texture = createStarTexture();
         const zoomVal = this.camera.isOrthographicCamera ? this.camera.zoom : 1.0;
         const material = createStarMaterial(texture, this.starOpacity, !this.camera.isOrthographicCamera, zoomVal);
@@ -197,12 +159,8 @@ export class MapManager {
           dummyColors[i * 3 + 2] = 1;
         }
         baseGeometry.setAttribute('color', new THREE.BufferAttribute(dummyColors, 3));
-        const material = new THREE.MeshBasicMaterial({
-          color: 0xffffff,
-          transparent: true,
-          opacity: this.starOpacity,
-          vertexColors: true
-        });
+        const material = createInstancedStarMaterial(this.starOpacity);
+        baseGeometry.setAttribute('instanceOpacity', new THREE.InstancedBufferAttribute(new Float32Array(count), 1));
         this.instancedMesh = new THREE.InstancedMesh(baseGeometry, material, count);
         this.instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
         this.instancedMesh.renderOrder = 4;
@@ -218,6 +176,7 @@ export class MapManager {
       const positions = this.points.geometry.attributes.position.array;
       const colors = this.points.geometry.attributes.customColor.array;
       const sizes = this.points.geometry.attributes.size.array;
+      const opacities = this.points.geometry.attributes.customOpacity.array;
       for (let i = 0; i < stars.length; i++) {
         const star = stars[i];
         const pos = star.mollweidePosition;
@@ -226,15 +185,19 @@ export class MapManager {
         positions[i * 3 + 2] = pos ? pos.z : 0;
         const size = star.displaySize !== undefined ? star.displaySize : 1;
         sizes[i] = size * 0.4 * 25.0;
+        opacities[i] = Number.isFinite(star.displayOpacity) ? clamp01(star.displayOpacity) : 1;
         writeUnitRgb(colors, i * 3, star.displayColor, '#ffffff');
       }
       this.points.geometry.attributes.position.needsUpdate = true;
       this.points.geometry.attributes.customColor.needsUpdate = true;
       this.points.geometry.attributes.size.needsUpdate = true;
+      this.points.geometry.attributes.customOpacity.needsUpdate = true;
     } else {
       if (!this.instancedMesh) return;
       const dummy = new THREE.Object3D();
       const colors = this.instancedMesh.instanceColor.array;
+      const instanceOpacity = this.instancedMesh.geometry.getAttribute('instanceOpacity');
+      const opacities = instanceOpacity?.array;
       const isTrueCoordinates = this.mapType === 'TrueCoordinates';
       const isGlobe = this.mapType === 'Globe';
       for (let i = 0; i < stars.length; i++) {
@@ -259,10 +222,12 @@ export class MapManager {
         dummy.scale.set(scale, scale, scale);
         dummy.updateMatrix();
         this.instancedMesh.setMatrixAt(i, dummy.matrix);
+        if (opacities) opacities[i] = Number.isFinite(star.displayOpacity) ? clamp01(star.displayOpacity) : 1;
         writeUnitRgb(colors, i * 3, star.displayColor, '#ffffff');
       }
       this.instancedMesh.instanceMatrix.needsUpdate = true;
       this.instancedMesh.instanceColor.needsUpdate = true;
+      if (instanceOpacity) instanceOpacity.needsUpdate = true;
     }
     this.starObjects = stars;
     requestRenderIfAvailable(this);
@@ -343,7 +308,7 @@ export class MapManager {
     } else {
       this.connectionGroup.add(mergeConnectionLines(connectionObjs, this.mapType, safeOpacity));
       if (this.mapType === 'TrueCoordinates') {
-        this.addTCDistanceLabels(connectionObjs, safeOpacity);
+        addTrueCoordinateDistanceLabels(this.connectionGroup, connectionObjs, safeOpacity);
       }
     }
 
@@ -500,54 +465,6 @@ export class MapManager {
     requestRenderIfAvailable(this);
   }
 
-  addTCDistanceLabels(connectionObjs, opacityFactor) {
-    const safeOpacityFactor = clamp01(opacityFactor);
-    const { connectionLabelSize } = getConnectionLineParams();
-    if (connectionLabelSize <= 0.01) return;
-    const bounds = getConnectionDistanceBounds(connectionObjs);
-    const largest = bounds.largestDistance;
-    const smallest = bounds.smallestDistance;
-    connectionObjs.forEach(pair => {
-      const { starA, starB, distance } = pair;
-      const posA = starA.truePosition || new THREE.Vector3(starA.x_coordinate, starA.y_coordinate, starA.z_coordinate);
-      const posB = starB.truePosition || new THREE.Vector3(starB.x_coordinate, starB.y_coordinate, starB.z_coordinate);
-      if (!posA || !posB) return;
-      const normDist = (distance - smallest) / (largest - smallest || 1);
-      const lineOpacityScale = THREE.MathUtils.lerp(1.0, 0.3, normDist);
-      const lineOpacity = clamp01(lineOpacityScale * safeOpacityFactor);
-      const mid = posA.clone().lerp(posB, 0.5);
-      const distText = `${distance < 10 ? distance.toFixed(1) : distance.toFixed(0)} ly`;
-      const baseFontSize = CONNECTION_LABEL_BASE_FONT;
-      const fontSize = baseFontSize * connectionLabelSize;
-      const c1 = new THREE.Color(normalizeHexColor(starA.displayColor, '#ffffff'));
-      const c2 = new THREE.Color(normalizeHexColor(starB.displayColor, '#ffffff'));
-      const labelColor = c1.clone().lerp(c2, 0.5);
-      const { canvas } = createMeasuredTextCanvas(distText, {
-        font: `${fontSize}px Oswald`,
-        paddingX: 10,
-        paddingY: 5,
-        height: fontSize + 10,
-        fillStyle: `#${labelColor.getHexString()}`
-      });
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.needsUpdate = true;
-      const spriteMat = new THREE.SpriteMaterial({
-        map: texture,
-        depthWrite: false,
-        depthTest: true,
-        transparent: true,
-        opacity: lineOpacity
-      });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.renderOrder = 5;
-      const scale = 0.15;
-      sprite.scale.set(canvas.width / 100 * scale, canvas.height / 100 * scale, 1);
-      sprite.position.copy(mid);
-      sprite.userData.connectionOpacityScale = lineOpacityScale;
-      this.connectionGroup.add(sprite);
-    });
-  }
-
   updateConnectionPositions(stars, connectionObjs) {
     if (this.mapType !== 'Mollweide' || !this.connectionGroup) {
       this.updateConnections(stars, connectionObjs, this.connectionOpacity);
@@ -588,7 +505,9 @@ export class MapManager {
         this.points.material.needsUpdate = true;
       }
     } else if (this.instancedMesh) {
-      this.instancedMesh.material.opacity = safeOpacity;
+      if (this.instancedMesh.material.uniforms?.opacity) {
+        this.instancedMesh.material.uniforms.opacity.value = safeOpacity;
+      }
       this.instancedMesh.material.needsUpdate = true;
     }
   }
@@ -661,6 +580,7 @@ export class MapManager {
     this.controls?.dispose?.();
     this.labelManager?.removeAllLabels?.();
     this.clearConnectionGroup();
+    this.webglContextDisposer?.();
 
     if (this.starGroup) {
       this.scene.remove(this.starGroup);

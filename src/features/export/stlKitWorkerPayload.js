@@ -46,7 +46,6 @@ export function createSTLKitWorkerPayload(stars, connections, options = {}) {
     stars: serializeStarsForWorker(stars),
     connections: serializeConnectionsForWorker(connections),
     options: {
-      ...safeOptions,
       allStars: serializeStarsForWorker(safeOptions.allStars?.length ? safeOptions.allStars : stars)
     }
   };

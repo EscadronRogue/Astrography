@@ -1,5 +1,6 @@
 import { notifyError } from '../../shared/userNotifications.js';
 import { readTextFile } from '../../shared/fileUtils.js';
+import { logError } from '../../shared/logger.js';
 
 export function setupEditIOControls(manager) {
   const dlBtn = document.getElementById('download-edits');
@@ -18,7 +19,7 @@ export function setupEditIOControls(manager) {
         const data = JSON.parse(text);
         manager.applyLabelEdits(data);
       } catch (error) {
-        console.error('Invalid edits file:', error);
+        logError('Invalid edits file:', error);
         notifyError('Invalid edits file', error);
       }
       fileInput.value = '';

@@ -1,6 +1,7 @@
 import { parseRA, parseDec, degToRad } from '../../shared/geometryUtils.js';
 import { fetchWithTimeout } from '../../data/fetchWithTimeout.js';
 import { validateConstellationCenters, validateConstellationFullNames } from '../../data/dataValidation.js';
+import { logError } from '../../shared/logger.js';
 
 let boundaryData = [];
 let centerData = [];
@@ -53,7 +54,7 @@ export async function loadConstellationBoundaries() {
         });
       }
     } catch (err) {
-      console.error('Error loading constellation boundaries:', err);
+      logError('Error loading constellation boundaries:', err);
       boundaryData = [];
     }
     return boundaryData;
@@ -76,7 +77,7 @@ export async function loadConstellationCenters() {
         epoch: entry.epoch || null
       }));
     } catch (err) {
-      console.error('Error loading constellation centers:', err);
+      logError('Error loading constellation centers:', err);
       centerData = [];
     }
     return centerData;
@@ -91,7 +92,7 @@ export async function loadConstellationFullNames() {
     if (!resp.ok) throw new Error(`Failed to load constellation full names: ${resp.status}`);
     fullNameData = validateConstellationFullNames(await resp.json(), 'constellation_full_names.json');
   } catch (err) {
-    console.error('Error loading constellation full names:', err);
+    logError('Error loading constellation full names:', err);
     fullNameData = {};
   }
   return fullNameData;

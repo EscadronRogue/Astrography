@@ -91,6 +91,10 @@ export function createMollweideBorder(R = 100, thickness = 1, opacity = 1, segme
   mesh.userData.points = borderPoints;
   mesh.userData.baseWidth = thickness;
   mesh.userData.baseOpacity = opacity;
+  mesh.userData.baseColor = 0xffffff;
+  mesh.userData.baseRadius = R;
+  mesh.userData.segments = segments;
+  mesh.userData.isMollweideBorder = true;
   return mesh;
 }
 
