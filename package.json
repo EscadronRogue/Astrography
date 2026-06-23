@@ -8,5 +8,8 @@
     "jspdf": "4.2.1",
     "jszip": "3.10.1",
     "three": "0.128.0"
+  },
+  "devDependencies": {
+    "playwright": "^1.61.1"
   }
 }

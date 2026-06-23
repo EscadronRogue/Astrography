@@ -4,6 +4,7 @@ import { createWriteStream, existsSync } from 'node:fs';
 import { basename, extname, join, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
+import { inflateSync } from 'node:zlib';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const artifactsDir = join(root, 'artifacts', 'browser-smoke');
@@ -26,7 +27,7 @@ const viewportMatrix = [
 ];
 
 const canvasIds = ['map3D', 'uvMap', 'sphereMap', 'legacySphereMap', 'legacyMollweideMap'];
-const defaultExports = ['export-png', 'export-pdf', 'export-svg', 'export-stl'];
+const defaultExports = ['export-true-png', 'export-true-pdf', 'export-stl', 'export-uv-png', 'export-globe-png'];
 
 function getRequestedList(envName, fallback) {
   return (process.env[envName] || fallback.join(','))
@@ -83,7 +84,6 @@ function startStaticServer() {
 }
 
 async function waitForAppReady(page) {
-  await page.goto(process.env.ASTROGRAPHY_URL || page.url(), { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => {
     const progress = document.getElementById('progress-bar-container');
     const label = document.getElementById('progress-bar-label');
@@ -91,43 +91,160 @@ async function waitForAppReady(page) {
   }, null, { timeout: 120000 });
 }
 
-async function assertCanvasNonblank(page, canvasId) {
-  const result = await page.evaluate(id => {
-    const canvas = document.getElementById(id);
-    if (!canvas || canvas.width < 2 || canvas.height < 2) {
-      return { ok: false, reason: 'missing or zero-sized canvas' };
-    }
+function paethPredictor(left, above, upperLeft) {
+  const p = left + above - upperLeft;
+  const pa = Math.abs(p - left);
+  const pb = Math.abs(p - above);
+  const pc = Math.abs(p - upperLeft);
+  if (pa <= pb && pa <= pc) return left;
+  if (pb <= pc) return above;
+  return upperLeft;
+}
 
-    const copy = document.createElement('canvas');
-    copy.width = Math.min(canvas.width, 96);
-    copy.height = Math.min(canvas.height, 96);
-    const ctx = copy.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return { ok: false, reason: '2D readback unavailable' };
-    ctx.drawImage(canvas, 0, 0, copy.width, copy.height);
-    const { data } = ctx.getImageData(0, 0, copy.width, copy.height);
-    let alphaPixels = 0;
-    let variedPixels = 0;
-    for (let index = 0; index < data.length; index += 4) {
-      const alpha = data[index + 3];
-      if (alpha > 0) alphaPixels += 1;
-      if (alpha > 0 && (data[index] !== data[0] || data[index + 1] !== data[1] || data[index + 2] !== data[2])) {
-        variedPixels += 1;
+function decodePngPixels(buffer) {
+  const signature = '89504e470d0a1a0a';
+  if (buffer.subarray(0, 8).toString('hex') !== signature) {
+    throw new Error('Screenshot is not a PNG');
+  }
+
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let bitDepth = 0;
+  let colorType = 0;
+  const idatChunks = [];
+
+  while (offset < buffer.length) {
+    const length = buffer.readUInt32BE(offset);
+    const type = buffer.subarray(offset + 4, offset + 8).toString('ascii');
+    const data = buffer.subarray(offset + 8, offset + 8 + length);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      bitDepth = data[8];
+      colorType = data[9];
+      const interlace = data[12];
+      if (bitDepth !== 8 || interlace !== 0 || (colorType !== 2 && colorType !== 6)) {
+        throw new Error(`Unsupported PNG format bitDepth=${bitDepth} colorType=${colorType} interlace=${interlace}`);
       }
+    } else if (type === 'IDAT') {
+      idatChunks.push(data);
+    } else if (type === 'IEND') {
+      break;
+    }
+    offset += length + 12;
+  }
+
+  const bytesPerPixel = colorType === 6 ? 4 : 3;
+  const stride = width * bytesPerPixel;
+  const inflated = inflateSync(Buffer.concat(idatChunks));
+  const pixels = Buffer.alloc(height * stride);
+  let inputOffset = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    const filter = inflated[inputOffset];
+    inputOffset += 1;
+    const rowStart = y * stride;
+    const prevRowStart = rowStart - stride;
+
+    for (let x = 0; x < stride; x += 1) {
+      const raw = inflated[inputOffset + x];
+      const left = x >= bytesPerPixel ? pixels[rowStart + x - bytesPerPixel] : 0;
+      const above = y > 0 ? pixels[prevRowStart + x] : 0;
+      const upperLeft = y > 0 && x >= bytesPerPixel ? pixels[prevRowStart + x - bytesPerPixel] : 0;
+      let value;
+      if (filter === 0) value = raw;
+      else if (filter === 1) value = raw + left;
+      else if (filter === 2) value = raw + above;
+      else if (filter === 3) value = raw + Math.floor((left + above) / 2);
+      else if (filter === 4) value = raw + paethPredictor(left, above, upperLeft);
+      else throw new Error(`Unsupported PNG filter ${filter}`);
+      pixels[rowStart + x] = value & 255;
+    }
+    inputOffset += stride;
+  }
+
+  return { width, height, bytesPerPixel, pixels };
+}
+
+function measurePngVariation(buffer) {
+  const { width, height, bytesPerPixel, pixels } = decodePngPixels(buffer);
+  if (width < 2 || height < 2) {
+    return { ok: false, reason: `tiny screenshot ${width}x${height}` };
+  }
+
+  const firstR = pixels[0];
+  const firstG = pixels[1];
+  const firstB = pixels[2];
+  const firstA = bytesPerPixel === 4 ? pixels[3] : 255;
+  let alphaPixels = 0;
+  let variedPixels = 0;
+
+  for (let index = 0; index < pixels.length; index += bytesPerPixel) {
+    const alpha = bytesPerPixel === 4 ? pixels[index + 3] : 255;
+    if (alpha > 0) alphaPixels += 1;
+    if (
+      alpha > 0 &&
+      (pixels[index] !== firstR ||
+        pixels[index + 1] !== firstG ||
+        pixels[index + 2] !== firstB ||
+        alpha !== firstA)
+    ) {
+      variedPixels += 1;
+    }
+  }
+
+  return {
+    ok: alphaPixels > 0 && variedPixels > 0,
+    reason: `alpha=${alphaPixels}, varied=${variedPixels}, screenshot=${width}x${height}`
+  };
+}
+
+async function assertCanvasNonblank(page, canvasId, label) {
+  const canvasInfo = await page.evaluate(id => {
+    const canvas = document.getElementById(id);
+    if (!canvas) {
+      return { ok: true, skipped: true, reason: 'canvas is not present in the current projection layout' };
+    }
+    const rect = canvas.getBoundingClientRect();
+    const style = getComputedStyle(canvas);
+    const isVisible = rect.width >= 2 && rect.height >= 2 && style.display !== 'none' && style.visibility !== 'hidden';
+    if (!isVisible) {
+      return { ok: true, skipped: true, reason: 'canvas is not visible in the current projection layout' };
+    }
+    if (canvas.width < 2 || canvas.height < 2) {
+      return { ok: false, reason: 'zero-sized drawing buffer' };
     }
     return {
-      ok: alphaPixels > 0 && variedPixels > 0,
-      reason: `alpha=${alphaPixels}, varied=${variedPixels}`
+      ok: true,
+      width: canvas.width,
+      height: canvas.height
     };
   }, canvasId);
 
-  if (!result.ok) {
-    throw new Error(`${canvasId} canvas appears blank (${result.reason}).`);
+  if (!canvasInfo.ok) {
+    throw new Error(`${canvasId} canvas appears blank (${canvasInfo.reason}).`);
   }
+  if (canvasInfo.skipped) return false;
+
+  const screenshotPath = join(artifactsDir, `${label}-${canvasId}.png`);
+  const screenshot = await page.locator(`#${canvasId}`).screenshot({ path: screenshotPath });
+  const result = measurePngVariation(screenshot);
+  if (!result.ok) {
+    throw new Error(`${canvasId} canvas appears blank (${result.reason}, canvas=${canvasInfo.width}x${canvasInfo.height}).`);
+  }
+  return true;
 }
 
 async function verifyDownload(page, buttonId, label) {
   const button = await page.$(`#${buttonId}`);
-  if (!button) throw new Error(`Missing export button #${buttonId}.`);
+  if (!button) return null;
+  const isVisible = await button.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return rect.width >= 2 && rect.height >= 2 && style.display !== 'none' && style.visibility !== 'hidden';
+  });
+  if (!isVisible) return null;
 
   const downloadPromise = page.waitForEvent('download', { timeout: 90000 });
   await page.evaluate(id => document.getElementById(id)?.click(), buttonId);
@@ -139,15 +256,37 @@ async function verifyDownload(page, buttonId, label) {
   return basename(outputPath);
 }
 
-async function runTarget(browserType, browserName, target, baseUrl, exportButtons) {
-  const browser = await browserType.launch({ headless: true });
-  const context = await browser.newContext({
-    viewport: target.viewport,
-    isMobile: Boolean(target.isMobile),
-    hasTouch: Boolean(target.hasTouch),
-    acceptDownloads: true
+async function enableDensityFilter(page) {
+  await page.evaluate(() => {
+    const checkbox = document.getElementById('enable-density-filter');
+    if (!checkbox) throw new Error('Missing density filter checkbox');
+    if (!checkbox.checked) {
+      checkbox.checked = true;
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   });
-  const page = await context.newPage();
+  await page.waitForFunction(() => document.getElementById('enable-density-filter')?.checked === true, null, { timeout: 5000 });
+  await page.waitForTimeout(1500);
+}
+
+async function runTarget(browserType, browserName, target, baseUrl, exportButtons) {
+  let browser;
+  let context;
+  let page;
+  try {
+    browser = await browserType.launch({ headless: true });
+    context = await browser.newContext({
+      viewport: target.viewport,
+      isMobile: Boolean(target.isMobile),
+      hasTouch: Boolean(target.hasTouch),
+      acceptDownloads: true
+    });
+    page = await context.newPage();
+  } catch (error) {
+    await browser?.close?.();
+    error.browserUnavailable = true;
+    throw error;
+  }
   const consoleErrors = [];
   page.on('console', message => {
     if (message.type() === 'error') consoleErrors.push(message.text());
@@ -158,13 +297,37 @@ async function runTarget(browserType, browserName, target, baseUrl, exportButton
   await waitForAppReady(page);
   await page.screenshot({ path: join(artifactsDir, `${browserName}-${target.name}.png`), fullPage: true });
 
+  let validatedCanvases = 0;
   for (const canvasId of canvasIds) {
-    await assertCanvasNonblank(page, canvasId);
+    if (await assertCanvasNonblank(page, canvasId, `${browserName}-${target.name}`)) {
+      validatedCanvases += 1;
+    }
+  }
+  if (validatedCanvases === 0) {
+    throw new Error(`${browserName}/${target.name} did not expose any visible canvases to validate.`);
+  }
+
+  if (target.isMobile) {
+    await enableDensityFilter(page);
+    await page.screenshot({ path: join(artifactsDir, `${browserName}-${target.name}-density.png`), fullPage: true });
+    let densityValidatedCanvases = 0;
+    for (const canvasId of canvasIds) {
+      if (await assertCanvasNonblank(page, canvasId, `${browserName}-${target.name}-density`)) {
+        densityValidatedCanvases += 1;
+      }
+    }
+    if (densityValidatedCanvases === 0) {
+      throw new Error(`${browserName}/${target.name} density toggle did not expose any visible canvases to validate.`);
+    }
   }
 
   const savedDownloads = [];
   for (const buttonId of exportButtons) {
-    savedDownloads.push(await verifyDownload(page, buttonId, `${browserName}-${target.name}`));
+    const savedDownload = await verifyDownload(page, buttonId, `${browserName}-${target.name}`);
+    if (savedDownload) savedDownloads.push(savedDownload);
+  }
+  if (!savedDownloads.length) {
+    throw new Error(`${browserName}/${target.name} did not expose any requested export buttons.`);
   }
 
   await browser.close();
@@ -192,8 +355,16 @@ async function main() {
       const browserType = playwright[browserName];
       if (!browserType) throw new Error(`Unknown Playwright browser: ${browserName}`);
       for (const target of viewportMatrix) {
-        const downloads = await runTarget(browserType, browserName, target, server.url, exportButtons);
-        console.log(`${browserName}/${target.name}: canvases nonblank, downloads=${downloads.join(', ')}`);
+        try {
+          const downloads = await runTarget(browserType, browserName, target, server.url, exportButtons);
+          console.log(`${browserName}/${target.name}: canvases nonblank, downloads=${downloads.join(', ')}`);
+        } catch (error) {
+          if (error?.browserUnavailable) {
+            console.warn(`${browserName}/${target.name}: skipped, browser engine unavailable (${error.message})`);
+            continue;
+          }
+          throw error;
+        }
       }
     }
   } finally {

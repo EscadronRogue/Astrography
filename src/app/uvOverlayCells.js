@@ -1,4 +1,5 @@
-import { ATLAS_HEIGHT, ATLAS_WIDTH, GLOBE_RADIUS } from '../shared/constants.js';
+import { GLOBE_RADIUS } from '../shared/constants.js';
+import { getAtlasHeight, getAtlasWidth } from './uvAtlasConfig.js';
 import { clamp01 } from './uvCanvasLayers.js';
 
 function hasFiniteNumber(value) {
@@ -26,11 +27,13 @@ export function getOverlayCellUv(cell, {
 export function getOverlayCellAtlasPoint(cell, projectors) {
   const uv = getOverlayCellUv(cell, projectors);
   if (!uv) return null;
+  const atlasWidth = getAtlasWidth();
+  const atlasHeight = getAtlasHeight();
   return {
     u: uv.u,
     v: uv.v,
-    x: uv.u * ATLAS_WIDTH,
-    y: uv.v * ATLAS_HEIGHT
+    x: uv.u * atlasWidth,
+    y: uv.v * atlasHeight
   };
 }
 

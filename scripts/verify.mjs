@@ -42,6 +42,13 @@ import {
 } from '../src/app/uvLayerSignatures.js';
 import { clamp01 as clampUvAlpha, createLayerCanvas as createUvLayerCanvas, rgbaFromHex as uvRgbaFromHex } from '../src/app/uvCanvasLayers.js';
 import {
+  CONSTRAINED_ATLAS_HEIGHT,
+  CONSTRAINED_ATLAS_WIDTH,
+  configureRuntimeAtlasDimensions,
+  getAtlasDimensions,
+  resetRuntimeAtlasDimensions
+} from '../src/app/uvAtlasConfig.js';
+import {
   CONSTRAINED_OVERLAY_MAX_CELLS,
   DEFAULT_OVERLAY_MAX_CELLS,
   estimateOverlayGridCells,
@@ -1936,8 +1943,8 @@ function checkUvCanvasLayerUtilityExtraction() {
   if (!helperText.includes('hexToRgbaString(hex, alpha)')) {
     addFailure(`UV canvas-layer helper should format CSS rgba through shared color parsing: ${helper}`);
   }
-  if (!helperText.includes('ATLAS_WIDTH') || !helperText.includes('ATLAS_HEIGHT')) {
-    addFailure(`UV canvas-layer helper must use centralized atlas dimensions: ${helper}`);
+  if (!helperText.includes("from './uvAtlasConfig.js'") || !helperText.includes('getAtlasDimensions()')) {
+    addFailure(`UV canvas-layer helper must use runtime atlas dimensions: ${helper}`);
   }
   if (!managerText.includes("from './uvCanvasLayers.js'")) {
     addFailure(`UV map manager must import canvas-layer utilities: ${manager}`);
@@ -2214,6 +2221,18 @@ function checkOverlayInstancing() {
         addFailure(`Grid overlay reintroduced per-cell mesh/material creation (${token}): ${file}`);
       }
     });
+  });
+
+  const densityFile = join(root, 'src', 'features', 'density', 'densityOverlay.js');
+  const densityText = readFileSync(densityFile, 'utf8');
+  [
+    'computeAdjacentLines',
+    'getGreatCirclePoints',
+    'new THREE.Line'
+  ].forEach(token => {
+    if (densityText.includes(token)) {
+      addFailure(`Density overlay must not rebuild per-cell adjacency line geometry (${token}): ${densityFile}`);
+    }
   });
 
   [
@@ -3100,6 +3119,7 @@ async function checkBehavioralInvariants() {
   const colorBuffer = [0, 0, 0, 0, 0, 0];
   writeUnitRgb(colorBuffer, 3, 'bad-color', '#0f0');
   assertArrayEqual(colorBuffer, [0, 0, 0, 0, 1, 0], 'Shared color parsing should write fallback unit RGB into render buffers');
+  resetRuntimeAtlasDimensions();
   const fakeCanvasContext = { kind: '2d' };
   const fakeLayer = createUvLayerCanvas({
     createElement: tag => ({
@@ -3110,6 +3130,33 @@ async function checkBehavioralInvariants() {
   assertEqual(fakeLayer.canvas.width, ATLAS_WIDTH, 'UV layer canvas width');
   assertEqual(fakeLayer.canvas.height, ATLAS_HEIGHT, 'UV layer canvas height');
   assertEqual(fakeLayer.ctx, fakeCanvasContext, 'UV layer canvas context');
+  configureRuntimeAtlasDimensions({ constrained: true, maxTextureSize: 4096 });
+  assertArrayEqual(
+    getAtlasDimensions(),
+    { width: CONSTRAINED_ATLAS_WIDTH, height: CONSTRAINED_ATLAS_HEIGHT },
+    'Constrained runtime atlas dimensions'
+  );
+  const constrainedLayer = createUvLayerCanvas({
+    createElement: tag => ({
+      tag,
+      getContext: kind => (kind === '2d' ? fakeCanvasContext : null)
+    })
+  });
+  assertEqual(constrainedLayer.canvas.width, CONSTRAINED_ATLAS_WIDTH, 'Constrained UV layer canvas width');
+  assertEqual(constrainedLayer.canvas.height, CONSTRAINED_ATLAS_HEIGHT, 'Constrained UV layer canvas height');
+  configureRuntimeAtlasDimensions({ constrained: false, maxTextureSize: 4096 });
+  assertArrayEqual(
+    getAtlasDimensions(),
+    { width: 4096, height: 2048 },
+    'Runtime atlas should respect WebGL max texture size'
+  );
+  configureRuntimeAtlasDimensions({ constrained: false, maxTextureSize: 3000 });
+  assertArrayEqual(
+    getAtlasDimensions(),
+    { width: 2048, height: 1024 },
+    'Runtime atlas should use power-of-two texture dimensions'
+  );
+  resetRuntimeAtlasDimensions();
   try {
     createUvLayerCanvas({ createElement: () => ({ getContext: () => null }) });
     addFailure('UV layer canvas helper should reject missing 2D contexts');

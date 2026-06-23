@@ -17,7 +17,7 @@ function normalizeScenes(scenes = {}) {
 
 /**
  * Generic overlay removal: removes all meshes/lines from scenes and nullifies the reference.
- * @param {Object|null} overlay - The overlay object with cubesData and adjacentLines.
+ * @param {Object|null} overlay - The overlay object with cell data and optional line data.
  * @param {Object} meshConfig - Maps overlay property paths to scene keys.
  */
 function removeOverlayFromScenes(overlay, meshConfig, scenes) {
@@ -77,9 +77,7 @@ const DENSITY_MESH_CONFIG = {
   cubes: [
     { prop: 'tcMesh', scene: 'tc' }
   ],
-  lines: [
-    { prop: 'line', scene: 'globe' }
-  ],
+  lines: [],
   extra: [
     { prop: 'textureMesh', scene: 'moll' }
   ]

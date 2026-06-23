@@ -380,6 +380,7 @@ export async function setupFilterUI(allStars) {
       loadConstellationCenters(),
       loadConstellationFullNames()
     ]);
+    document.dispatchEvent(new Event('astrography:filters-ready'));
   } catch (error) {
     logError('[setupFilterUI] Failed to initialize filter UI:', error);
     throw error;

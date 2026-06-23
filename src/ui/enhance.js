@@ -3,10 +3,14 @@
    Does not touch application logic; decorates the DOM only.
 */
 (function () {
+  const FILTERS_READY_EVENT = 'astrography:filters-ready';
+
   function buildFilterSearch() {
     const sidebar = document.querySelector('.sidebar');
     const form = document.getElementById('filters-form');
-    if (!sidebar || !form || sidebar.querySelector('.ag-filter-search')) return;
+    const existing = sidebar?.querySelector('.ag-filter-search');
+    if (existing) return existing._agDispose || null;
+    if (!sidebar || !form) return null;
 
     const wrap = document.createElement('div');
     wrap.className = 'ag-filter-search';
@@ -97,16 +101,16 @@
       });
     }
 
-    input.addEventListener('input', event => runSearch(event.target.value));
-    input.addEventListener('keydown', event => {
+    const onInput = event => runSearch(event.target.value);
+    const onInputKeydown = event => {
       if (event.key === 'Escape') {
         input.value = '';
         runSearch('');
         input.blur();
       }
-    });
+    };
 
-    window.addEventListener('keydown', event => {
+    const onWindowKeydown = event => {
       const activeTag = document.activeElement?.tagName || '';
       const isTypingTarget = /INPUT|TEXTAREA|SELECT/.test(activeTag);
       if (event.key !== '/' || document.activeElement === input || isTypingTarget) return;
@@ -118,7 +122,20 @@
         if (toggle) toggle.click();
       }
       input.focus();
-    });
+    };
+
+    input.addEventListener('input', onInput);
+    input.addEventListener('keydown', onInputKeydown);
+    window.addEventListener('keydown', onWindowKeydown);
+
+    const dispose = () => {
+      input.removeEventListener('input', onInput);
+      input.removeEventListener('keydown', onInputKeydown);
+      window.removeEventListener('keydown', onWindowKeydown);
+      wrap.remove();
+    };
+    wrap._agDispose = dispose;
+    return dispose;
   }
 
   function boot() {
@@ -132,5 +149,5 @@
     boot();
   }
 
-  setTimeout(buildFilterSearch, 800);
+  document.addEventListener(FILTERS_READY_EVENT, buildFilterSearch);
 })();

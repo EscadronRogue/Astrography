@@ -4,16 +4,17 @@ import {
   splitWrappedUvSegment,
   unwrapUvSequence
 } from '../shared/uvUtils.js';
-import { ATLAS_WIDTH, ATLAS_HEIGHT } from '../shared/constants.js';
+import { getAtlasHeight, getAtlasWidth } from './uvAtlasConfig.js';
 
 /**
- * Draw a filled circle at (x, y) with wrapping copies at +/- ATLAS_WIDTH
+ * Draw a filled circle at (x, y) with wrapping copies at +/- atlas width
  * so the circle seamlessly spans the left/right atlas edges.
  */
 export function drawWrappedCircle(ctx, x, y, radius) {
-  [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
+  const atlasWidth = getAtlasWidth();
+  [-atlasWidth, 0, atlasWidth].forEach(shiftX => {
     const drawX = x + shiftX;
-    if (drawX + radius < 0 || drawX - radius > ATLAS_WIDTH) return;
+    if (drawX + radius < 0 || drawX - radius > atlasWidth) return;
     ctx.beginPath();
     ctx.arc(drawX, y, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -25,12 +26,14 @@ export function drawWrappedCircle(ctx, x, y, radius) {
  * (offset by -1, 0, +1 atlas widths) so the segment wraps correctly.
  */
 export function strokeUvSegment(ctx, s, e) {
+  const atlasWidth = getAtlasWidth();
+  const atlasHeight = getAtlasHeight();
   [-1, 0, 1].forEach(copyOffset => {
-    const x1 = (s.u + copyOffset) * ATLAS_WIDTH;
-    const y1 = s.v * ATLAS_HEIGHT;
-    const x2 = (e.u + copyOffset) * ATLAS_WIDTH;
-    const y2 = e.v * ATLAS_HEIGHT;
-    if (Math.max(x1, x2) < 0 || Math.min(x1, x2) > ATLAS_WIDTH) return;
+    const x1 = (s.u + copyOffset) * atlasWidth;
+    const y1 = s.v * atlasHeight;
+    const x2 = (e.u + copyOffset) * atlasWidth;
+    const y2 = e.v * atlasHeight;
+    if (Math.max(x1, x2) < 0 || Math.min(x1, x2) > atlasWidth) return;
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
@@ -39,11 +42,12 @@ export function strokeUvSegment(ctx, s, e) {
 }
 
 /**
- * Wrap a pixel X coordinate into [0, ATLAS_WIDTH).
+ * Wrap a pixel X coordinate into [0, atlas width).
  */
 export function wrapPixelX(value) {
-  let wrapped = value % ATLAS_WIDTH;
-  if (wrapped < 0) wrapped += ATLAS_WIDTH;
+  const atlasWidth = getAtlasWidth();
+  let wrapped = value % atlasWidth;
+  if (wrapped < 0) wrapped += atlasWidth;
   return wrapped;
 }
 
@@ -52,7 +56,8 @@ export function wrapPixelX(value) {
  */
 export function pointInWrappedRect(x, y, rect) {
   if (y < rect.y || y > rect.y + rect.height) return false;
-  for (const shift of [-ATLAS_WIDTH, 0, ATLAS_WIDTH]) {
+  const atlasWidth = getAtlasWidth();
+  for (const shift of [-atlasWidth, 0, atlasWidth]) {
     const shiftedX = x + shift;
     if (shiftedX >= rect.x && shiftedX <= rect.x + rect.width) return true;
   }
@@ -65,7 +70,8 @@ export function pointInWrappedRect(x, y, rect) {
 export function boxesOverlapWrapped(a, b) {
   const yOverlap = a.y < (b.y + b.height) && (a.y + a.height) > b.y;
   if (!yOverlap) return false;
-  for (const shift of [-ATLAS_WIDTH, 0, ATLAS_WIDTH]) {
+  const atlasWidth = getAtlasWidth();
+  for (const shift of [-atlasWidth, 0, atlasWidth]) {
     const bx = b.x + shift;
     const xOverlap = a.x < (bx + b.width) && (a.x + a.width) > bx;
     if (xOverlap) return true;
@@ -88,12 +94,14 @@ export function normalizeWrappedTriangle(triangle) {
 export function fillWrappedTriangle(ctx, aVec, bVec, cVec) {
   const tri = [spherePositionToUv(aVec, 100), spherePositionToUv(bVec, 100), spherePositionToUv(cVec, 100)];
   const normalized = normalizeWrappedTriangle(tri);
+  const atlasWidth = getAtlasWidth();
+  const atlasHeight = getAtlasHeight();
   [-1, 0, 1].forEach(copyOffset => {
-    const points = normalized.map(({ u, v }) => ({ x: (u + copyOffset) * ATLAS_WIDTH, y: v * ATLAS_HEIGHT }));
+    const points = normalized.map(({ u, v }) => ({ x: (u + copyOffset) * atlasWidth, y: v * atlasHeight }));
     const xs = points.map(p => p.x);
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
-    if (maxX < -8 || minX > ATLAS_WIDTH + 8) return;
+    if (maxX < -8 || minX > atlasWidth + 8) return;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     ctx.lineTo(points[1].x, points[1].y);

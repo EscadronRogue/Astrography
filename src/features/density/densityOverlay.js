@@ -1,15 +1,10 @@
 // Density overlay implementation migrated from the legacy density filter module.
 import * as THREE from '../../vendor/three.js';
-import {
-  getGreatCirclePoints,
-  cachedRadToMollweide,
-  getMollweideLambda0,
-} from '../../shared/geometryUtils.js';
-import { minimalRADifference } from '../../shared/geometryUtils.js';
+import { getMollweideLambda0, minimalRADifference } from '../../shared/geometryUtils.js';
 import { lightenColor } from './densityColorScale.js';
 import { disposeObject3D } from '../../render/engine/renderUtils.js';
 import { buildDistanceQueryIndex, populateCellDistanceCaches, sumWeightedDistancesWithinRadius } from '../../shared/cellDistanceCache.js';
-import { GLOBE_RADIUS, HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
+import { HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
 import { InstancedCellLayer, createCellVisualState } from '../overlays/instancedCellLayer.js';
 
 // Pre-allocated reusable objects to avoid per-cell allocations in hot loops
@@ -68,26 +63,12 @@ class DensityGridOverlay {
           if (distFromCenter < this.minDistance || distFromCenter > this.maxDistance) continue;
 
           const cubeTC = createCellVisualState(posTC, 0xff0000, 0);
-          const squareGlobe = createCellVisualState(null, 0xff0000, 0);
-          const circleMoll = createCellVisualState(null, 0xff0000, 0);
-
-          let projectedPos;
           let ra, dec;
           if (distFromCenter < 1e-6) {
-            projectedPos = new THREE.Vector3(0, 0, 0);
-            circleMoll.position.set(0, 0, 0);
             ra = 0; dec = 0;
           } else {
             ra = Math.atan2(-posTC.z, -posTC.x);
             dec = Math.asin(posTC.y / distFromCenter);
-            const radius = GLOBE_RADIUS;
-            projectedPos = new THREE.Vector3(
-              -radius * Math.cos(dec) * Math.cos(ra),
-               radius * Math.sin(dec),
-              -radius * Math.cos(dec) * Math.sin(ra)
-            );
-            const projMoll = cachedRadToMollweide(ra, dec, GLOBE_RADIUS, getMollweideLambda0());
-            circleMoll.position.copy(projMoll);
           }
           let theta = dec;
           for (let i = 0; i < MOLLWEIDE_MAX_ITERATIONS; i++) {
@@ -100,19 +81,9 @@ class DensityGridOverlay {
           const sinT = Math.sin(theta);
           const mollXFactor = (2 * 100 / Math.PI) * cosT;
           const mollY = 100 * sinT;
-          squareGlobe.position.copy(projectedPos);
-          const nrm = projectedPos.clone().normalize();
-          let right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), nrm);
-          if (right.lengthSq() < 1e-6) right.set(1,0,0);
-          right.normalize();
-          const upVec = new THREE.Vector3().crossVectors(nrm, right).normalize();
-          const mat4 = new THREE.Matrix4().makeBasis(right, upVec, nrm);
-          squareGlobe.setRotationFromMatrix(mat4);
 
           const cell = {
             tcMesh: cubeTC,
-            globeMesh: squareGlobe,
-            mollweideMesh: circleMoll,
             tcPos: posTC,
             grid: {
               ix: Math.round(x / this.gridSize),
@@ -136,23 +107,19 @@ class DensityGridOverlay {
       geometry: new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize),
       count: this.cubesData.length
     });
-    this.computeAdjacentLines();
     populateCellDistanceCaches(this.cubesData, this.getExtendedStars(stars));
   }
 
   getSceneObjects() {
     return {
       tc: this.tcCellLayer ? [this.tcCellLayer.mesh] : [],
-      globe: this.adjacentLines.map(obj => obj.line),
+      globe: [],
       moll: [this.textureMesh]
     };
   }
 
   dispose() {
     this.tcCellLayer?.dispose();
-    this.adjacentLines.forEach(obj => {
-      disposeObject3D(obj.line);
-    });
     disposeObject3D(this.textureMesh);
   }
 
@@ -165,50 +132,6 @@ class DensityGridOverlay {
 
   computeCellDensity(cell, radius = 10, tolerance = 0, queryIndex = null) {
     cell.density = sumWeightedDistancesWithinRadius(cell, radius, tolerance, queryIndex);
-  }
-
-  computeAdjacentLines() {
-    this.adjacentLines = [];
-    const cellMap = new Map();
-    this.cubesData.forEach(cell => {
-      const key = `${cell.grid.ix},${cell.grid.iy},${cell.grid.iz}`;
-      cellMap.set(key, cell);
-    });
-    const directions = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dz = -1; dz <= 1; dz++) {
-          if (dx === 0 && dy === 0 && dz === 0) continue;
-          if (dx > 0 || (dx === 0 && dy > 0) || (dx === 0 && dy === 0 && dz > 0)) {
-            directions.push({ dx, dy, dz });
-          }
-        }
-      }
-    }
-    directions.forEach(dir => {
-      this.cubesData.forEach(cell => {
-        const neighborKey = `${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`;
-        if (cellMap.has(neighborKey)) {
-          const neighbor = cellMap.get(neighborKey);
-          const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
-          const positions = [];
-          for (let i = 0; i < points.length; i++) {
-            positions.push(points[i].x, points[i].y, points[i].z);
-          }
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          const mat = new THREE.LineBasicMaterial({
-            color: 0xff0000,
-            transparent: true,
-            opacity: 0.3,
-            linewidth: 2
-          });
-          const line = new THREE.Line(geom, mat);
-          line.renderOrder = 2;
-          this.adjacentLines.push({ line, cell1: cell, cell2: neighbor });
-        }
-      });
-    });
   }
 
   drawHeatmap(lambda0 = getMollweideLambda0(), force = false) {
@@ -229,8 +152,8 @@ class DensityGridOverlay {
       const height = this.gridSize * scale * yScale;
       const px = (x + 200) * xScale;
       const py = (100 - y) * yScale;
-      const col = cell.mollweideMesh.material.color;
-      const alpha = cell.mollweideMesh.material.opacity;
+      const col = cell.tcMesh.material.color;
+      const alpha = cell.tcMesh.material.opacity;
       const r = Math.round(col.r * 255);
       const g = Math.round(col.g * 255);
       const b = Math.round(col.b * 255);
@@ -274,8 +197,6 @@ class DensityGridOverlay {
     const _lightRedBase = lightenColor(new THREE.Color(0xff0000), 0.4);
 
     this.cubesData.forEach(cell => {
-      const ratio = cell.tcPos.length() / this.maxDistance;
-      const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
       let alpha = 0;
       if (cell.density <= bottomThr) {
         const t = bottomThr === minD ? 0 : (cell.density - minD) / (bottomThr - minD);
@@ -294,44 +215,15 @@ class DensityGridOverlay {
 
       const finalAlpha = alpha * this.opacityFactor;
       cell.tcMesh.material.opacity = finalAlpha;
-      cell.globeMesh.material.opacity = finalAlpha;
-      cell.mollweideMesh.material.opacity = finalAlpha;
       cell.tcMesh.material.color.copy(_tempColor);
-      cell.globeMesh.material.color.copy(_tempColor);
-      cell.mollweideMesh.material.color.copy(_tempColor);
       cell.tcMesh.visible = cell.active;
-      cell.globeMesh.visible = cell.active;
-      cell.mollweideMesh.visible = cell.active;
-      cell.globeMesh.scale.set(scale, scale, 1);
-      cell.mollweideMesh.scale.set(scale * 2, scale * 2, 1);
     });
     this.tcCellLayer?.update(this.cubesData, cell => cell.tcMesh);
-    this.adjacentLines.forEach(obj => {
-      const { line, cell1, cell2 } = obj;
-      const visible = cell1.active && cell2.active;
-      line.visible = visible;
-      if (visible) {
-        _tempColor.copy(cell1.tcMesh.material.color).lerp(cell2.tcMesh.material.color, 0.5);
-        const avgOpacity = (cell1.tcMesh.material.opacity + cell2.tcMesh.material.opacity) / 2;
-        line.material.color.copy(_tempColor);
-        line.material.opacity = avgOpacity;
-        line.material.vertexColors = false;
-        line.material.needsUpdate = true;
-      }
-    });
     this.revision += 1;
     this.drawHeatmap(getMollweideLambda0());
   }
 
   refreshMollweide(lambda0 = getMollweideLambda0()) {
-    this.cubesData.forEach(cell => {
-      const lambda = minimalRADifference(cell.raRad - lambda0);
-      cell.mollweideMesh.position.set(
-        cell.mollXFactor * lambda,
-        cell.mollY,
-        0
-      );
-    });
     this.revision += 1;
     this.drawHeatmap(lambda0, true); // force redraw since Mollweide positions changed
   }

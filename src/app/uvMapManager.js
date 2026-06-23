@@ -25,7 +25,7 @@ import { getConstellationLabelAnchors } from '../features/constellations/constel
 import { applyCanvasConstellationLabelStyle, constellationLineCss } from '../features/constellations/constellationStyle.js';
 import { computeConstellationColorMapping } from '../features/constellations/constellationOverlayMeshes.js';
 import { getViewpointStarId } from '../shared/viewpoint.js';
-import { GLOBE_RADIUS, ATLAS_WIDTH, ATLAS_HEIGHT } from '../shared/constants.js';
+import { GLOBE_RADIUS } from '../shared/constants.js';
 import { configureRendererForCanvas } from '../shared/canvasSizing.js';
 import { addWebGLContextLossHandlers, assertWebGLAvailable } from '../shared/webglSupport.js';
 import { logWarn } from '../shared/logger.js';
@@ -56,6 +56,11 @@ import {
   getScaledOverlayRadius
 } from './uvOverlayCells.js';
 import { getStarDisplayOpacity } from '../features/filters/logic/displayMetrics.js';
+import {
+  configureRuntimeAtlasDimensions,
+  getAtlasHeight,
+  getAtlasWidth
+} from './uvAtlasConfig.js';
 
 function createHiddenPointsMaterial() {
   return new THREE.PointsMaterial({
@@ -93,9 +98,12 @@ export class UVMapManager {
     this.sourceGlobeScene = null;
     this.updateToken = 0;
 
+    const atlasDimensions = configureRuntimeAtlasDimensions({
+      maxTextureSize: this.renderer.capabilities?.maxTextureSize
+    });
     this.atlasCanvas = document.createElement('canvas');
-    this.atlasCanvas.width = ATLAS_WIDTH;
-    this.atlasCanvas.height = ATLAS_HEIGHT;
+    this.atlasCanvas.width = atlasDimensions.width;
+    this.atlasCanvas.height = atlasDimensions.height;
     this.atlasCtx = this.atlasCanvas.getContext('2d');
     this.atlasTexture = new THREE.CanvasTexture(this.atlasCanvas);
     this.atlasTexture.wrapS = THREE.RepeatWrapping;
@@ -202,15 +210,17 @@ export class UVMapManager {
 
   redrawBaseLayer() {
     const ctx = this.baseLayer.ctx;
-    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    const atlasWidth = getAtlasWidth();
+    const atlasHeight = getAtlasHeight();
+    ctx.clearRect(0, 0, atlasWidth, atlasHeight);
     ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    ctx.fillRect(0, 0, atlasWidth, atlasHeight);
     this.drawGraticule(ctx);
   }
 
   redrawFeatureLayer(connections) {
     const ctx = this.featureLayer.ctx;
-    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    ctx.clearRect(0, 0, getAtlasWidth(), getAtlasHeight());
     this.drawConstellationOverlay(ctx);
     this.drawDensityOverlay(ctx);
     this.drawIsolationOverlay(ctx);
@@ -225,20 +235,20 @@ export class UVMapManager {
 
   redrawStarLayer(stars) {
     const ctx = this.starLayer.ctx;
-    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    ctx.clearRect(0, 0, getAtlasWidth(), getAtlasHeight());
     this.drawStars(ctx, stars || []);
   }
 
   redrawLabelLayer(stars) {
     const ctx = this.labelLayer.ctx;
-    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    ctx.clearRect(0, 0, getAtlasWidth(), getAtlasHeight());
     this.drawConstellationNames(ctx);
     this.drawStarLabels(ctx, stars || []);
   }
 
   composeAtlas() {
     const ctx = this.atlasCtx;
-    ctx.clearRect(0, 0, ATLAS_WIDTH, ATLAS_HEIGHT);
+    ctx.clearRect(0, 0, getAtlasWidth(), getAtlasHeight());
     ctx.drawImage(this.baseLayer.canvas, 0, 0);
     ctx.drawImage(this.featureLayer.canvas, 0, 0);
     ctx.drawImage(this.starLayer.canvas, 0, 0);
@@ -325,21 +335,23 @@ export class UVMapManager {
   }
 
   drawGraticule(ctx) {
+    const atlasWidth = getAtlasWidth();
+    const atlasHeight = getAtlasHeight();
     ctx.save();
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
     ctx.lineWidth = 1;
     for (let i = 0; i <= 12; i++) {
-      const x = (i / 12) * ATLAS_WIDTH;
+      const x = (i / 12) * atlasWidth;
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, ATLAS_HEIGHT);
+      ctx.lineTo(x, atlasHeight);
       ctx.stroke();
     }
     for (let i = 0; i <= 6; i++) {
-      const y = (i / 6) * ATLAS_HEIGHT;
+      const y = (i / 6) * atlasHeight;
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(ATLAS_WIDTH, y);
+      ctx.lineTo(atlasWidth, y);
       ctx.stroke();
     }
     ctx.restore();
@@ -390,11 +402,13 @@ export class UVMapManager {
           ctx.textBaseline = 'middle';
           ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.7})`;
           ctx.lineWidth = 2;
-          const px = midUv.u * ATLAS_WIDTH;
-          const py = midUv.v * ATLAS_HEIGHT;
-          [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
+          const atlasWidth = getAtlasWidth();
+          const atlasHeight = getAtlasHeight();
+          const px = midUv.u * atlasWidth;
+          const py = midUv.v * atlasHeight;
+          [-atlasWidth, 0, atlasWidth].forEach(shiftX => {
             const drawX = px + shiftX;
-            if (drawX < -60 || drawX > ATLAS_WIDTH + 60) return;
+            if (drawX < -60 || drawX > atlasWidth + 60) return;
             ctx.strokeText(distText, drawX, py);
             ctx.fillText(distText, drawX, py);
           });
@@ -405,12 +419,14 @@ export class UVMapManager {
   }
 
   drawStars(ctx, stars) {
+    const atlasWidth = getAtlasWidth();
+    const atlasHeight = getAtlasHeight();
     stars.forEach(star => {
       if (!star.displayVisible) return;
       const { ra, dec } = getStarCoordinates(star);
       const { u, v } = raDecToUV(ra, dec);
-      const x = u * ATLAS_WIDTH;
-      const y = v * ATLAS_HEIGHT;
+      const x = u * atlasWidth;
+      const y = v * atlasHeight;
       const radius = THREE.MathUtils.clamp((star.displaySize || 1) * 1.6, 1.2, 10);
       ctx.save();
       ctx.fillStyle = rgbaFromHex(star.displayColor || '#ffffff', getStarDisplayOpacity(star, this.starOpacity));
@@ -430,9 +446,11 @@ export class UVMapManager {
       .filter(star => star.displayVisible)
       .map(star => {
         const starPos = getStarEquirectangularPosition(star);
+        const atlasWidth = getAtlasWidth();
+        const atlasHeight = getAtlasHeight();
         return {
-          x: ((starPos.x / EQUIRECT_WIDTH) + 0.5) * ATLAS_WIDTH,
-          y: (0.5 - (starPos.y / EQUIRECT_HEIGHT)) * ATLAS_HEIGHT,
+          x: ((starPos.x / EQUIRECT_WIDTH) + 0.5) * atlasWidth,
+          y: (0.5 - (starPos.y / EQUIRECT_HEIGHT)) * atlasHeight,
           star
         };
       });
@@ -463,9 +481,10 @@ export class UVMapManager {
           placement.connector.endUv
         );
 
-        [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
+        const atlasWidth = getAtlasWidth();
+        [-atlasWidth, 0, atlasWidth].forEach(shiftX => {
           const drawX = placement.drawX + shiftX;
-          if (drawX + placement.bounds.width < -24 || drawX > ATLAS_WIDTH + 24) return;
+          if (drawX + placement.bounds.width < -24 || drawX > atlasWidth + 24) return;
           ctx.fillStyle = textColor;
           ctx.strokeStyle = `rgba(0,0,0,${opacity * 0.85})`;
           ctx.lineWidth = 3;
@@ -494,18 +513,20 @@ export class UVMapManager {
     if (opacity <= 0.001) return;
     const centers = getConstellationLabelAnchors();
     const fullNames = getConstellationFullNames();
+    const atlasWidth = getAtlasWidth();
+    const atlasHeight = getAtlasHeight();
     ctx.save();
     applyCanvasConstellationLabelStyle(ctx, opacity);
-    const fontSize = Math.round(THREE.MathUtils.clamp(ATLAS_WIDTH / 240, 18, 34));
+    const fontSize = Math.round(THREE.MathUtils.clamp(atlasWidth / 240, 18, 34));
     ctx.font = `300 ${fontSize}px "Cormorant Garamond", "Times New Roman", serif`;
     centers.forEach(center => {
       const { u, v } = raDecToUV(center.ra, center.dec);
-      const x = u * ATLAS_WIDTH;
-      const y = v * ATLAS_HEIGHT;
+      const x = u * atlasWidth;
+      const y = v * atlasHeight;
       const name = fullNames[center.name] || center.name;
-      [-ATLAS_WIDTH, 0, ATLAS_WIDTH].forEach(shiftX => {
+      [-atlasWidth, 0, atlasWidth].forEach(shiftX => {
         const drawX = x + shiftX;
-        if (drawX < -180 || drawX > ATLAS_WIDTH + 180) return;
+        if (drawX < -180 || drawX > atlasWidth + 180) return;
         ctx.strokeText(name, drawX, y);
         ctx.fillText(name, drawX, y);
       });
@@ -565,32 +586,6 @@ export class UVMapManager {
     });
     ctx.filter = 'none';
 
-    // Draw adjacent lines between active cells
-    (overlay.adjacentLines || []).forEach(({ cell1, cell2 }) => {
-      if (!cell1?.active || !cell2?.active) return;
-      const c1 = cell1.tcMesh?.material?.color;
-      const c2 = cell2.tcMesh?.material?.color;
-      const avgColor = c1 ? `#${c1.clone().lerp(c2 || c1, 0.5).getHexString()}` : '#ff8844';
-      const avgAlpha = getAverageOverlayAlpha(cell1, cell2, { meshKey: 'tcMesh' });
-      ctx.strokeStyle = rgbaFromHex(avgColor, avgAlpha);
-      ctx.lineWidth = 1.5;
-      const raDec1 = getOverlayCellRaDec(cell1);
-      const raDec2 = getOverlayCellRaDec(cell2);
-      if (raDec1 && raDec2) {
-        const segments = sampleGreatCircleUvFromRaDec(
-          raDec1.ra, raDec1.dec,
-          raDec2.ra, raDec2.dec,
-          GLOBE_RADIUS, 12
-        );
-        for (let j = 0; j < segments.length - 1; j++) {
-          splitWrappedUvSegment(segments[j], segments[j + 1]).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
-        }
-      } else {
-        const uv1 = getOverlayCellAtlasPoint(cell1, { raDecToUV, spherePositionToUv });
-        const uv2 = getOverlayCellAtlasPoint(cell2, { raDecToUV, spherePositionToUv });
-        if (uv1 && uv2) splitWrappedSegment(uv1, uv2).forEach(([s, e]) => strokeUvSegment(ctx, s, e));
-      }
-    });
     ctx.restore();
   }
 

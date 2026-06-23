@@ -4,15 +4,15 @@ Date: 2026-06-23
 
 ## Verification Baseline
 
-- `npm.cmd test` passes: 136 JavaScript files and 7 CSS files.
-- `npm.cmd run test:browser` fails before opening a browser because Playwright is not installed in `package.json`.
-- The in-app browser route was not reliable in this environment, so the phone density issue was audited from code paths plus static verifier coverage.
+- `npm.cmd test` passes: 137 JavaScript files and 7 CSS files.
+- `npm.cmd run test:browser` passes Chromium and WebKit on desktop and phone, including a phone density-toggle scenario and export-download checks.
+- The local Playwright Firefox engine is installed but skipped because it fails before page creation with `browserContext.newPage: Cannot read properties of undefined (reading '_page')`.
 
 ## Fixed In This Pass
 
-1. Density overlay allocated unused Mollweide adjacency meshes.
-   - Previous behavior: `densityOverlay` created and updated hidden `lineM` geometry for every density cell neighbor even though the Mollweide scene only used the heatmap texture.
-   - Fix: removed the unused `lineM` allocation/update/disposal path.
+1. Density overlay built object-heavy geometry on phone even for true-coordinate-only viewing.
+   - Previous behavior: `densityOverlay` created per-cell globe and Mollweide visual states and built a `THREE.Line` adjacency graph with great-circle sampling for every neighboring density cell.
+   - Fix: density now keeps only the true-coordinate instanced cell layer plus the Mollweide heatmap canvas. The density adjacency line path and unused globe/Mollweide per-cell visual state were removed, and the verifier now blocks reintroducing density line geometry.
 
 2. Mobile/constrained overlay grids used the same cell cap as desktop.
    - Previous behavior: density, isolation, and cloud-density overlays used the default 75k estimated-cell budget regardless of device.
@@ -21,44 +21,58 @@ Date: 2026-06-23
 3. Density UI exposed controls with no visible effect.
    - Removed density `Line Thickness`, density `Edge Hardness`, and density/isolation `Cluster Labeling & Segmentation` controls because their values were read but not consumed by a renderer.
 
+4. Sidebar search enhancement depended on a fixed startup delay.
+   - Previous behavior: `src/ui/enhance.js` retried search setup with `setTimeout(buildFilterSearch, 800)`.
+   - Fix: `setupFilterUI()` dispatches an `astrography:filters-ready` event after dynamic sidebar setup, and the search enhancement attaches from that lifecycle signal with disposable event listeners.
+
+5. UV atlas canvases used the desktop resolution on constrained phones.
+   - Previous behavior: each UV map manager allocated 8192 x 4096 atlas/layer canvases regardless of device.
+   - Fix: added runtime atlas sizing. Desktop remains 8192 x 4096 by default, constrained/mobile browsers use a 2048 x 1024 interactive atlas, and WebGL `MAX_TEXTURE_SIZE` caps either path.
+
+6. Browser smoke testing was defined but not runnable or aligned with the current app.
+   - Previous behavior: Playwright was missing, the smoke script double-navigated during startup, used stale export IDs, treated hidden projection canvases as failures, and used in-page WebGL readback that produced false blank-canvas failures.
+   - Fix: added Playwright, installed browsers locally, switched canvas validation to Playwright element screenshots, updated current export IDs, added phone density-toggle coverage, and made unavailable browser engines explicit skips.
+
+7. The app made an external Google Fonts request on every load.
+   - Previous behavior: local/browser tests emitted network-denied resource errors and the app depended on an external font service.
+   - Fix: removed the Google Fonts stylesheet request from `index.html`; CSS and canvas text now fall back through local/system font stacks.
+
 ## Highest Priority Remaining Issues
 
-### 1. Automated mobile/browser smoke testing is not actually available
+### 1. Firefox browser smoke coverage is unavailable in this local Playwright runtime
 
 Evidence:
 
-- `package.json` defines `test:browser`.
-- `scripts/browserSmoke.mjs` imports Playwright dynamically.
-- `package.json` has no `playwright` dependency, and `npm.cmd run test:browser` fails immediately.
+- `npm.cmd run test:browser` validates Chromium and WebKit desktop/phone targets.
+- The same script skips Firefox because Playwright fails at `browserContext.newPage` before the app is loaded.
 
 Impact:
 
-- Phone, Safari/WebKit, Firefox, Edge, touch interaction, canvas readback, export-download, and density-toggle regressions are not gated.
+- Mozilla/Firefox behavior is not currently covered by the automated local smoke run.
 
 Fix method:
 
-- Add Playwright as a dev dependency or provide a documented external browser-test setup.
-- Add a test scenario that loads the phone viewport, opens the sidebar, enables density, waits for the filter pipeline to settle, asserts no console/page errors, and checks canvases remain nonblank.
-- Run Chromium, Firefox, and WebKit in CI where possible; keep a manual Safari/iOS checklist for real-device memory behavior.
+- Reinstall or pin Playwright if the Firefox runtime remains broken.
+- Add a CI/browser environment where Playwright Firefox can create pages reliably.
+- Keep a manual Firefox checklist until automated Firefox coverage is green.
 
-### 2. UV atlas memory is too high for phones
+### 2. UV atlas layering still duplicates memory
 
 Evidence:
 
-- `ATLAS_WIDTH = 8192` and `ATLAS_HEIGHT = 4096`.
-- Each `UVMapManager` allocates `atlasCanvas`, `baseLayer`, `featureLayer`, `starLayer`, and `labelLayer`.
+- Runtime atlas sizing now caps constrained/mobile browsers to 2048 x 1024.
+- Each `UVMapManager` still allocates `atlasCanvas`, `baseLayer`, `featureLayer`, `starLayer`, and `labelLayer`.
 - The app creates both `uvMap` and `uvGlobeMap`.
 
 Impact:
 
-- A single 8192 x 4096 RGBA canvas is about 128 MB before browser overhead. Five canvases per manager and two managers can exceed practical mobile memory. Enabling density redraws feature layers and can be the action that exposes the crash.
+- The phone path is much smaller than before, but duplicated full-layer canvases can still consume meaningful memory during density/cloud/label redraws.
 
 Fix method:
 
-- Introduce runtime atlas sizing based on `MAX_TEXTURE_SIZE`, viewport, device memory, and export requirements.
-- Use a lower interactive atlas size on constrained devices, then allocate high-resolution export canvases only during export.
 - Avoid duplicating full layer canvases for both UV projections when one atlas can be shared.
 - Dispose or null old layer canvases when maps are hidden or projection managers are destroyed.
+- Keep high-resolution export canvases allocated only during export transactions.
 
 ### 3. Overlay generation still runs synchronously on the main thread
 
@@ -78,12 +92,12 @@ Fix method:
 - Add cancellation tokens so rapid slider changes abandon stale work.
 - Show a lightweight "building overlay" progress state and keep the UI interactive.
 
-### 4. Overlay adjacency lines remain object-heavy
+### 4. Isolation adjacency lines remain object-heavy
 
 Evidence:
 
-- Density and isolation still build an adjacency list and per-neighbor line objects for the globe path.
-- Isolation still maintains both globe and Mollweide line geometry per active edge.
+- Density no longer builds adjacency line geometry.
+- Isolation still builds an adjacency list and maintains both globe and Mollweide line geometry per active edge.
 
 Impact:
 
@@ -148,40 +162,22 @@ Fix method:
 - Keep advanced settings behind a nested details/advanced row.
 - Keep isolation as a separate fieldset or separate clearly labeled subsection.
 
-### 8. Sidebar search enhancement is bolted on with a timeout
-
-Evidence:
-
-- `src/ui/enhance.js` calls `setTimeout(buildFilterSearch, 800)` in addition to DOMContentLoaded boot.
-
-Impact:
-
-- UI enhancement timing depends on a fixed delay and has no lifecycle disposal. This can race with slower startup or duplicate future UI mounting patterns.
-
-Fix method:
-
-- Move search construction into `setupFilterUI()` after dynamic sidebar content is created.
-- Return a disposer for search event listeners.
-- Remove the fixed timeout fallback.
-
-### 9. No-build ES module delivery is expensive on mobile cold start
+### 8. No-build ES module delivery is expensive on mobile cold start
 
 Evidence:
 
 - The app ships many separate ES modules plus large JSON/text data assets directly to the browser.
-- Runtime fonts are loaded from Google Fonts.
 
 Impact:
 
-- Mobile cold start pays many request/parse costs and depends on an external font service. Offline/local demos and stricter CSP/privacy environments are weaker.
+- Mobile cold start pays many request/parse costs. Offline/local demos are better now that external fonts are removed, but module/data loading still has no production bundle.
 
 Fix method:
 
 - Add a production build that bundles application modules while keeping data files cacheable.
 - Add `modulepreload` or a bundler manifest for key startup modules if staying no-build.
-- Self-host fonts or define robust system fallbacks.
 
-### 10. Runtime data normalization remains browser-heavy
+### 9. Runtime data normalization remains browser-heavy
 
 Evidence:
 
@@ -198,7 +194,7 @@ Fix method:
 - Consider binary/typed-array star position payloads for render-heavy paths.
 - Move expensive normalization to a Worker if runtime preprocessing must remain.
 
-### 11. Browser-only behavior has more static checks than runtime checks
+### 10. Browser-only behavior has more static checks than runtime checks
 
 Evidence:
 
@@ -237,4 +233,3 @@ Fix method:
 5. Existing audit files can drift from code.
    - Older audit notes already contain findings that are now fixed.
    - Fix: keep this current audit as the source of truth or replace old audit files with status-linked current findings.
-
