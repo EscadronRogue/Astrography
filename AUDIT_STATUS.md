@@ -12,11 +12,12 @@ Date: 2026-06-24
 - Removed stale mobile CSS overrides from `styles/responsive.css`.
 - Added startup `modulepreload` links for critical ES modules.
 - Fixed hidden viewpoint-banner CSS so it cannot cover mobile map headings while hidden.
+- Removed the standalone `editIOControls.js` startup module after a reported 503 resource failure; edit import/export wiring now lives in `EditManager` while still using shared file-reading and managed listener helpers.
 - Expanded `scripts/verify.mjs` with static checks for the new architecture and UI rules.
 
 ## Verification
 
-- `npm.cmd test` passes.
+- `npm.cmd test` passes: 137 JavaScript files and 7 CSS files.
 - `npm.cmd run test:browser` passes Chromium and WebKit desktop/phone canvas and export checks.
 - `npx.cmd playwright install firefox` was run, but Firefox smoke coverage still skips because Playwright cannot create a Firefox page in this environment.
 

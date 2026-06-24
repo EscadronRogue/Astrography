@@ -1051,13 +1051,13 @@ function checkLocalFileReadCompatibility() {
     }
   });
 
-  const editIo = join(root, 'src', 'features', 'editing', 'editIOControls.js');
-  const editIoText = readFileSync(editIo, 'utf8');
-  if (!editIoText.includes("from '../../shared/fileUtils.js'") || !editIoText.includes('readTextFile(file)')) {
-    addFailure(`Edit import should read local files through readTextFile: ${editIo}`);
+  const editManager = join(root, 'src', 'features', 'editing', 'editManager.js');
+  const editManagerText = readFileSync(editManager, 'utf8');
+  if (!editManagerText.includes("from '../../shared/fileUtils.js'") || !editManagerText.includes('readTextFile(file)')) {
+    addFailure(`Edit import should read local files through readTextFile without requiring a separate startup module: ${editManager}`);
   }
-  if (editIoText.includes('file.text()')) {
-    addFailure(`Edit import must not depend directly on File.text browser support: ${editIo}`);
+  if (editManagerText.includes('file.text()')) {
+    addFailure(`Edit import must not depend directly on File.text browser support: ${editManager}`);
   }
 }
 
@@ -1841,8 +1841,11 @@ function checkEditControlLifecycle() {
     }
   });
 
+  if (!managerText.includes('function setupEditIOControls(manager)') || !managerText.includes('readTextFile(file)')) {
+    addFailure(`Edit manager should own edit import/export button wiring without a separate editIOControls module: ${managerFile}`);
+  }
+
   [
-    join(root, 'src', 'features', 'editing', 'editIOControls.js'),
     join(root, 'src', 'features', 'editing', 'labelDragControls.js'),
     join(root, 'src', 'features', 'editing', 'transformControls.js')
   ].forEach(file => {

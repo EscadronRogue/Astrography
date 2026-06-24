@@ -2,7 +2,6 @@ import * as THREE from '../../vendor/three.js';
 import { createEventListenerRegistry } from '../../shared/eventListenerRegistry.js';
 import { initializeEditState } from './editState.js';
 import { downloadLabelEdits, applyLabelEdits, buildSerializableEditState } from './editPersistence.js';
-import { setupEditIOControls } from './editIOControls.js';
 import { updateEditOverlayPosition, registerEditableLabels } from './labelEditor.js';
 import { handleEditPointerDown, handleEditPointerMove, handleEditPointerUp, setupLabelEditor } from './labelDragControls.js';
 import {
@@ -13,7 +12,35 @@ import {
 } from './lineEditor.js';
 import { undoLastEdit } from './editCommands.js';
 import { setupEditOverlay, handleRotateMove, handleRotateUp, handleScaleMove, handleScaleUp } from './transformControls.js';
-import { logWarn } from '../../shared/logger.js';
+import { notifyError } from '../../shared/userNotifications.js';
+import { readTextFile } from '../../shared/fileUtils.js';
+import { logError, logWarn } from '../../shared/logger.js';
+
+function setupEditIOControls(manager) {
+  const dlBtn = document.getElementById('download-edits');
+  if (dlBtn) {
+    manager.addManagedEventListener(dlBtn, 'click', () => manager.downloadLabelEdits());
+  }
+
+  const upBtn = document.getElementById('upload-edits');
+  const fileInput = document.getElementById('upload-edits-input');
+  if (!upBtn || !fileInput) return;
+
+  manager.addManagedEventListener(upBtn, 'click', () => fileInput.click());
+  manager.addManagedEventListener(fileInput, 'change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    try {
+      const text = await readTextFile(file);
+      const data = JSON.parse(text);
+      manager.applyLabelEdits(data);
+    } catch (error) {
+      logError('Invalid edits file:', error);
+      notifyError('Invalid edits file', error);
+    }
+    fileInput.value = '';
+  });
+}
 
 export class EditManager {
   constructor(mollweideMap, cachedStars, constellationLabelsMoll, galacticDirectionLabelsMoll, getStarId, buildAndApplyFilters, maybePersistPresets, requestRender) {

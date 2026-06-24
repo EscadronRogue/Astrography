@@ -4,7 +4,7 @@ Date: 2026-06-24
 
 ## Verification Baseline
 
-- `npm.cmd test` passes: 138 JavaScript files and 7 CSS files.
+- `npm.cmd test` passes: 137 JavaScript files and 7 CSS files.
 - `npm.cmd run test:browser` passes Chromium and WebKit on desktop and phone, including nonblank canvas checks, phone density-toggle coverage, and PNG/PDF/STL/UV/globe export downloads.
 - Firefox automation still skips before Astrography loads: Playwright fails at `browserContext.newPage` with `Cannot read properties of undefined (reading '_page')`. Re-running `npx.cmd playwright install firefox` completed, but the failure remained.
 - `npm.cmd audit --audit-level=moderate` was not run because the approval reviewer rejected sending dependency metadata to the external npm advisory service. Run it locally or approve that disclosure explicitly if registry-backed dependency audit evidence is required.
@@ -35,7 +35,11 @@ Date: 2026-06-24
    - Evidence: `#viewpoint-banner` declared `display: flex`, overriding the browser's default `[hidden]` behavior. Phone screenshots showed the hidden banner over the first map heading.
    - Fix method: added `#viewpoint-banner[hidden] { display: none; }`, and retained `body.viewpoint-active` spacing for the legitimate visible-banner state.
 
-7. Audit guardrails did not cover the above regressions.
+7. A reported `editIOControls.js` resource request failed with HTTP 503.
+   - Evidence: the standalone module was present and repo static serving returned 200, but the browser reported a failed resource load for that exact startup module.
+   - Fix method: removed `src/features/editing/editIOControls.js` and folded its small import/export button wiring into `EditManager`, eliminating that network request while preserving managed listener cleanup and shared `readTextFile` compatibility.
+
+8. Audit guardrails did not cover the above regressions.
    - Fix method: extended `scripts/verify.mjs` to enforce shared UV atlas usage, projection-local interaction signatures, merged isolation line layers, one Density fieldset plus separate Isolation fieldset, mobile CSS cleanup, and startup module preloads.
 
 ## Current Residual Gaps
