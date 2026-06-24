@@ -95,7 +95,7 @@ export class UVMapManager {
     this.boundariesPromise = null;
     this.boundaryData = null;
     this.constellationMetaPromise = null;
-    this.sourceGlobeScene = null;
+    this.globeSourceScene = null;
     this.updateToken = 0;
 
     this.atlasStore = (atlasStore || createUvAtlasStore({
@@ -142,8 +142,8 @@ export class UVMapManager {
     });
   }
 
-  setLegacySourceScene(scene) {
-    this.sourceGlobeScene = scene;
+  setGlobeSourceScene(scene) {
+    this.globeSourceScene = scene;
   }
 
   async ensureConstellationMeta() {
@@ -558,7 +558,7 @@ export class UVMapManager {
     const opacityFactor = clamp01(this.getFilterNumber('densityOpacity', 1));
     if (opacityFactor <= 0.001) return;
 
-    // Smooth heatmap pass (inspired by Mollweide heatmap canvas approach)
+    // Smooth heatmap pass that keeps the UV cloud layer soft at atlas scale.
     ctx.save();
     ctx.filter = 'blur(6px)';
     (overlay.cubesData || []).forEach(cell => {
@@ -658,7 +658,7 @@ export class UVMapManager {
 
   drawCloudsOverlay(ctx) {
     drawUvCloudsOverlay(ctx, {
-      sourceScene: this.sourceGlobeScene,
+      sourceScene: this.globeSourceScene,
       showClouds: this.state.showCloudsFlag,
       cloudOpacity: this.getFilterNumber('cloudOpacity', 1)
     });

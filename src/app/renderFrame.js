@@ -1,6 +1,6 @@
 import { scheduleAnimationFrame } from '../shared/renderScheduler.js';
 
-export function createRenderRequester(mapManagers, getEditManager) {
+export function createRenderRequester(mapManagers) {
   let renderRequested = false;
 
   function markDirty(targets) {
@@ -23,17 +23,13 @@ export function createRenderRequester(mapManagers, getEditManager) {
     renderRequested = true;
     scheduleAnimationFrame(() => {
       renderRequested = false;
-      let rendered = false;
       for (let i = 0; i < mapManagers.length; i++) {
         const manager = mapManagers[i];
         if (!manager.canvas.isConnected) continue;
         if (manager.renderDirty === false) continue;
         manager.renderDirty = false;
         manager.render();
-        rendered = true;
       }
-      const editManager = getEditManager();
-      if (rendered && editManager) editManager.updateEditOverlay();
     });
   };
 }

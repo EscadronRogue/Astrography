@@ -5,14 +5,6 @@ export {
   createGalacticPlaneGlobe,
   createEclipticPlaneGlobe,
   createCelestialEquatorGlobe,
-  createGalacticPlaneMollweide,
-  updateGalacticPlaneMollweide,
-  createEclipticPlaneMollweide,
-  updateEclipticPlaneMollweide,
-  createCelestialEquatorMollweide,
-  updateCelestialEquatorMollweide,
   createGalacticDirectionLabelsTrue,
-  createGalacticDirectionLabelsGlobe,
-  createGalacticDirectionLabelsMollweide,
-  updateGalacticDirectionLabelsMollweide
+  createGalacticDirectionLabelsGlobe
 } from './planeMeshes.js';

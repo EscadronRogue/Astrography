@@ -17,29 +17,20 @@ const _state = {
   selectedStarData: null,
   selectedHighlightTrue: null,
   selectedHighlightGlobe: null,
-  selectedHighlightMollweide: null,
   selectedHighlightUv: null,
-  selectedHighlightUvGlobe: null,
   globeSurfaceSphere: null,
   cloudDensityOverlays: [],
   constellationLinesGlobe: [],
   constellationLabelsGlobe: [],
   constellationOverlayGlobe: [],
-  constellationLinesMoll: [],
-  constellationLabelsMoll: [],
-  constellationOverlayMoll: [],
   galacticPlaneTrue: null,
   eclipticPlaneTrue: null,
   celestialEquatorTrue: null,
   galacticPlaneGlobe: null,
   eclipticPlaneGlobe: null,
   celestialEquatorGlobe: null,
-  galacticPlaneMoll: null,
-  eclipticPlaneMoll: null,
-  celestialEquatorMoll: null,
   galacticDirectionLabelsTrue: [],
-  galacticDirectionLabelsGlobe: [],
-  galacticDirectionLabelsMoll: []
+  galacticDirectionLabelsGlobe: []
 };
 
 const filterRuntimeState = {
@@ -47,8 +38,6 @@ const filterRuntimeState = {
   currentConnections: [],
   currentGlobeFilteredStars: [],
   currentGlobeConnections: [],
-  currentMollweideFilteredStars: [],
-  currentMollweideConnections: [],
   isolationOverlay: null,
   densityOverlay: null,
   cloudDensitySignature: '',
@@ -102,6 +91,3 @@ export function setCachedStars(v) { _state.cachedStars = v; }
 
 export function getGlobeSurfaceSphere() { return _state.globeSurfaceSphere; }
 export function setGlobeSurfaceSphere(v) { _state.globeSurfaceSphere = v; }
-
-export function getConstellationLinesMoll() { return _state.constellationLinesMoll; }
-export function getGalacticDirectionLabelsMoll() { return _state.galacticDirectionLabelsMoll; }

@@ -3,15 +3,15 @@ import { readStorageItem, removeStorageItem, writeStorageItem } from '../shared/
 import { logWarn } from '../shared/logger.js';
 
 export const PRESET_KEY = 'astrography-presets';
-export const PRESET_SCHEMA_VERSION = 3;
+export const PRESET_SCHEMA_VERSION = 4;
 
-function migrateLegacyDustCloudSelections(form, savedFormState) {
+function migrateDustCloudSelections(form, savedFormState) {
   if (!form || !savedFormState) return;
 
   const densitySelections = Object.entries(savedFormState).filter(([id, value]) =>
     id.startsWith('dust-density-') && value === true
   );
-  const legacySelections = Object.entries(savedFormState).filter(([id, value]) =>
+  const lineSelections = Object.entries(savedFormState).filter(([id, value]) =>
     id.startsWith('dust-cloud-') && value === true
   );
 
@@ -24,12 +24,12 @@ function migrateLegacyDustCloudSelections(form, savedFormState) {
   });
 
   const densityMode = form.querySelector('#dust-cloud-mode-density');
-  const legacyMode = form.querySelector('#dust-cloud-mode-legacy');
+  const linesMode = form.querySelector('#dust-cloud-mode-lines');
   if (densitySelections.length > 0 && densityMode) {
     densityMode.checked = true;
-    if (legacyMode) legacyMode.checked = false;
-  } else if (legacySelections.length > 0 && legacyMode) {
-    legacyMode.checked = true;
+    if (linesMode) linesMode.checked = false;
+  } else if (lineSelections.length > 0 && linesMode) {
+    linesMode.checked = true;
     if (densityMode) densityMode.checked = false;
   }
 }
@@ -46,27 +46,13 @@ function refreshRestoredFilterUi(form) {
     'enable-density-filter',
     'enable-isolation-filter',
     'dust-cloud-mode-density',
-    'dust-cloud-mode-legacy'
+    'dust-cloud-mode-lines'
   ].forEach(id => {
     const control = getElementByIdWithin(form, id);
     if (control) {
       control.dispatchEvent(new Event('change', { bubbles: true }));
     }
   });
-}
-
-function serializeMap(map) {
-  return Array.from(map.entries());
-}
-
-function deserializeMap(entries, target) {
-  target.clear();
-  (entries || []).forEach(([id, value]) => target.set(id, value));
-}
-
-function deserializeSet(values, target) {
-  target.clear();
-  (values || []).forEach(value => target.add(value));
 }
 
 export function maybeSavePresets(onSave) {
@@ -76,34 +62,14 @@ export function maybeSavePresets(onSave) {
   }
 }
 
-export function savePresets({
-  formId = 'filters-form',
-  starLabelOffsets,
-  starLabelRotations,
-  starLabelScales,
-  constellationLabelOffsets,
-  galacticLabelOffsets,
-  removedLineSegments,
-  hiddenLineKeys
-}) {
+export function savePresets({ formId = 'filters-form' } = {}) {
   const form = document.getElementById(formId);
   if (!form) return;
 
   const payload = {
     schemaVersion: PRESET_SCHEMA_VERSION,
     remember: true,
-    form: captureFormState(form),
-    edits: {
-      starOffsets: serializeMap(starLabelOffsets),
-      starRotations: serializeMap(starLabelRotations),
-      starScales: serializeMap(starLabelScales),
-      constellationOffsets: serializeMap(constellationLabelOffsets),
-      galacticOffsets: serializeMap(galacticLabelOffsets)
-    },
-    lineEdits: {
-      removedSegments: Array.from(removedLineSegments),
-      hiddenLines: Array.from(hiddenLineKeys)
-    }
+    form: captureFormState(form)
   };
 
   writeStorageItem(PRESET_KEY, JSON.stringify(payload), {
@@ -111,16 +77,7 @@ export function savePresets({
   });
 }
 
-export function loadPresets({
-  formId = 'filters-form',
-  starLabelOffsets,
-  starLabelRotations,
-  starLabelScales,
-  constellationLabelOffsets,
-  galacticLabelOffsets,
-  removedLineSegments,
-  hiddenLineKeys
-}) {
+export function loadPresets({ formId = 'filters-form' } = {}) {
   const serialized = readStorageItem(PRESET_KEY, {
     onError: error => logWarn('[loadPresets] Failed to read saved presets:', error)
   });
@@ -145,21 +102,8 @@ export function loadPresets({
   const form = document.getElementById(formId);
   if (form && payload.form) {
     restoreFormState(form, payload.form, { dispatchEvents: false });
-    migrateLegacyDustCloudSelections(form, payload.form);
+    migrateDustCloudSelections(form, payload.form);
     refreshRestoredFilterUi(form);
-  }
-
-  if (payload.edits) {
-    deserializeMap(payload.edits.starOffsets, starLabelOffsets);
-    deserializeMap(payload.edits.starRotations, starLabelRotations);
-    deserializeMap(payload.edits.starScales, starLabelScales);
-    deserializeMap(payload.edits.constellationOffsets, constellationLabelOffsets);
-    deserializeMap(payload.edits.galacticOffsets, galacticLabelOffsets);
-  }
-
-  if (payload.lineEdits) {
-    deserializeSet(payload.lineEdits.removedSegments, removedLineSegments);
-    deserializeSet(payload.lineEdits.hiddenLines, hiddenLineKeys);
   }
 
   return true;

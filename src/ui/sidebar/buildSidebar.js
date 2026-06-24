@@ -121,8 +121,8 @@ function bindToggleAllDustClouds() {
 
 function bindDustCloudModeControls() {
   const densityRadio = document.getElementById('dust-cloud-mode-density');
-  const legacyRadio = document.getElementById('dust-cloud-mode-legacy');
-  if (!densityRadio || !legacyRadio) return;
+  const linesRadio = document.getElementById('dust-cloud-mode-lines');
+  if (!densityRadio || !linesRadio) return;
 
   const densityControlIds = [
     'cloud-density-radius-slider',
@@ -130,26 +130,26 @@ function bindDustCloudModeControls() {
     'cloud-density-opacity-slider',
     'cloud-density-opacity-number'
   ];
-  const legacyControlIds = [
+  const lineControlIds = [
     'cloud-opacity-slider',
     'cloud-opacity-number'
   ];
 
   const densityControls = densityControlIds.map(id => document.getElementById(id)).filter(Boolean);
-  const legacyControls = legacyControlIds.map(id => document.getElementById(id)).filter(Boolean);
+  const lineControls = lineControlIds.map(id => document.getElementById(id)).filter(Boolean);
 
   const syncMode = () => {
     const useDensity = densityRadio.checked;
     densityControls.forEach(control => {
       control.disabled = !useDensity;
     });
-    legacyControls.forEach(control => {
+    lineControls.forEach(control => {
       control.disabled = useDensity;
     });
   };
 
   densityRadio.addEventListener('change', syncMode);
-  legacyRadio.addEventListener('change', syncMode);
+  linesRadio.addEventListener('change', syncMode);
   syncMode();
 }
 
@@ -344,8 +344,6 @@ function initSliderSync() {
   syncSliderPair('constellation-line-opacity-slider', 'constellation-line-opacity-number', 'constellation-line-opacity-value');
   bindClampedSlider('constellation-line-width-slider', 'constellation-line-width-number', 'constellation-line-width-value', 0.1, 5);
   syncSliderPair('constellation-name-opacity-slider', 'constellation-name-opacity-number', 'constellation-name-opacity-value');
-  bindClampedSlider('mollweide-border-width-slider', 'mollweide-border-width-number', 'mollweide-border-width-value', 0.1, 10);
-  syncSliderPair('mollweide-border-opacity-slider', 'mollweide-border-opacity-number', 'mollweide-border-opacity-value');
   syncSliderPair('plane-opacity-slider', 'plane-opacity-number', 'plane-opacity-value');
 
   bindToggleAllDustClouds();

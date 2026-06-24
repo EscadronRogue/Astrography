@@ -1,4 +1,3 @@
-import { ExportManager } from '../features/export/exportManager.js';
 import { exportSceneSnapshot } from '../features/export/sceneSnapshotExporter.js';
 import { exportTrueCoordinatesSTL } from '../features/export/stlExporter.js';
 import { exportPrintableSTLKit } from '../features/export/stlKitExporter.js';
@@ -99,8 +98,6 @@ export function setupExportBindings({
   maps,
   yieldToUI
 }) {
-  const exportManager = new ExportManager(maps.mollweideMap);
-  exportManager.setup();
   applyExportDependencyHealth(documentRef);
 
   [
@@ -108,10 +105,8 @@ export function setupExportBindings({
     ['export-true-pdf', maps.trueCoordinatesMap, 'pdf', 'true_coordinates_map'],
     ['export-uv-png', maps.uvMap, 'png', 'uv_map'],
     ['export-uv-pdf', maps.uvMap, 'pdf', 'uv_map'],
-    ['export-globe-png', maps.uvGlobeMap, 'png', 'globe_map'],
-    ['export-globe-pdf', maps.uvGlobeMap, 'pdf', 'globe_map'],
-    ['export-legacy-globe-png', maps.globeMap, 'png', 'legacy_globe_map'],
-    ['export-legacy-globe-pdf', maps.globeMap, 'pdf', 'legacy_globe_map']
+    ['export-globe-png', maps.globeMap, 'png', 'globe_map'],
+    ['export-globe-pdf', maps.globeMap, 'pdf', 'globe_map']
   ].forEach(([id, manager, format, filenameBase]) => {
     bindSceneSnapshotExport({ documentRef, id, manager, format, filenameBase });
   });
@@ -119,5 +114,5 @@ export function setupExportBindings({
   bindTrueCoordinatesStlExport({ documentRef, state });
   bindPrintableStlKitExport({ documentRef, state, yieldToUI });
 
-  return { exportManager };
+  return {};
 }

@@ -6,17 +6,6 @@
 /** Radius of the globe projection sphere in scene units. */
 export const GLOBE_RADIUS = 100;
 
-/** Number of segments used when drawing circles/arcs on the sphere. */
-export const CIRCLE_SEGMENTS = 32;
-
-/** Canvas texture dimensions for Mollweide heatmaps. */
-export const HEATMAP_CANVAS_WIDTH = 1024;
-export const HEATMAP_CANVAS_HEIGHT = 512;
-
-/** Mollweide heatmap plane dimensions in scene units. */
-export const HEATMAP_PLANE_WIDTH = 400;
-export const HEATMAP_PLANE_HEIGHT = 200;
-
 /** Default color for constellation boundary lines (grey). */
 export const CONSTELLATION_LINE_COLOR = 0x888888;
 
@@ -49,9 +38,6 @@ export const STELLAR_CLASS_NAMES = Object.freeze({
   T: 'Cool Brown Dwarf',
   Y: 'Ultra Cool Brown Dwarf'
 });
-
-/** Newton-Raphson iteration limit for Mollweide theta convergence. */
-export const MOLLWEIDE_MAX_ITERATIONS = 10;
 
 /** Slider range defaults for stellar class star/label size. */
 export const STELLAR_SIZE_SLIDER = Object.freeze({
@@ -115,9 +101,6 @@ export const EXPORT_MAX_TILE_SIZE = 8192;
 
 /** Connection label base font size (px). */
 export const CONNECTION_LABEL_BASE_FONT = 72;
-
-/** Star texture size (px). */
-export const STAR_TEXTURE_SIZE = 64;
 
 /** HSL saturation and lightness for auto-generated colors. */
 export const AUTO_COLOR_SATURATION = 70;

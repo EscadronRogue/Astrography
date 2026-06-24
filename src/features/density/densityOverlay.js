@@ -1,10 +1,6 @@
-// Density overlay implementation migrated from the legacy density filter module.
 import * as THREE from '../../vendor/three.js';
-import { getMollweideLambda0, minimalRADifference } from '../../shared/geometryUtils.js';
 import { lightenColor } from './densityColorScale.js';
-import { disposeObject3D } from '../../render/engine/renderUtils.js';
 import { buildDistanceQueryIndex, populateCellDistanceCaches, sumWeightedDistancesWithinRadius } from '../../shared/cellDistanceCache.js';
-import { HEATMAP_CANVAS_WIDTH, HEATMAP_CANVAS_HEIGHT, HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT, MOLLWEIDE_MAX_ITERATIONS, EPSILON } from '../../shared/constants.js';
 import { InstancedCellLayer, createCellVisualState } from '../overlays/instancedCellLayer.js';
 
 // Pre-allocated reusable objects to avoid per-cell allocations in hot loops
@@ -22,29 +18,6 @@ class DensityGridOverlay {
     this.opacityFactor = 1.0;
     this.revision = 0;
     this.tcCellLayer = null;
-
-    // Off-screen canvas for smooth Mollweide heatmap
-    this.canvasWidth = HEATMAP_CANVAS_WIDTH;
-    this.canvasHeight = HEATMAP_CANVAS_HEIGHT;
-    this.canvas = document.createElement('canvas');
-    this.canvas.width = this.canvasWidth;
-    this.canvas.height = this.canvasHeight;
-    this.ctx = this.canvas.getContext('2d');
-    if (!this.ctx) throw new Error('2D canvas context unavailable');
-    this.texture = new THREE.CanvasTexture(this.canvas);
-    this.texture.minFilter = THREE.LinearFilter;
-    this.texture.magFilter = THREE.LinearFilter;
-    const mat = new THREE.MeshBasicMaterial({
-      map: this.texture,
-      transparent: true,
-      depthWrite: false
-    });
-    this.textureMesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(HEATMAP_PLANE_WIDTH, HEATMAP_PLANE_HEIGHT),
-      mat
-    );
-    this.textureMesh.renderOrder = 2;
-    this._heatmapRevision = -1; // tracks last drawn revision to avoid redundant redraws
   }
 
   createGrid(stars) {
@@ -63,25 +36,6 @@ class DensityGridOverlay {
           if (distFromCenter < this.minDistance || distFromCenter > this.maxDistance) continue;
 
           const cubeTC = createCellVisualState(posTC, 0xff0000, 0);
-          let ra, dec;
-          if (distFromCenter < 1e-6) {
-            ra = 0; dec = 0;
-          } else {
-            ra = Math.atan2(-posTC.z, -posTC.x);
-            dec = Math.asin(posTC.y / distFromCenter);
-          }
-          let theta = dec;
-          for (let i = 0; i < MOLLWEIDE_MAX_ITERATIONS; i++) {
-            const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
-              (2 + 2 * Math.cos(2 * theta));
-            theta -= delta;
-            if (Math.abs(delta) < EPSILON) break;
-          }
-          const cosT = Math.cos(theta);
-          const sinT = Math.sin(theta);
-          const mollXFactor = (2 * 100 / Math.PI) * cosT;
-          const mollY = 100 * sinT;
-
           const cell = {
             tcMesh: cubeTC,
             tcPos: posTC,
@@ -91,10 +45,6 @@ class DensityGridOverlay {
               iz: Math.round(z / this.gridSize)
             },
             active: false,
-            raRad: ra,
-            decRad: dec,
-            mollXFactor: mollXFactor,
-            mollY: mollY,
             density: 0
           };
           cell.id = this.cubesData.length;
@@ -113,14 +63,12 @@ class DensityGridOverlay {
   getSceneObjects() {
     return {
       tc: this.tcCellLayer ? [this.tcCellLayer.mesh] : [],
-      globe: [],
-      moll: [this.textureMesh]
+      globe: []
     };
   }
 
   dispose() {
     this.tcCellLayer?.dispose();
-    disposeObject3D(this.textureMesh);
   }
 
   getExtendedStars(stars) {
@@ -134,45 +82,7 @@ class DensityGridOverlay {
     cell.density = sumWeightedDistancesWithinRadius(cell, radius, tolerance, queryIndex);
   }
 
-  drawHeatmap(lambda0 = getMollweideLambda0(), force = false) {
-    if (!force && this._heatmapRevision === this.revision) return;
-    const ctx = this.ctx;
-    ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight);
-    ctx.filter = 'blur(8px)';
-    const xScale = this.canvasWidth / 400;
-    const yScale = this.canvasHeight / 200;
-    this.cubesData.forEach(cell => {
-      if (!cell.active) return;
-      const lambda = minimalRADifference(cell.raRad - lambda0);
-      const x = cell.mollXFactor * lambda;
-      const y = cell.mollY;
-      const ratio = cell.tcPos.length() / this.maxDistance;
-      const scale = THREE.MathUtils.lerp(20.0, 0.1, Math.min(1, ratio));
-      const width = this.gridSize * scale * xScale;
-      const height = this.gridSize * scale * yScale;
-      const px = (x + 200) * xScale;
-      const py = (100 - y) * yScale;
-      const col = cell.tcMesh.material.color;
-      const alpha = cell.tcMesh.material.opacity;
-      const r = Math.round(col.r * 255);
-      const g = Math.round(col.g * 255);
-      const b = Math.round(col.b * 255);
-      const radius = Math.max(width, height);
-      const grd = ctx.createRadialGradient(px, py, 0, px, py, radius);
-      grd.addColorStop(0, `rgba(${r},${g},${b},${alpha})`);
-      grd.addColorStop(0.7, `rgba(${r},${g},${b},${alpha * 0.3})`);
-      grd.addColorStop(1, `rgba(${r},${g},${b},0)`);
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.arc(px, py, radius, 0, Math.PI * 2);
-      ctx.fill();
-    });
-    ctx.filter = 'none';
-    this.texture.needsUpdate = true;
-    this._heatmapRevision = this.revision;
-  }
-
-  update(stars, sceneTC, sceneGlobe, sceneMoll, options = {}) {
+  update(stars, sceneTC, sceneGlobe, options = {}) {
     const radius = Number.isFinite(options.density) ? options.density : 10;
     const tolerance = Number.isFinite(options.densityTolerance) ? options.densityTolerance : 0;
     const bottomPct = Number.isFinite(options.densityBottomPercent) ? options.densityBottomPercent : 10;
@@ -220,12 +130,6 @@ class DensityGridOverlay {
     });
     this.tcCellLayer?.update(this.cubesData, cell => cell.tcMesh);
     this.revision += 1;
-    this.drawHeatmap(getMollweideLambda0());
-  }
-
-  refreshMollweide(lambda0 = getMollweideLambda0()) {
-    this.revision += 1;
-    this.drawHeatmap(lambda0, true); // force redraw since Mollweide positions changed
   }
 }
 
@@ -235,7 +139,7 @@ export function initDensityFilter(minDistance, maxDistance, starArray, gridSize 
   return overlay;
 }
 
-export function updateDensityFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll, options = {}) {
+export function updateDensityFilter(starArray, overlay, sceneTC, sceneGlobe, options = {}) {
   if (!overlay) return;
-  overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll, options);
+  overlay.update(starArray, sceneTC, sceneGlobe, options);
 }

@@ -43,7 +43,10 @@ export function readFilterState(filterForm) {
     ? filterForm
     : new FormData(filterForm);
   const selectedDustClouds = formData.getAll('dust-clouds');
-  const dustCloudMode = formData.get('dust-cloud-mode') === 'legacy' ? 'legacy' : 'density';
+  const dustCloudModeValue = formData.get('dust-cloud-mode');
+  const dustCloudMode = dustCloudModeValue === 'lines'
+    ? 'lines'
+    : 'density';
   const { minDistance, maxDistance } = normalizeDistanceRange(
     readNumericValue(formData, 'min-distance', 0),
     readNumericValue(formData, 'max-distance', 20)
@@ -89,12 +92,10 @@ export function readFilterState(filterForm) {
     constellationLineWidth: readNumericValue(formData, 'constellation-line-width', 1),
     constellationNameOpacity: readNumericValue(formData, 'constellation-name-opacity', 80) / 100,
     planeOpacity: readNumericValue(formData, 'plane-opacity', 50) / 100,
-    mollweideBorderWidth: readNumericValue(formData, 'mollweide-border-width', 1),
-    mollweideBorderOpacity: readNumericValue(formData, 'mollweide-border-opacity', 100) / 100,
     selectedDustClouds,
     dustCloudMode,
-    showClouds: dustCloudMode === 'legacy' && selectedDustClouds.length > 0,
-    showCloudDensity: dustCloudMode !== 'legacy' && selectedDustClouds.length > 0,
+    showClouds: dustCloudMode === 'lines' && selectedDustClouds.length > 0,
+    showCloudDensity: dustCloudMode !== 'lines' && selectedDustClouds.length > 0,
     showGalacticPlane: readCheckboxValue(formData, 'show-galactic-plane'),
     showEclipticPlane: readCheckboxValue(formData, 'show-ecliptic-plane'),
     showCelestialEquator: readCheckboxValue(formData, 'show-celestial-equator'),

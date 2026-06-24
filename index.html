@@ -56,21 +56,7 @@
             </div>
             <div class="filter-item">
               <input type="checkbox" id="map-globe" name="map-projection" value="globe" checked />
-              <label for="map-globe">Globe (UV Projection)</label>
-            </div>
-            <div class="filter-item">
-              <input type="checkbox" id="show-legacy-projections" name="show-legacy-projections" />
-              <label for="show-legacy-projections">Show Legacy Projections</label>
-            </div>
-            <div id="legacy-projection-controls" hidden>
-              <div class="filter-item">
-                <input type="checkbox" id="map-legacy-mollweide" name="map-projection-legacy" value="legacy-mollweide" />
-                <label for="map-legacy-mollweide">Legacy Mollweide</label>
-              </div>
-              <div class="filter-item">
-                <input type="checkbox" id="map-legacy-globe" name="map-projection-legacy" value="legacy-globe" />
-                <label for="map-legacy-globe">Legacy Globe</label>
-              </div>
+              <label for="map-globe">Globe</label>
             </div>
           </div>
         </fieldset>
@@ -327,8 +313,8 @@
               <label for="dust-cloud-mode-density">Density Overlay</label>
             </div>
             <div class="filter-item">
-              <input type="radio" id="dust-cloud-mode-legacy" name="dust-cloud-mode" value="legacy" />
-              <label for="dust-cloud-mode-legacy">Dust Cloud Legacy</label>
+              <input type="radio" id="dust-cloud-mode-lines" name="dust-cloud-mode" value="lines" />
+              <label for="dust-cloud-mode-lines">Cloud Lines</label>
             </div>
 
             <div class="filter-subhead">Density Overlay</div>
@@ -385,18 +371,6 @@
               <input type="number" id="constellation-name-opacity-number" name="constellation-name-opacity" min="0" max="100" value="80" />
               <span id="constellation-name-opacity-value">80</span>%
             </div>
-            <div class="filter-item">
-              <label for="mollweide-border-width-slider">Border Width:</label>
-              <input type="range" id="mollweide-border-width-slider" name="mollweide-border-width" min="0.1" max="10" value="1.0" step="0.1" />
-              <input type="number" id="mollweide-border-width-number" name="mollweide-border-width" min="0.1" max="10" value="1.0" step="0.1" />
-              <span id="mollweide-border-width-value">1.0</span>px
-            </div>
-            <div class="filter-item">
-              <label for="mollweide-border-opacity-slider">Border Opacity:</label>
-              <input type="range" id="mollweide-border-opacity-slider" name="mollweide-border-opacity" min="0" max="100" value="100" />
-              <input type="number" id="mollweide-border-opacity-number" name="mollweide-border-opacity" min="0" max="100" value="100" />
-              <span id="mollweide-border-opacity-value">100</span>%
-            </div>
           </div>
         </fieldset>
 
@@ -439,15 +413,10 @@
           <div class="filter-content">
             <div class="filter-item">
               <input type="checkbox" id="enable-save-presets" name="enable-save-presets" />
-              <label for="enable-save-presets">Remember Filters &amp; Edits</label>
+              <label for="enable-save-presets">Remember Filters</label>
             </div>
             <div class="filter-item filter-button-row">
               <button type="button" id="clear-saved-presets">Clear Saved Presets</button>
-            </div>
-            <div class="filter-item">
-              <button type="button" id="download-edits">Download Edits</button>
-              <button type="button" id="upload-edits">Upload Edits</button>
-              <input type="file" id="upload-edits-input" accept="application/json" class="visually-hidden" />
             </div>
           </div>
         </fieldset>
@@ -479,37 +448,12 @@
       </div>
       <div class="map-container">
         <h2>Globe</h2>
-        <p class="map-subtitle">Primary globe projected from the UV map</p>
+        <p class="map-subtitle">Celestial sphere using the shared star and overlay styling</p>
         <button class="fullscreen-btn" aria-label="Fullscreen Globe Map">&#x2922;</button>
-        <canvas id="sphereMap" tabindex="0" aria-label="UV globe star map"></canvas>
+        <canvas id="sphereMap" tabindex="0" aria-label="Globe star map"></canvas>
         <div class="export-controls">
           <button id="export-globe-png" class="export-btn">PNG</button>
           <button id="export-globe-pdf" class="export-btn">PDF</button>
-        </div>
-      </div>
-      <div class="map-container legacy-map-container">
-        <h2>Legacy Globe</h2>
-        <p class="map-subtitle">Legacy scene-based 3D plotting workflow</p>
-        <button class="fullscreen-btn" aria-label="Fullscreen Legacy Globe Map">&#x2922;</button>
-        <canvas id="legacySphereMap" tabindex="0" aria-label="Legacy globe star map"></canvas>
-        <div class="export-controls">
-          <button id="export-legacy-globe-png" class="export-btn">PNG</button>
-          <button id="export-legacy-globe-pdf" class="export-btn">PDF</button>
-        </div>
-      </div>
-      <div class="map-container legacy-map-container">
-        <h2>Legacy Mollweide</h2>
-        <p class="map-subtitle">Legacy flat-sky projection and editing workflow</p>
-        <button class="fullscreen-btn" aria-label="Fullscreen Legacy Mollweide Map">&#x2922;</button>
-        <canvas id="legacyMollweideMap" tabindex="0" aria-label="Legacy Mollweide star map"></canvas>
-        <div class="export-controls">
-          <button id="export-mollweide" class="export-btn">Export</button>
-          <button id="export-png" class="export-btn hidden-control">PNG</button>
-          <button id="export-pdf" class="export-btn hidden-control">PDF</button>
-          <button id="export-svg" class="export-btn hidden-control">SVG</button>
-          <button id="toggle-label-editor" class="export-btn">Edit Labels</button>
-          <button id="toggle-line-editor" class="export-btn">Edit Lines</button>
-          <button id="undo-edit" class="export-btn">Undo</button>
         </div>
       </div>
     </section>

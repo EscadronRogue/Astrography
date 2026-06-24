@@ -7,15 +7,7 @@ import {
   createGalacticPlaneGlobe,
   createEclipticPlaneGlobe,
   createCelestialEquatorGlobe,
-  createGalacticPlaneMollweide,
-  updateGalacticPlaneMollweide,
-  createEclipticPlaneMollweide,
-  updateEclipticPlaneMollweide,
-  createCelestialEquatorMollweide,
-  updateCelestialEquatorMollweide,
   createGalacticDirectionLabelsGlobe,
-  createGalacticDirectionLabelsMollweide,
-  updateGalacticDirectionLabelsMollweide,
   createGalacticDirectionLabelsTrue
 } from './planeRenderer.js';
 
@@ -24,41 +16,29 @@ const PLANE_CONFIG = {
     stateKeys: {
       trueMesh: 'galacticPlaneTrue',
       globeMesh: 'galacticPlaneGlobe',
-      mollMesh: 'galacticPlaneMoll',
       trueLabels: 'galacticDirectionLabelsTrue',
-      globeLabels: 'galacticDirectionLabelsGlobe',
-      mollLabels: 'galacticDirectionLabelsMoll'
+      globeLabels: 'galacticDirectionLabelsGlobe'
     },
     createTrue: opacity => createGalacticPlaneMesh(200, opacity),
     createGlobe: opacity => createGalacticPlaneGlobe(100, undefined, opacity),
-    createMoll: opacity => createGalacticPlaneMollweide(undefined, opacity),
-    updateMoll: updateGalacticPlaneMollweide,
     createTrueLabels: opacity => createGalacticDirectionLabelsTrue(undefined, opacity),
-    createGlobeLabels: opacity => createGalacticDirectionLabelsGlobe(undefined, opacity),
-    createMollLabels: opacity => createGalacticDirectionLabelsMollweide(undefined, opacity),
-    updateMollLabels: updateGalacticDirectionLabelsMollweide
+    createGlobeLabels: opacity => createGalacticDirectionLabelsGlobe(undefined, opacity)
   },
   ecliptic: {
     stateKeys: {
       trueMesh: 'eclipticPlaneTrue',
-      globeMesh: 'eclipticPlaneGlobe',
-      mollMesh: 'eclipticPlaneMoll'
+      globeMesh: 'eclipticPlaneGlobe'
     },
     createTrue: opacity => createEclipticPlaneMesh(200, opacity),
-    createGlobe: opacity => createEclipticPlaneGlobe(100, undefined, opacity),
-    createMoll: opacity => createEclipticPlaneMollweide(undefined, opacity),
-    updateMoll: updateEclipticPlaneMollweide
+    createGlobe: opacity => createEclipticPlaneGlobe(100, undefined, opacity)
   },
   equator: {
     stateKeys: {
       trueMesh: 'celestialEquatorTrue',
-      globeMesh: 'celestialEquatorGlobe',
-      mollMesh: 'celestialEquatorMoll'
+      globeMesh: 'celestialEquatorGlobe'
     },
     createTrue: opacity => createCelestialEquatorMesh(200, opacity),
-    createGlobe: opacity => createCelestialEquatorGlobe(100, undefined, opacity),
-    createMoll: opacity => createCelestialEquatorMollweide(undefined, opacity),
-    updateMoll: updateCelestialEquatorMollweide
+    createGlobe: opacity => createCelestialEquatorGlobe(100, undefined, opacity)
   }
 };
 
@@ -77,7 +57,7 @@ function removeMesh(scene, mesh) {
 }
 
 function ensurePlane(ctx, type, opacity) {
-  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap } = ctx.getMaps();
   const { state } = ctx;
   const config = PLANE_CONFIG[type];
   const keys = config.stateKeys;
@@ -89,13 +69,6 @@ function ensurePlane(ctx, type, opacity) {
   if (!state[keys.globeMesh]) {
     state[keys.globeMesh] = config.createGlobe(opacity);
     globeMap.scene.add(state[keys.globeMesh]);
-  }
-  if (!state[keys.mollMesh]) {
-    state[keys.mollMesh] = config.createMoll(opacity);
-    mollweideMap.scene.add(state[keys.mollMesh]);
-  } else {
-    config.updateMoll(state[keys.mollMesh]);
-    state[keys.mollMesh].material.opacity = opacity;
   }
 
   state[keys.trueMesh].material.opacity = opacity;
@@ -118,34 +91,22 @@ function ensurePlane(ctx, type, opacity) {
         if (label.material) label.material.opacity = opacity;
       });
     }
-    if (state[keys.mollLabels].length === 0) {
-      state[keys.mollLabels] = config.createMollLabels(opacity);
-      state[keys.mollLabels].forEach(label => mollweideMap.scene.add(label));
-    } else {
-      config.updateMollLabels(state[keys.mollLabels]);
-      state[keys.mollLabels].forEach(label => {
-        if (label.material) label.material.opacity = opacity;
-      });
-    }
   }
 }
 
 function clearPlane(ctx, type) {
-  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap } = ctx.getMaps();
   const { state } = ctx;
   const keys = PLANE_CONFIG[type].stateKeys;
 
   state[keys.trueMesh] = removeMesh(trueCoordinatesMap.scene, state[keys.trueMesh]);
   state[keys.globeMesh] = removeMesh(globeMap.scene, state[keys.globeMesh]);
-  state[keys.mollMesh] = removeMesh(mollweideMap.scene, state[keys.mollMesh]);
 
   if (keys.trueLabels) {
     removeLabelObjects(trueCoordinatesMap.scene, state[keys.trueLabels]);
     removeLabelObjects(globeMap.scene, state[keys.globeLabels]);
-    removeLabelObjects(mollweideMap.scene, state[keys.mollLabels]);
     state[keys.trueLabels] = [];
     state[keys.globeLabels] = [];
-    state[keys.mollLabels] = [];
   }
 }
 
@@ -163,20 +124,4 @@ export function applyPlanes(ctx, flags, opacity = 0.5) {
 
   if (atSol && flags.showCelestialEquator) ensurePlane(ctx, 'equator', opacity);
   else clearPlane(ctx, 'equator');
-}
-
-export function refreshMollweidePlanes(ctx) {
-  const { state } = ctx;
-  if (state.showGalacticPlaneFlag && state.galacticPlaneMoll) {
-    updateGalacticPlaneMollweide(state.galacticPlaneMoll);
-    if (state.galacticDirectionLabelsMoll.length > 0) {
-      updateGalacticDirectionLabelsMollweide(state.galacticDirectionLabelsMoll);
-    }
-  }
-  if (state.showEclipticPlaneFlag && state.eclipticPlaneMoll) {
-    updateEclipticPlaneMollweide(state.eclipticPlaneMoll);
-  }
-  if (state.showCelestialEquatorFlag && state.celestialEquatorMoll) {
-    updateCelestialEquatorMollweide(state.celestialEquatorMoll);
-  }
 }

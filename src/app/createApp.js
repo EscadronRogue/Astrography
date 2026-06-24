@@ -1,9 +1,9 @@
 /**
  * @file Application bootstrap — wires services, loads data, and starts the app.
  * Kept deliberately thin: state lives in appStateFactory, globe surface in globeSurface,
- * Mollweide updates in mollweideUpdater, and star preprocessing in starPreprocessor.
+ * and star preprocessing in starPreprocessor.
  */
-import { state, getCachedStars, setCachedStars, getConstellationLinesMoll, getGalacticDirectionLabelsMoll } from './appStateFactory.js';
+import { state, getCachedStars, setCachedStars } from './appStateFactory.js';
 import { setupFilterUI } from '../features/filters/pipeline/index.js';
 import { loadStarData } from '../data/loaders/loadStarData.js';
 import { MapManager } from './mapManager.js';
@@ -13,35 +13,29 @@ import { createLoadingProgress } from './loadingProgress.js';
 import { setupMapProjectionToggles } from './projectionVisibility.js';
 import { debounce, createGlobeGrid } from './mapDecorations.js';
 import { maybeSavePresets, savePresets, loadPresets, clearSavedPresets } from './presets.js';
-import { getStarId } from '../shared/starUtils.js';
-import { getStarTruePosition as getSharedStarTruePosition, getStarGlobePosition, getStarMollweidePosition, precalcMollweideData as precalcSharedMollweideData } from '../shared/starUtils.js';
-import { buildAndApplyFilters as runFilterPipeline, updateMollweideView as refreshMollweideMap } from '../features/filters/pipeline/filterPipeline.js';
+import { getStarTruePosition as getSharedStarTruePosition, getStarGlobePosition } from '../shared/starUtils.js';
+import { buildAndApplyFilters as runFilterPipeline } from '../features/filters/pipeline/filterPipeline.js';
 import { initStarInteractions, setupStarInteractionToggle, updateSelectedStarHighlight } from '../render/interactions/starInteractions.js';
 import { setTooltipContext, invalidateTooltipCache } from '../render/interactions/tooltips.js';
 import { setRenderRequester, requestRenderIfAvailable } from '../shared/renderScheduler.js';
 import { notifyError } from '../shared/userNotifications.js';
 import { logError } from '../shared/logger.js';
-import { EditManager } from '../features/editing/editManager.js';
 import { applyGlobeSurface } from './globeSurface.js';
 import { setupExportBindings } from './exportBindings.js';
-import { updateMollweidePosition, createMollweideScheduler } from './mollweideUpdater.js';
 import { preprocessStarData, reprojectAllStars } from './starPreprocessor.js';
 import { clearConnectionPositionCache } from '../features/connections/connectionPairs.js';
 import { setViewpointStar, isDefaultViewpoint } from '../shared/viewpoint.js';
-import { clearRadToSphereCache, clearRadToMollweideCache } from '../shared/geometryUtils.js';
+import { clearRadToSphereCache } from '../shared/geometryUtils.js';
 
 // ---------------------------------------------------------------------------
 // Map managers and render coordination
 // ---------------------------------------------------------------------------
 let trueCoordinatesMap;
 let globeMap;
-let mollweideMap;
 let uvMap;
-let uvGlobeMap;
-let editManager = null;
 
 const mapManagers = [];
-const requestRender = createRenderRequester(mapManagers, () => editManager);
+const requestRender = createRenderRequester(mapManagers);
 setRenderRequester(requestRender);
 const loadingProgress = createLoadingProgress();
 const PHASE_WEIGHTS = loadingProgress.weights;
@@ -55,15 +49,11 @@ const yieldToUI = loadingProgress.yieldToUI;
 // ---------------------------------------------------------------------------
 const appContext = {
   state,
-  getMaps: () => ({ trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap }),
+  getMaps: () => ({ trueCoordinatesMap, globeMap, uvMap }),
   getStarTruePosition: getSharedStarTruePosition,
   projectStarGlobe: getStarGlobePosition,
-  projectStarMollweide: getStarMollweidePosition,
-  precalcMollweideData: precalcSharedMollweideData,
-  updateMollweidePosition,
   applyGlobeSurface: (isOpaque) => applyGlobeSurface(isOpaque, globeMap.scene),
   requestRender: () => requestRender(),
-  get editManager() { return editManager; },
 
   /**
    * Switch the viewpoint to a different star, or null to return to Sol.
@@ -78,7 +68,6 @@ const appContext = {
 
     // Clear projection caches — all RA/DEC values change with viewpoint
     clearRadToSphereCache();
-    clearRadToMollweideCache();
 
     // Reproject every star relative to the new viewpoint
     const stars = getCachedStars();
@@ -109,28 +98,11 @@ async function buildAndApplyFilters() {
   return runFilterPipeline(appContext);
 }
 
-async function updateMollweideView() {
-  return refreshMollweideMap(appContext);
-}
-
-const scheduleMollweideUpdate = createMollweideScheduler(updateMollweideView);
-
 // ---------------------------------------------------------------------------
 // Preset persistence helpers
 // ---------------------------------------------------------------------------
 function persistPresets() {
-  if (editManager) {
-    const edState = editManager.getState();
-    savePresets({
-      starLabelOffsets: edState.starLabelOffsets,
-      starLabelRotations: edState.starLabelRotations,
-      starLabelScales: edState.starLabelScales,
-      constellationLabelOffsets: edState.constellationLabelOffsets,
-      galacticLabelOffsets: edState.galacticLabelOffsets,
-      removedLineSegments: edState.removedLineSegments,
-      hiddenLineKeys: edState.hiddenLineKeys
-    });
-  }
+  savePresets();
 }
 
 function maybePersistPresets() {
@@ -214,14 +186,11 @@ export async function bootstrapApp() {
     const mapBase = PHASE_WEIGHTS.starData + PHASE_WEIGHTS.filterUI;
     updateProgress(mapBase, 'Initializing maps…');
 
-    trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates', state, scheduleMollweideUpdate, getEditManager: () => editManager });
-    globeMap = new MapManager({ canvasId: 'legacySphereMap', mapType: 'Globe', state, scheduleMollweideUpdate, getEditManager: () => editManager });
-    mollweideMap = new MapManager({ canvasId: 'legacyMollweideMap', mapType: 'Mollweide', state, scheduleMollweideUpdate, getEditManager: () => editManager });
+    trueCoordinatesMap = new MapManager({ canvasId: 'map3D', mapType: 'TrueCoordinates', state });
+    globeMap = new MapManager({ canvasId: 'sphereMap', mapType: 'Globe', state });
     uvMap = new UVMapManager({ canvasId: 'uvMap', mapType: 'Equirectangular', state });
-    uvGlobeMap = new UVMapManager({ canvasId: 'sphereMap', mapType: 'UVGlobe', state, atlasStore: uvMap.atlasStore });
-    uvMap.setLegacySourceScene(globeMap.scene);
-    uvGlobeMap.setLegacySourceScene(globeMap.scene);
-    mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap);
+    uvMap.setGlobeSourceScene(globeMap.scene);
+    mapManagers.push(trueCoordinatesMap, globeMap, uvMap);
 
     await yieldToUI();
 
@@ -229,29 +198,7 @@ export async function bootstrapApp() {
     const prepBase = mapBase + PHASE_WEIGHTS.maps;
     updateProgress(prepBase, 'Processing star positions…');
 
-    // Initialize EditManager
-    editManager = new EditManager(
-      mollweideMap,
-      stars,
-      getConstellationLinesMoll(),
-      getGalacticDirectionLabelsMoll(),
-      getStarId,
-      buildAndApplyFilters,
-      maybePersistPresets,
-      requestRender
-    );
-
-    // Load presets with edit manager's state
-    const edState = editManager.getState();
-    loadPresets({
-      starLabelOffsets: edState.starLabelOffsets,
-      starLabelRotations: edState.starLabelRotations,
-      starLabelScales: edState.starLabelScales,
-      constellationLabelOffsets: edState.constellationLabelOffsets,
-      galacticLabelOffsets: edState.galacticLabelOffsets,
-      removedLineSegments: edState.removedLineSegments,
-      hiddenLineKeys: edState.hiddenLineKeys
-    });
+    loadPresets();
 
     // Wire form change listeners
     const debouncedApplyFilters = debounce(() => {
@@ -273,8 +220,8 @@ export async function bootstrapApp() {
       });
     }
 
-    // Preprocess star positions and apply stored edits
-    preprocessStarData(stars, editManager);
+    // Preprocess star positions
+    preprocessStarData(stars);
 
     // Scene setup
     const globeGrid = createGlobeGrid(100, { color: 0x444444, opacity: 0.2, lineWidth: 1 });
@@ -287,9 +234,7 @@ export async function bootstrapApp() {
       syncVisibleMaps: buildAndApplyFilters,
       trueCoordinatesMap,
       globeMap,
-      mollweideMap,
-      uvMap,
-      uvGlobeMap
+      uvMap
     });
 
     await yieldToUI();
@@ -308,10 +253,8 @@ export async function bootstrapApp() {
 
     setTooltipContext(appContext);
     initStarInteractions(appContext, trueCoordinatesMap);
-    initStarInteractions(appContext, uvGlobeMap);
     initStarInteractions(appContext, uvMap);
     initStarInteractions(appContext, globeMap);
-    initStarInteractions(appContext, mollweideMap);
     setupStarInteractionToggle(appContext);
 
     // Viewpoint banner "Return to Sol" button
@@ -330,12 +273,9 @@ export async function bootstrapApp() {
 
     setupExportBindings({
       state,
-      maps: { trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap },
+      maps: { trueCoordinatesMap, globeMap, uvMap },
       yieldToUI
     });
-    editManager.setConstellationLinesMoll(getConstellationLinesMoll());
-    editManager.setIsolationOverlay(state.isolationOverlay);
-    editManager.setupAll();
 
     requestRender();
 

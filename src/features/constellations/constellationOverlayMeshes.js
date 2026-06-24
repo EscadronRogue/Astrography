@@ -1,6 +1,5 @@
-// Constellation overlay mesh builders migrated from the legacy overlay filter module.
 import * as THREE from '../../vendor/three.js';
-import { cachedRadToSphere, cachedRadToMollweide, getGreatCirclePoints, subdivideGeometry, getMollweideLambda0, adjustMollweideWrap } from '../../shared/geometryUtils.js';
+import { cachedRadToSphere, subdivideGeometry } from '../../shared/geometryUtils.js';
 import { getConstellationBoundaries } from './constellationDataService.js';
 
 const R = 100;
@@ -116,7 +115,6 @@ export function createConstellationOverlayForGlobe() {
     }
   });
   
-  const lambda0 = getMollweideLambda0();
   const colorMapping = computeConstellationColorMapping();
   const overlays = [];
   
@@ -220,100 +218,5 @@ export function createConstellationOverlayForGlobe() {
     mesh.userData.constellation = constellation;
     overlays.push(mesh);
   }
-  return overlays;
-}
-
-export function createConstellationOverlayForMollweide() {
-  const boundaries = getConstellationBoundaries();
-  const groups = {};
-  boundaries.forEach(seg => {
-    if (seg.const1) {
-      const key = seg.const1.toUpperCase();
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(seg);
-    }
-    if (seg.const2 && seg.const2.toUpperCase() !== (seg.const1 ? seg.const1.toUpperCase() : '')) {
-      const key = seg.const2.toUpperCase();
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(seg);
-    }
-  });
-
-  const lambda0 = getMollweideLambda0();
-  const colorMapping = computeConstellationColorMapping();
-  const overlays = [];
-
-  for (const constellation in groups) {
-    const segs = groups[constellation];
-    if (segs.length === 0) continue;
-
-    const ordered = [];
-    const used = new Array(segs.length).fill(false);
-    const convert = (seg, endpoint, base = null) => {
-      const raw = cachedRadToMollweide(
-        endpoint === 0 ? seg.ra1 : seg.ra2,
-        endpoint === 0 ? seg.dec1 : seg.dec2,
-        R,
-        lambda0
-      );
-      if (!base) return raw.clone();
-      const [adj] = adjustMollweideWrap(raw, base);
-      return adj;
-    };
-
-    let currentPoint = convert(segs[0], 0);
-    ordered.push(currentPoint.clone());
-    used[0] = true;
-    let currentEnd = convert(segs[0], 1, currentPoint);
-    ordered.push(currentEnd.clone());
-    let changed = true;
-    let iteration = 0;
-    while (changed && iteration < segs.length) {
-      changed = false;
-      for (let i = 0; i < segs.length; i++) {
-        if (used[i]) continue;
-        const seg = segs[i];
-        const p0 = convert(seg, 0, currentEnd);
-        const p1 = convert(seg, 1, currentEnd);
-        if (p0.distanceTo(currentEnd) < TOLERANCE) {
-          ordered.push(p1.clone());
-          currentEnd = p1.clone();
-          used[i] = true;
-          changed = true;
-        } else if (p1.distanceTo(currentEnd) < TOLERANCE) {
-          ordered.push(p0.clone());
-          currentEnd = p0.clone();
-          used[i] = true;
-          changed = true;
-        }
-      }
-      iteration++;
-    }
-
-    if (ordered.length < 3) continue;
-    if (ordered[0].distanceTo(ordered[ordered.length - 1]) > TOLERANCE) continue;
-    if (ordered[0].distanceTo(ordered[ordered.length - 1]) < TOLERANCE) {
-      ordered.pop();
-    }
-
-    const shape = new THREE.Shape();
-    shape.moveTo(ordered[0].x, ordered[0].y);
-    for (let i = 1; i < ordered.length; i++) {
-      shape.lineTo(ordered[i].x, ordered[i].y);
-    }
-    const geometry = new THREE.ShapeGeometry(shape);
-    const material = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(colorMapping[constellation]),
-      opacity: 0.15,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.renderOrder = 2;
-    mesh.userData.constellation = constellation;
-    overlays.push(mesh);
-  }
-
   return overlays;
 }

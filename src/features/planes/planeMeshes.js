@@ -1,6 +1,5 @@
-// Plane mesh builders migrated from the legacy planes filter module.
 import * as THREE from '../../vendor/three.js';
-import { radToSphere, radToMollweide, getMollweideLambda0, splitMollweideWrap } from '../../shared/geometryUtils.js';
+import { radToSphere } from '../../shared/geometryUtils.js';
 import { createMeasuredTextCanvas } from '../../shared/textCanvas.js';
 import { DEG2RAD, galacticToEquatorial, eclipticToEquatorial } from './planeDefinitions.js';
 
@@ -89,104 +88,6 @@ export function createCelestialEquatorGlobe(R = 100, segments = 180, opacity = 0
     pts.push(radToSphere(ra, dec, R));
   }
   return createGreatCircleLine(pts, 0xff0000, 10, opacity);
-}
-
-export function createGalacticPlaneMollweide(segments = 180, opacity = 0.5) {
-  const line = new THREE.LineSegments(
-    new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 20, transparent: true, opacity })
-  );
-  line.userData.segments = segments;
-  updateGalacticPlaneMollweide(line);
-  return line;
-}
-
-export function updateGalacticPlaneMollweide(line) {
-  const segments = line.userData.segments || 180;
-  const lambda0 = getMollweideLambda0();
-  const pts = [];
-  for (let i = 0; i <= segments; i++) {
-    const l = (i / segments) * 2 * Math.PI;
-    const { ra, dec } = galacticToEquatorial(l, 0);
-    pts.push(radToMollweide(ra, dec, 100, lambda0));
-  }
-  const positions = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const splits = splitMollweideWrap(pts[i], pts[i + 1]);
-    splits.forEach(pair => {
-      positions.push(pair[0].x, pair[0].y, 0);
-      positions.push(pair[1].x, pair[1].y, 0);
-    });
-  }
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  line.geometry.dispose();
-  line.geometry = geom;
-}
-
-export function createEclipticPlaneMollweide(segments = 180, opacity = 0.5) {
-  const line = new THREE.LineSegments(
-    new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 10, transparent: true, opacity })
-  );
-  line.userData.segments = segments;
-  updateEclipticPlaneMollweide(line);
-  return line;
-}
-
-export function createCelestialEquatorMollweide(segments = 180, opacity = 0.5) {
-  const line = new THREE.LineSegments(
-    new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 10, transparent: true, opacity })
-  );
-  line.userData.segments = segments;
-  updateCelestialEquatorMollweide(line);
-  return line;
-}
-
-export function updateEclipticPlaneMollweide(line) {
-  const segments = line.userData.segments || 180;
-  const lambda0 = getMollweideLambda0();
-  const pts = [];
-  for (let i = 0; i <= segments; i++) {
-    const lam = (i / segments) * 2 * Math.PI;
-    const { ra, dec } = eclipticToEquatorial(lam, 0);
-    pts.push(radToMollweide(ra, dec, 100, lambda0));
-  }
-  const positions = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const splits = splitMollweideWrap(pts[i], pts[i + 1]);
-    splits.forEach(pair => {
-      positions.push(pair[0].x, pair[0].y, 0);
-      positions.push(pair[1].x, pair[1].y, 0);
-    });
-  }
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  line.geometry.dispose();
-  line.geometry = geom;
-}
-
-export function updateCelestialEquatorMollweide(line) {
-  const segments = line.userData.segments || 180;
-  const lambda0 = getMollweideLambda0();
-  const pts = [];
-  for (let i = 0; i <= segments; i++) {
-    const ra = (i / segments) * 2 * Math.PI;
-    pts.push(radToMollweide(ra, 0, 100, lambda0));
-  }
-  const positions = [];
-  for (let i = 0; i < pts.length - 1; i++) {
-    const splits = splitMollweideWrap(pts[i], pts[i + 1]);
-    splits.forEach(pair => {
-      positions.push(pair[0].x, pair[0].y, 0);
-      positions.push(pair[1].x, pair[1].y, 0);
-    });
-  }
-  const geom = new THREE.BufferGeometry();
-  geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  line.geometry.dispose();
-  line.geometry = geom;
 }
 
 function createTextSprite(text, color = '#ffffff', opacity = 0.8, fontSize = 150) {
@@ -285,27 +186,4 @@ export function createGalacticDirectionLabelsGlobe(R = 102, opacity = 0.8) {
     labels.push(mesh);
   });
   return labels;
-}
-
-export function createGalacticDirectionLabelsMollweide(R = 100, opacity = 0.8) {
-  const lambda0 = getMollweideLambda0();
-  const labels = [];
-  galacticDirectionData().forEach(d => {
-    const eq = galacticToEquatorial(d.l, 0);
-    const p = radToMollweide(eq.ra, eq.dec, R, lambda0);
-    const sprite = createTextSprite(d.label, '#ffffff', opacity, 450);
-    sprite.position.set(p.x, p.y, 0);
-    sprite.userData = { name: d.label, ra: eq.ra, dec: eq.dec };
-    labels.push(sprite);
-  });
-  return labels;
-}
-
-export function updateGalacticDirectionLabelsMollweide(labels, R = 100) {
-  const lambda0 = getMollweideLambda0();
-  labels.forEach(sprite => {
-    if (!sprite.userData) return;
-    const p = radToMollweide(sprite.userData.ra, sprite.userData.dec, R, lambda0);
-    sprite.position.set(p.x, p.y, 0);
-  });
 }

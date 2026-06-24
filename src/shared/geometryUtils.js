@@ -1,33 +1,7 @@
-// utils/geometryUtils.js
 import * as THREE from '../vendor/three.js';
 
 /**
- * Wraps RA difference into [-π, π].
- * @param {number} ra
- * @returns {number}
- */
-export function minimalRADifference(ra) {
-  while (ra > Math.PI) ra -= 2 * Math.PI;
-  while (ra < -Math.PI) ra += 2 * Math.PI;
-  return ra;
-}
-
-/**
- * Module-private central meridian for Mollweide projection.
- * Accessed exclusively via get/set functions — never import the variable directly.
- */
-const _mollweideState = { lambda0: 0 };
-
-export function setMollweideLambda0(lambda0) {
-  _mollweideState.lambda0 = lambda0;
-}
-
-export function getMollweideLambda0() {
-  return _mollweideState.lambda0;
-}
-
-/**
- * Converts RA and DEC (in radians) to a THREE.Vector3 on a sphere of radius R.
+ * Converts RA and DEC in radians to a point on a sphere of radius R.
  */
 export function radToSphere(ra, dec, R) {
   const x = -R * Math.cos(dec) * Math.cos(ra);
@@ -37,20 +11,17 @@ export function radToSphere(ra, dec, R) {
 }
 
 /**
- * Subdivides the triangles of a BufferGeometry a given number of iterations.
- * @param {THREE.BufferGeometry} geometry - The geometry to subdivide.
- * @param {number} iterations - Number of subdivision iterations.
- * @returns {THREE.BufferGeometry} - The subdivided geometry.
+ * Subdivides all triangles of a BufferGeometry.
  */
 export function subdivideGeometry(geometry, iterations) {
   let geo = geometry;
-  for (let iter = 0; iter < iterations; iter++) {
+  for (let iter = 0; iter < iterations; iter += 1) {
     const posAttr = geo.getAttribute('position');
     const oldPositions = [];
-    for (let i = 0; i < posAttr.count; i++) {
-      const v = new THREE.Vector3().fromBufferAttribute(posAttr, i);
-      oldPositions.push(v);
+    for (let i = 0; i < posAttr.count; i += 1) {
+      oldPositions.push(new THREE.Vector3().fromBufferAttribute(posAttr, i));
     }
+
     const oldIndices = geo.getIndex().array;
     const newVertices = [...oldPositions];
     const newIndices = [];
@@ -59,13 +30,15 @@ export function subdivideGeometry(geometry, iterations) {
     function getMidpoint(i1, i2) {
       const key = i1 < i2 ? `${i1}_${i2}` : `${i2}_${i1}`;
       if (midpointCache[key] !== undefined) return midpointCache[key];
-      const v1 = newVertices[i1];
-      const v2 = newVertices[i2];
-      const mid = new THREE.Vector3().addVectors(v1, v2).multiplyScalar(0.5).normalize().multiplyScalar(100);
+      const mid = new THREE.Vector3()
+        .addVectors(newVertices[i1], newVertices[i2])
+        .multiplyScalar(0.5)
+        .normalize()
+        .multiplyScalar(100);
       newVertices.push(mid);
-      const idx = newVertices.length - 1;
-      midpointCache[key] = idx;
-      return idx;
+      const index = newVertices.length - 1;
+      midpointCache[key] = index;
+      return index;
     }
 
     for (let i = 0; i < oldIndices.length; i += 3) {
@@ -82,8 +55,8 @@ export function subdivideGeometry(geometry, iterations) {
     }
 
     const positions = [];
-    newVertices.forEach(v => {
-      positions.push(v.x, v.y, v.z);
+    newVertices.forEach(vertex => {
+      positions.push(vertex.x, vertex.y, vertex.z);
     });
     geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -94,12 +67,7 @@ export function subdivideGeometry(geometry, iterations) {
 }
 
 /**
- * Generates points along a great‑circle arc between two points on a sphere of radius R.
- * @param {THREE.Vector3} p1 - Starting point.
- * @param {THREE.Vector3} p2 - Ending point.
- * @param {number} R - Radius of the sphere.
- * @param {number} segments - Number of segments.
- * @returns {THREE.Vector3[]} - Array of points on the arc.
+ * Generates points along a great-circle arc between two sphere points.
  */
 export function getGreatCirclePoints(p1, p2, R, segments) {
   const points = [];
@@ -107,49 +75,33 @@ export function getGreatCirclePoints(p1, p2, R, segments) {
   const end = p2.clone().normalize().multiplyScalar(R);
   const axis = new THREE.Vector3().crossVectors(start, end).normalize();
   const angle = start.angleTo(end);
-  for (let i = 0; i <= segments; i++) {
+
+  for (let i = 0; i <= segments; i += 1) {
     const theta = (i / segments) * angle;
     const quaternion = new THREE.Quaternion().setFromAxisAngle(axis, theta);
-    const point = start.clone().applyQuaternion(quaternion);
-    points.push(point);
+    points.push(start.clone().applyQuaternion(quaternion));
   }
+
   return points;
 }
 
-/**
- * Converts degrees to radians.
- */
-export function degToRad(d) {
-  return d * Math.PI / 180;
+export function degToRad(degrees) {
+  return degrees * Math.PI / 180;
 }
 
-/**
- * Parses a Right Ascension string (e.g. "12:34:56") into radians.
- */
 export function parseRA(raStr) {
-  const [hh, mm, ss] = raStr.split(':').map(x => parseFloat(x));
+  const [hh, mm, ss] = raStr.split(':').map(value => parseFloat(value));
   const hours = hh + mm / 60 + ss / 3600;
-  const deg = hours * 15;
-  return degToRad(deg);
+  return degToRad(hours * 15);
 }
 
-/**
- * Parses a Declination string (e.g. "-12:34:56") into radians.
- */
 export function parseDec(decStr) {
   const sign = decStr.startsWith('-') ? -1 : 1;
   const stripped = decStr.replace('+', '').replace('-', '');
-  const [dd, mm, ss] = stripped.split(':').map(x => parseFloat(x));
-  const degVal = (dd + mm / 60 + ss / 3600) * sign;
-  return degToRad(degVal);
+  const [dd, mm, ss] = stripped.split(':').map(value => parseFloat(value));
+  return degToRad((dd + mm / 60 + ss / 3600) * sign);
 }
 
-/**
- * Converts a sphere coordinate to RA/DEC (in degrees).
- * @param {THREE.Vector3} vector - The vector position.
- * @param {number} [R=100] - The sphere radius (default is 100).
- * @returns {Object} - Object with properties { ra, dec } in degrees.
- */
 export function vectorToRaDec(vector, R = 100) {
   const dec = Math.asin(vector.y / R);
   let ra = Math.atan2(-vector.z, -vector.x);
@@ -158,12 +110,6 @@ export function vectorToRaDec(vector, R = 100) {
   return { ra: raDeg, dec: dec * 180 / Math.PI };
 }
 
-/**
- * Converts a sphere coordinate to RA/DEC in **radians**.
- * @param {THREE.Vector3} vector - The vector position.
- * @param {number} [R=100] - The sphere radius.
- * @returns {{ra:number, dec:number}} - RA and DEC in radians.
- */
 export function vectorToRaDecRad(vector, R = 100) {
   const dec = Math.asin(vector.y / R);
   let ra = Math.atan2(-vector.z, -vector.x);
@@ -171,134 +117,18 @@ export function vectorToRaDecRad(vector, R = 100) {
   return { ra, dec };
 }
 
-/**
- * Caching mechanism for converting RA/DEC to sphere coordinates.
- * Returns a THREE.Vector3 corresponding to the inputs.
- */
 const radToSphereCache = new Map();
-export function clearRadToSphereCache() { radToSphereCache.clear(); }
+
+export function clearRadToSphereCache() {
+  radToSphereCache.clear();
+}
+
 export function cachedRadToSphere(ra, dec, R) {
   const key = `${ra}_${dec}_${R}`;
   if (radToSphereCache.has(key)) {
-    // Return a clone so that the cached vector is not accidentally mutated.
     return radToSphereCache.get(key).clone();
   }
-  const vec = radToSphere(ra, dec, R);
-  radToSphereCache.set(key, vec.clone());
-  return vec;
-}
-
-/**
- * Converts RA and DEC (in radians) to Mollweide projection coordinates.
- * @param {number} ra
- * @param {number} dec
- * @param {number} [R=100]
- * @param {number} [lambda0=0] - Central meridian in radians.
- * @returns {THREE.Vector3}
- */
-export function radToMollweide(ra, dec, R = 100, lambda0 = _mollweideState.lambda0) {
-  const lambda = minimalRADifference(ra - lambda0);
-  const phi = dec;
-  let theta = phi;
-  for (let i = 0; i < 10; i++) {
-    const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(phi)) /
-      (2 + 2 * Math.cos(2 * theta));
-    theta -= delta;
-    if (Math.abs(delta) < 1e-10) break;
-  }
-  const x = (2 * R / Math.PI) * lambda * Math.cos(theta);
-  const y = R * Math.sin(theta);
-  return new THREE.Vector3(x, y, 0);
-}
-
-const radToMollweideCache = new Map();
-export function clearRadToMollweideCache() { radToMollweideCache.clear(); }
-export function cachedRadToMollweide(ra, dec, R = 100, lambda0 = _mollweideState.lambda0) {
-  const key = `${ra}_${dec}_${R}_${lambda0}`;
-  if (radToMollweideCache.has(key)) {
-    return radToMollweideCache.get(key).clone();
-  }
-  const vec = radToMollweide(ra, dec, R, lambda0);
-  radToMollweideCache.set(key, vec.clone());
-  return vec;
-}
-
-/**
- * Adjusts a pair of Mollweide points so the connecting line wraps inside the
- * standard [-200, 200] x-range. Returns the adjusted clones.
- * @param {THREE.Vector3} p1
- * @param {THREE.Vector3} p2
- * @returns {[THREE.Vector3, THREE.Vector3]}
- */
-export function adjustMollweideWrap(p1, p2) {
-  const a = p1.clone();
-  const b = p2.clone();
-  // shift points horizontally so their separation stays within the map
-  while (a.x - b.x > 200) a.x -= 400;
-  while (b.x - a.x > 200) b.x -= 400;
-  // keep coordinates inside [-200, 200]
-  while (a.x > 200) a.x -= 400;
-  while (a.x < -200) a.x += 400;
-  while (b.x > 200) b.x -= 400;
-  while (b.x < -200) b.x += 400;
-  return [a, b];
-}
-
-/**
- * Splits a Mollweide segment at the map boundary if needed so that
- * wrapped lines appear on the opposite side instead of bleeding out.
- * Returns an array of [start, end] pairs.
- */
-export function splitMollweideWrap(p1, p2) {
-  const a = p1.clone();
-  const b = p2.clone();
-  if (Math.abs(a.x - b.x) < 200) {
-    return [[a, b]];
-  }
-  let left = a, right = b;
-  let swapped = false;
-  if (left.x > right.x) { left = b; right = a; swapped = true; }
-
-  const shifted = right.clone();
-  shifted.x -= 400;
-
-  const dx = shifted.x - left.x;
-  const dy = shifted.y - left.y;
-  const A = (dx * dx) / (200 * 200) + (dy * dy) / (100 * 100);
-  const B = 2 * (left.x * dx / (200 * 200) + left.y * dy / (100 * 100));
-  const C = (left.x * left.x) / (200 * 200) + (left.y * left.y) / (100 * 100) - 1;
-  const disc = B * B - 4 * A * C;
-  if (disc < 0) return [[a, b]];
-  const sqrtDisc = Math.sqrt(disc);
-  const t1 = (-B - sqrtDisc) / (2 * A);
-  const t2 = (-B + sqrtDisc) / (2 * A);
-  const t = (t1 >= 0 && t1 <= 1) ? t1 : (t2 >= 0 && t2 <= 1 ? t2 : null);
-  if (t === null) return [[a, b]];
-  const ix = left.x + dx * t;
-  const iy = left.y + dy * t;
-  const edgeLeft = new THREE.Vector3(ix, iy, 0);
-  const edgeRight = new THREE.Vector3(-ix, iy, 0);
-  if (!swapped) {
-    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
-  } else {
-    return [ [left.clone(), edgeLeft], [edgeRight, right.clone()] ];
-  }
-}
-
-/**
- * Generates Mollweide coordinates for the great-circle arc between two
- * 3D positions on the celestial sphere.
- * @param {THREE.Vector3} p1 - Start vector on the sphere.
- * @param {THREE.Vector3} p2 - End vector on the sphere.
- * @param {number} [R=100] - Sphere radius.
- * @param {number} [segments=32] - Number of segments along the arc.
- * @param {number} [lambda0=mollweideLambda0] - Central meridian for projection.
- * @returns {THREE.Vector3[]} Array of Mollweide coordinates along the arc.
- */
-export function greatCircleToMollweide(p1, p2, R = 100, segments = 32, lambda0 = _mollweideState.lambda0) {
-  const gcPoints = getGreatCirclePoints(p1, p2, R, segments);
-  return gcPoints.map(v => {
-    const { ra, dec } = vectorToRaDecRad(v, R);
-    return radToMollweide(ra, dec, R, lambda0);
-  });
+  const vector = radToSphere(ra, dec, R);
+  radToSphereCache.set(key, vector.clone());
+  return vector;
 }

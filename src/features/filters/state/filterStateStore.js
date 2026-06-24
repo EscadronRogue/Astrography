@@ -12,8 +12,7 @@ const SYNC_KEYS = Object.freeze([
   'showGalacticPlaneFlag', 'showEclipticPlaneFlag', 'showCelestialEquatorFlag',
   'isolationOverlay', 'densityOverlay',
   'currentFilteredStars', 'currentConnections',
-  'currentGlobeFilteredStars', 'currentGlobeConnections',
-  'currentMollweideFilteredStars', 'currentMollweideConnections'
+  'currentGlobeFilteredStars', 'currentGlobeConnections'
 ]);
 
 export function syncFilterResultsToAppState(state, filters) {

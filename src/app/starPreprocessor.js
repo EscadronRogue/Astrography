@@ -1,12 +1,11 @@
 /**
  * @file Preprocesses star data after loading — calculates 3D positions,
- * Mollweide data, and applies stored edit offsets.
+ * globe positions, and UV/equirectangular positions.
  * Also handles reprojection when the viewpoint star changes.
  * Extracted from createApp.js bootstrapApp() to keep bootstrap thin.
  */
 import * as THREE from '../vendor/three.js';
-import { getStarId, getStarCoordinates, getStarTruePosition, getStarGlobePosition, precalcMollweideData } from '../shared/starUtils.js';
-import { updateMollweidePosition } from './mollweideUpdater.js';
+import { getStarCoordinates, getStarTruePosition, getStarGlobePosition } from '../shared/starUtils.js';
 import { cachedRadToSphere } from '../shared/geometryUtils.js';
 import { getStarEquirectangularPosition } from '../shared/uvUtils.js';
 import { GLOBE_RADIUS } from '../shared/constants.js';
@@ -18,19 +17,17 @@ import {
 } from '../shared/viewpoint.js';
 
 /**
- * Calculates all derived positions for each star and applies stored edit state.
+ * Calculates all derived positions for each star.
  * Also stores immutable heliocentric reference data (helioPosition, helioRA,
  * helioDec) that survive viewpoint changes.
  *
  * @param {Array} stars - Array of star records.
- * @param {Object} editManager - The edit manager instance (for label offsets/rotations/scales).
  */
-export function preprocessStarData(stars, editManager) {
+export function preprocessStarData(stars) {
   stars.forEach(star => {
     star.spherePosition = getStarGlobePosition(star);
     star.truePosition = getStarTruePosition(star);
-    precalcMollweideData(star);
-    updateMollweidePosition(star);
+    star.equirectPosition = getStarEquirectangularPosition(star);
 
     // Preserve immutable heliocentric data for viewpoint reprojection.
     const { ra, dec } = getStarCoordinates(star);
@@ -39,19 +36,6 @@ export function preprocessStarData(stars, editManager) {
     star.helioDec = dec;
     star.viewpointDistance = star.distance; // initially same as heliocentric
 
-    const id = getStarId(star);
-
-    if (editManager.starLabelOffsets.has(id)) {
-      const off = editManager.starLabelOffsets.get(id);
-      star.mollLabelOffset = new THREE.Vector3(off.x, off.y, 0);
-    }
-    if (editManager.starLabelRotations.has(id)) {
-      star.mollLabelRotation = editManager.starLabelRotations.get(id);
-    }
-    if (editManager.starLabelScales.has(id)) {
-      const sc = editManager.starLabelScales.get(id);
-      star.mollLabelScale = new THREE.Vector3(sc.x, sc.y, 1);
-    }
   });
 }
 
@@ -84,8 +68,6 @@ export function reprojectAllStars(stars) {
       star.spherePosition = cachedRadToSphere(star.helioRA, star.helioDec, GLOBE_RADIUS);
       star.equirectPosition = undefined; // force recompute from helio RA/DEC
       star.equirectPosition = getStarEquirectangularPosition(star);
-      precalcMollweideData(star);
-      updateMollweidePosition(star);
     } else {
       // Compute viewpoint-relative 3D position
       star.truePosition = getViewpointRelativePosition(star);
@@ -108,23 +90,6 @@ export function reprojectAllStars(stars) {
       const safeDec = THREE.MathUtils.clamp(dec, -Math.PI / 2, Math.PI / 2);
       const v = 1 - ((safeDec + Math.PI / 2) / Math.PI);
       star.equirectPosition = new THREE.Vector3((u - 0.5) * 200, (0.5 - v) * 100, 0);
-
-      // Recompute Mollweide from apparent RA/DEC
-      star.raRad = ra;
-      star.decRad = dec;
-      // Recalculate Mollweide auxiliary values (theta, mollXFactor, mollY)
-      const MOLLWEIDE_MAX_ITERATIONS = 10;
-      const EPSILON = 1e-10;
-      let theta = dec;
-      for (let i = 0; i < MOLLWEIDE_MAX_ITERATIONS; i++) {
-        const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
-          (2 + 2 * Math.cos(2 * theta));
-        theta -= delta;
-        if (Math.abs(delta) < EPSILON) break;
-      }
-      star.mollXFactor = (2 * GLOBE_RADIUS / Math.PI) * Math.cos(theta);
-      star.mollY = GLOBE_RADIUS * Math.sin(theta);
-      updateMollweidePosition(star);
     }
   });
 }

@@ -3,9 +3,7 @@ import { hasJsPdfConstructor, hasJsZipConstructor } from './pdfUtils.js';
 const PDF_BUTTON_IDS = [
   'export-true-pdf',
   'export-uv-pdf',
-  'export-globe-pdf',
-  'export-legacy-globe-pdf',
-  'export-pdf'
+  'export-globe-pdf'
 ];
 
 const ZIP_BUTTON_IDS = [

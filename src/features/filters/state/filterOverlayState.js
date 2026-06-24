@@ -10,8 +10,7 @@ import { disposeObject3D } from '../../../render/engine/renderUtils.js';
 function normalizeScenes(scenes = {}) {
   return {
     tc: scenes.tc ?? null,
-    globe: scenes.globe ?? null,
-    moll: scenes.moll ?? null
+    globe: scenes.globe ?? null
   };
 }
 
@@ -63,12 +62,10 @@ function removeOverlayFromScenes(overlay, meshConfig, scenes) {
 /** Mesh layout for the isolation overlay. */
 const ISOLATION_MESH_CONFIG = {
   cubes: [
-    { prop: 'tcMesh', scene: 'tc' },
-    { prop: 'mollweideMesh', scene: 'moll' }
+    { prop: 'tcMesh', scene: 'tc' }
   ],
   lines: [
-    { prop: 'line', scene: 'globe' },
-    { prop: 'lineM', scene: 'moll' }
+    { prop: 'line', scene: 'globe' }
   ]
 };
 
@@ -77,10 +74,7 @@ const DENSITY_MESH_CONFIG = {
   cubes: [
     { prop: 'tcMesh', scene: 'tc' }
   ],
-  lines: [],
-  extra: [
-    { prop: 'textureMesh', scene: 'moll' }
-  ]
+  lines: []
 };
 
 /**
@@ -109,7 +103,6 @@ function addIsolationToScenes(overlay, scenes) {
     const sceneObjects = overlay.getSceneObjects();
     sceneObjects.tc?.forEach(object => normalizedScenes.tc?.add(object));
     sceneObjects.globe?.forEach(object => normalizedScenes.globe?.add(object));
-    sceneObjects.moll?.forEach(object => normalizedScenes.moll?.add(object));
     return;
   }
 
@@ -118,7 +111,6 @@ function addIsolationToScenes(overlay, scenes) {
   });
   overlay.adjacentLines.forEach(obj => {
     normalizedScenes.globe?.add(obj.line);
-    normalizedScenes.moll?.add(obj.lineM);
   });
 }
 
@@ -132,7 +124,6 @@ function addDensityToScenes(overlay, scenes) {
     const sceneObjects = overlay.getSceneObjects();
     sceneObjects.tc?.forEach(object => normalizedScenes.tc?.add(object));
     sceneObjects.globe?.forEach(object => normalizedScenes.globe?.add(object));
-    sceneObjects.moll?.forEach(object => normalizedScenes.moll?.add(object));
     return;
   }
 
@@ -142,7 +133,6 @@ function addDensityToScenes(overlay, scenes) {
   overlay.adjacentLines.forEach(obj => {
     normalizedScenes.globe?.add(obj.line);
   });
-  normalizedScenes.moll?.add(overlay.textureMesh);
 }
 
 /**
@@ -177,7 +167,7 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
       addIsolationToScenes(isolationOverlay, normalizedScenes);
     }
 
-    updateIsolationFilter(allStars, isolationOverlay, normalizedScenes.tc, normalizedScenes.globe, normalizedScenes.moll, filters);
+    updateIsolationFilter(allStars, isolationOverlay, normalizedScenes.tc, normalizedScenes.globe, filters);
   } else {
     removeOverlayFromScenes(isolationOverlay, ISOLATION_MESH_CONFIG, normalizedScenes);
     isolationOverlay = null;
@@ -200,7 +190,7 @@ export function updateDerivedOverlays(allStars, filters, computeAdaptiveGridSize
       addDensityToScenes(densityOverlay, normalizedScenes);
     }
 
-    updateDensityFilter(allStars, densityOverlay, normalizedScenes.tc, normalizedScenes.globe, normalizedScenes.moll, filters);
+    updateDensityFilter(allStars, densityOverlay, normalizedScenes.tc, normalizedScenes.globe, filters);
   } else {
     removeOverlayFromScenes(densityOverlay, DENSITY_MESH_CONFIG, normalizedScenes);
     densityOverlay = null;

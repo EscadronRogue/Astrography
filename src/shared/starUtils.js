@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.js';
-import { cachedRadToSphere, cachedRadToMollweide, degToRad } from './geometryUtils.js';
-import { GLOBE_RADIUS, MOLLWEIDE_MAX_ITERATIONS, EPSILON, SOL_STAR_NAME } from './constants.js';
+import { cachedRadToSphere, degToRad } from './geometryUtils.js';
+import { GLOBE_RADIUS, SOL_STAR_NAME } from './constants.js';
 
 export function getStarId(star) {
   return (
@@ -66,29 +66,4 @@ export function getStarGlobePosition(star, radius = GLOBE_RADIUS) {
   }
   const { ra, dec } = getStarCoordinates(star);
   return cachedRadToSphere(ra, dec, radius);
-}
-
-export function getStarMollweidePosition(star, radius = GLOBE_RADIUS) {
-  if (star.mollweidePosition && radius === GLOBE_RADIUS) {
-    return star.mollweidePosition.clone ? star.mollweidePosition.clone() : star.mollweidePosition;
-  }
-  const { ra, dec } = getStarCoordinates(star);
-  return cachedRadToMollweide(ra, dec, radius);
-}
-
-export function precalcMollweideData(star, radius = GLOBE_RADIUS) {
-  const { ra, dec } = getStarCoordinates(star);
-  star.raRad = ra;
-  star.decRad = dec;
-  let theta = dec;
-  for (let i = 0; i < MOLLWEIDE_MAX_ITERATIONS; i++) {
-    const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
-      (2 + 2 * Math.cos(2 * theta));
-    theta -= delta;
-    if (Math.abs(delta) < EPSILON) break;
-  }
-  const cosT = Math.cos(theta);
-  const sinT = Math.sin(theta);
-  star.mollXFactor = (2 * radius / Math.PI) * cosT;
-  star.mollY = radius * sinT;
 }

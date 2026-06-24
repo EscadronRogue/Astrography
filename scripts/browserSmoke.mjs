@@ -26,7 +26,7 @@ const viewportMatrix = [
   { name: 'phone', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
 ];
 
-const canvasIds = ['map3D', 'uvMap', 'sphereMap', 'legacySphereMap', 'legacyMollweideMap'];
+const canvasIds = ['map3D', 'uvMap', 'sphereMap'];
 const defaultExports = ['export-true-png', 'export-true-pdf', 'export-stl', 'export-uv-png', 'export-globe-png'];
 
 function getRequestedList(envName, fallback) {

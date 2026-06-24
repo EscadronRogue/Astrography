@@ -36,7 +36,7 @@ export function applyFilters(allStars, context = {}) {
   filteredStars = applyColorFilter(filteredStars, filters, displayStats);
   filteredStars = applyOpacityFilter(filteredStars, filters, displayStats);
 
-  // Exclude the viewpoint star from angular projections (Globe/Mollweide/Equirect).
+  // Exclude the viewpoint star from angular projections (Globe/Equirect).
   // When viewing from Sol (default), exclude Sol. When viewing from another star,
   // exclude that star and let Sol appear as a regular star.
   const viewpointId = getViewpointStarId();
@@ -44,7 +44,6 @@ export function applyFilters(allStars, context = {}) {
 
   let connections = [];
   let globeConnections = [];
-  let mollweideConnections = [];
 
   if (filters.enableConnections) {
     if (filters.connectionMode === 'k-nearest') {
@@ -54,7 +53,6 @@ export function applyFilters(allStars, context = {}) {
       connections = computeConnectionPairs(filteredStars, filters.connections);
       globeConnections = computeConnectionPairs(nonViewpointStars, filters.connections);
     }
-    mollweideConnections = globeConnections;
   }
 
   const overlayState = updateDerivedOverlays(
@@ -72,8 +70,6 @@ export function applyFilters(allStars, context = {}) {
     currentConnections: connections,
     currentGlobeFilteredStars: nonViewpointStars,
     currentGlobeConnections: globeConnections,
-    currentMollweideFilteredStars: nonViewpointStars,
-    currentMollweideConnections: mollweideConnections,
     showConstellationBoundariesFlag: filters.showConstellationBoundaries,
     showConstellationNamesFlag: filters.showConstellationNames,
     showConstellationOverlayFlag: filters.showConstellationOverlay,

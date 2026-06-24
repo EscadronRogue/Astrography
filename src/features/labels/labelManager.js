@@ -178,8 +178,8 @@ export class LabelManager {
       if (labelObj) { this.removeInteractionObject(labelObj); this.scene.remove(labelObj); disposeObject3D(labelObj); }
       if (lineObj) { this.scene.remove(lineObj); disposeObject3D(lineObj); }
 
-      const isGlobeLike = this.mapType === 'Globe' || this.mapType === 'UVGlobe';
-      const isFlatProjected = this.mapType === 'Mollweide' || this.mapType === 'Equirectangular';
+      const isGlobeLike = this.mapType === 'Globe';
+      const isFlatProjected = this.mapType === 'Equirectangular';
       const isTrueCoordinates = this.mapType === 'TrueCoordinates';
       const trueCoordinateMetrics = isTrueCoordinates ? getTrueCoordinateLabelMetrics(labelSize) : null;
       const baseFontSize = isGlobeLike ? 64 : (isFlatProjected ? 72 : 24);
@@ -227,7 +227,7 @@ export class LabelManager {
         const worldScale = trueCoordinateMetrics ? trueCoordinateMetrics.worldScale : scaleFactor;
         labelObj.scale.set((canvas.width / 100) * worldScale, (canvas.height / 100) * worldScale, 1);
       }
-      labelObj.renderOrder = this.mapType === 'TrueCoordinates' ? 6 : (this.mapType === 'Mollweide' ? 5 : 1);
+      labelObj.renderOrder = this.mapType === 'TrueCoordinates' ? 6 : 1;
       labelObj.userData.starRef = star;
       lineObj = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({
         color: new THREE.Color(starColor),
@@ -236,7 +236,7 @@ export class LabelManager {
         depthWrite: this.mapType !== 'TrueCoordinates',
         linewidth: 2
       }));
-      lineObj.renderOrder = this.mapType === 'TrueCoordinates' ? 5 : (this.mapType === 'Mollweide' ? 5 : 1);
+      lineObj.renderOrder = this.mapType === 'TrueCoordinates' ? 5 : 1;
       lineObj.userData.starRef = star;
       this.sprites.set(star, labelObj);
       this.lines.set(star, lineObj);
@@ -249,24 +249,15 @@ export class LabelManager {
 
     const starPos = this.mapType === 'TrueCoordinates'
       ? (star.truePosition ? new THREE.Vector3(star.truePosition.x, star.truePosition.y, star.truePosition.z) : new THREE.Vector3(star.x_coordinate, star.y_coordinate, star.z_coordinate))
-      : (this.mapType === 'Globe' || this.mapType === 'UVGlobe')
+      : this.mapType === 'Globe'
         ? new THREE.Vector3(star.spherePosition.x, star.spherePosition.y, star.spherePosition.z)
-        : (this.mapType === 'Equirectangular'
-          ? getStarEquirectangularPosition(star)
-          : new THREE.Vector3(star.mollweidePosition.x, star.mollweidePosition.y, star.mollweidePosition.z));
+        : getStarEquirectangularPosition(star);
 
-    const offset = this.mapType === 'Mollweide' && star.mollLabelOffset ? star.mollLabelOffset.clone() : this.computeLabelOffset(star, starPos);
+    const offset = this.computeLabelOffset(star, starPos);
     const labelPos = starPos.clone().add(offset);
     labelObj.position.copy(labelPos);
 
-    if (this.mapType === 'Mollweide' || this.mapType === 'Equirectangular') {
-      if (star.mollLabelRotation !== undefined && labelObj.material) labelObj.material.rotation = star.mollLabelRotation;
-      if (star.mollLabelScale) {
-        labelObj.scale.set(star.mollLabelScale.x, star.mollLabelScale.y, labelObj.scale.z);
-      }
-    }
-
-    if ((this.mapType === 'Globe' || this.mapType === 'UVGlobe') && labelObj instanceof THREE.Mesh) {
+    if (this.mapType === 'Globe' && labelObj instanceof THREE.Mesh) {
       const normal = starPos.clone().normalize();
       const globalUp = new THREE.Vector3(0, 1, 0);
       let desiredUp = globalUp.clone().sub(normal.clone().multiplyScalar(globalUp.dot(normal)));
@@ -293,7 +284,7 @@ export class LabelManager {
       const angle = getOrAssignSystemAngle(this.systemAngles, system, getStarCacheKey(star));
       return tangent.multiplyScalar(Math.cos(angle)).add(bitangent.multiplyScalar(Math.sin(angle))).multiplyScalar(getTrueCoordinateLabelMetrics(labelSize).offsetDistance);
     }
-    if (this.mapType === 'Mollweide' || this.mapType === 'Equirectangular') {
+    if (this.mapType === 'Equirectangular') {
       const scaleFactor = THREE.MathUtils.clamp(labelSize / 2, 0.1, 5);
       const dist = 2 * scaleFactor;
       const system = getStarSystemName(star);

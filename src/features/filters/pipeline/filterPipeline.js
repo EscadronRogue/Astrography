@@ -2,15 +2,12 @@ import { applyFilters, generateStellarClassFilters } from './index.js';
 import { isDefaultViewpoint, getViewpointStarId } from '../../../shared/viewpoint.js';
 import { setConnectionLineParams } from '../../connections/connectionSettings.js';
 import { disposeObject3D } from '../../../render/engine/renderUtils.js';
-import {
-  updateCloudsOverlay,
-  updateMollweideCloudSegments
-} from '../../clouds/cloudOverlay.js';
+import { updateCloudsOverlay } from '../../clouds/cloudOverlay.js';
 import { createCloudDensityOverlay, updateCloudDensityOverlay } from '../../clouds/cloudDensityOverlay.js';
 import { captureFormState, restoreFormState } from '../../../shared/formUtils.js';
 import { syncFilterResultsToAppState } from '../state/filterStateStore.js';
-import { applyPlanes, refreshMollweidePlanes } from '../../planes/planeManager.js';
-import { rebuildConstellationVisuals, refreshMollweideConstellationVisuals } from '../../constellations/constellationManager.js';
+import { applyPlanes } from '../../planes/planeManager.js';
+import { rebuildConstellationVisuals } from '../../constellations/constellationManager.js';
 import { getStarId } from '../../../shared/starUtils.js';
 import { getStarEquirectangularPosition } from '../../../shared/uvUtils.js';
 import { clamp01 } from '../../../shared/colorParsing.js';
@@ -77,46 +74,27 @@ function updateProjectedPositions(ctx) {
     state.currentFilteredStars.forEach(star => {
       star.truePosition = ctx.getStarTruePosition(star);
     });
-    state.currentMollweideFilteredStars.forEach(star => {
-      ctx.precalcMollweideData(star);
-      ctx.updateMollweidePosition(star);
-    });
-  } else {
-    // Non-Sol viewpoint: positions were already computed by reprojectAllStars().
-    // Only update Mollweide positions (they depend on the current lambda0
-    // which can change independently via camera interaction).
-    state.currentMollweideFilteredStars.forEach(star => {
-      ctx.updateMollweidePosition(star);
-    });
   }
 }
 
 function updateMapDisplays(ctx, options) {
-  const { trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap, uvMap } = ctx.getMaps();
   const { state } = ctx;
   uvMap?.setFilterOptions(options);
-  uvGlobeMap?.setFilterOptions(options);
 
   trueCoordinatesMap.setStarOpacity(options.starOpacity);
   globeMap.setStarOpacity(options.starOpacity);
-  mollweideMap.setStarOpacity(options.starOpacity);
   uvMap?.setStarOpacity(options.starOpacity);
-  uvGlobeMap?.setStarOpacity(options.starOpacity);
   trueCoordinatesMap.setLabelOpacity(options.starNameOpacity);
   globeMap.setLabelOpacity(options.starNameOpacity);
-  mollweideMap.setLabelOpacity(options.starNameOpacity);
   uvMap?.setLabelOpacity(options.starNameOpacity);
-  uvGlobeMap?.setLabelOpacity(options.starNameOpacity);
   trueCoordinatesMap.setConnectionOpacity(options.connectionOpacity);
   globeMap.setConnectionOpacity(options.connectionOpacity);
-  mollweideMap.setConnectionOpacity(options.connectionOpacity);
   uvMap?.setConnectionOpacity(options.connectionOpacity);
-  uvGlobeMap?.setConnectionOpacity(options.connectionOpacity);
   setConnectionLineParams(options.connectionWidth, options.connectionFade, options.connectionLabelSize);
 
   trueCoordinatesMap.connectionOpacity = options.connectionOpacity;
   globeMap.connectionOpacity = options.connectionOpacity;
-  mollweideMap.connectionOpacity = options.connectionOpacity;
 
   if (isMapVisible(trueCoordinatesMap)) {
     trueCoordinatesMap.updateMap(state.currentFilteredStars, state.currentConnections);
@@ -126,49 +104,33 @@ function updateMapDisplays(ctx, options) {
     globeMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
     globeMap.labelManager.refreshLabels(state.currentGlobeFilteredStars);
   }
-  if (isMapVisible(mollweideMap)) {
-    mollweideMap.addStars(state.currentMollweideFilteredStars);
-    mollweideMap.updateConnections(
-      state.currentMollweideFilteredStars,
-      state.currentMollweideConnections,
-      mollweideMap.connectionOpacity
-    );
-    mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
-    if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
-  }
   if (isMapVisible(uvMap)) {
     uvMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections, options);
-  }
-  if (isMapVisible(uvGlobeMap)) {
-    uvGlobeMap.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections, options);
   }
 }
 
 async function refreshCloudOverlays(ctx, options) {
-  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap } = ctx.getMaps();
   const { state } = ctx;
 
   if (options.showClouds) {
     const cloudDataFiles = getSelectedDustCloudFiles(options);
     await updateCloudsOverlay(state.cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', cloudDataFiles, options.cloudOpacity);
     await updateCloudsOverlay(state.cachedStars, globeMap.scene, 'Globe', cloudDataFiles, options.cloudOpacity);
-    await updateCloudsOverlay(state.cachedStars, mollweideMap.scene, 'Mollweide', cloudDataFiles, options.cloudOpacity);
   } else {
     await updateCloudsOverlay(state.cachedStars, trueCoordinatesMap.scene, 'TrueCoordinates', [], options.cloudOpacity);
     await updateCloudsOverlay(state.cachedStars, globeMap.scene, 'Globe', [], options.cloudOpacity);
-    await updateCloudsOverlay(state.cachedStars, mollweideMap.scene, 'Mollweide', [], options.cloudOpacity);
   }
 }
 
 function clearCloudDensityOverlays(ctx) {
-  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap } = ctx.getMaps();
   const { state } = ctx;
   state.cloudDensityOverlays.forEach(overlay => {
     if (typeof overlay.getSceneObjects === 'function') {
       const sceneObjects = overlay.getSceneObjects();
       sceneObjects.tc?.forEach(object => trueCoordinatesMap.scene.remove(object));
       sceneObjects.globe?.forEach(object => globeMap.scene.remove(object));
-      sceneObjects.moll?.forEach(object => mollweideMap.scene.remove(object));
       overlay.dispose?.();
       return;
     }
@@ -178,11 +140,7 @@ function clearCloudDensityOverlays(ctx) {
       disposeObject3D(cube.tcMesh);
       globeMap.scene.remove(cube.globeMesh);
       disposeObject3D(cube.globeMesh);
-      mollweideMap.scene.remove(cube.mollweideMesh);
-      disposeObject3D(cube.mollweideMesh);
     });
-    mollweideMap.scene.remove(overlay.textureMesh);
-    disposeObject3D(overlay.textureMesh);
   });
   state.cloudDensityOverlays = [];
   state.cloudDensitySignature = '';
@@ -213,8 +171,7 @@ function normalizeFilterOpacityOptions(filters) {
     'connectionOpacity',
     'constellationLineOpacity',
     'constellationNameOpacity',
-    'planeOpacity',
-    'mollweideBorderOpacity'
+    'planeOpacity'
   ].forEach(key => {
     filters[key] = clamp01(filters[key]);
   });
@@ -222,7 +179,7 @@ function normalizeFilterOpacityOptions(filters) {
 }
 
 async function refreshCloudDensityOverlays(ctx, options) {
-  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap } = ctx.getMaps();
   const { state } = ctx;
   const requestId = (state.cloudDensityUpdateRequestId || 0) + 1;
   state.cloudDensityUpdateRequestId = requestId;
@@ -275,7 +232,6 @@ async function refreshCloudDensityOverlays(ctx, options) {
       overlay,
       trueCoordinatesMap.scene,
       globeMap.scene,
-      mollweideMap.scene,
       options.cloudDensityRadius,
       options.cloudDensityOpacity
     );
@@ -287,15 +243,14 @@ export async function buildAndApplyFilters(ctx) {
   const { state } = ctx;
   if (!state.cachedStars) return;
 
-  const { trueCoordinatesMap, globeMap, mollweideMap } = ctx.getMaps();
+  const { trueCoordinatesMap, globeMap } = ctx.getMaps();
   const filterForm = getFilterForm(ctx);
   const filterContext = { document: ctx.document, form: filterForm, state };
   const filters = applyFilters(state.cachedStars, {
     form: filterForm,
     scenes: {
       tc: trueCoordinatesMap?.scene,
-      globe: globeMap?.scene,
-      moll: mollweideMap?.scene
+      globe: globeMap?.scene
     },
     overlayState: state
   });
@@ -324,8 +279,6 @@ export async function buildAndApplyFilters(ctx) {
   }
 
   const sanitizedConstellationLineWidth = Math.max(0.1, filters.constellationLineWidth || 0.1);
-  const sanitizedBorderWidth = Math.max(0.1, filters.mollweideBorderWidth || 0.1);
-  const sanitizedBorderOpacity = filters.mollweideBorderOpacity;
 
   syncFilterResultsToAppState(state, filters);
 
@@ -343,10 +296,6 @@ export async function buildAndApplyFilters(ctx) {
     constellationNameOpacity: filters.constellationNameOpacity
   });
 
-  if (mollweideMap && typeof mollweideMap.setMollweideBorderAppearance === 'function') {
-    mollweideMap.setMollweideBorderAppearance(sanitizedBorderWidth, sanitizedBorderOpacity);
-  }
-
   await refreshCloudOverlays(ctx, filters);
   await refreshCloudDensityOverlays(ctx, filters);
 
@@ -357,45 +306,5 @@ export async function buildAndApplyFilters(ctx) {
   }, filters.planeOpacity);
 
   ctx.applyGlobeSurface(filters.globeOpaqueSurface);
-  ctx.requestRender();
-}
-
-export async function updateMollweideView(ctx) {
-  const { state } = ctx;
-  if (!state.currentMollweideFilteredStars || state.currentMollweideFilteredStars.length === 0) return;
-
-  state.currentMollweideFilteredStars.forEach(star => {
-    ctx.updateMollweidePosition(star);
-  });
-
-  const { mollweideMap, uvMap, uvGlobeMap } = ctx.getMaps();
-  mollweideMap.addStars(state.currentMollweideFilteredStars);
-  mollweideMap.updateConnectionPositions(state.currentMollweideFilteredStars, state.currentMollweideConnections);
-  mollweideMap.labelManager.refreshLabels(state.currentMollweideFilteredStars);
-  uvMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  uvGlobeMap?.updateMap(state.currentGlobeFilteredStars, state.currentGlobeConnections);
-  if (ctx.editManager) ctx.editManager.registerMollweideEditableLabels();
-
-  refreshMollweideConstellationVisuals(ctx);
-
-  if (state.showCloudsFlag && mollweideMap.scene.userData.cloudOverlays) {
-    mollweideMap.scene.userData.cloudOverlays.forEach(line => {
-      if (line.userData && line.userData.isMollweideCloud) {
-        updateMollweideCloudSegments(line);
-      }
-    });
-  }
-
-  if (state.enableIsolationFilterFlag && state.isolationOverlay && typeof state.isolationOverlay.refreshMollweide === 'function') {
-    state.isolationOverlay.refreshMollweide();
-  }
-  if (state.enableDensityFilterFlag && state.densityOverlay && typeof state.densityOverlay.refreshMollweide === 'function') {
-    state.densityOverlay.refreshMollweide();
-  }
-  if (state.showCloudDensityFlag && Array.isArray(state.cloudDensityOverlays)) {
-    state.cloudDensityOverlays.forEach(overlay => overlay.refreshMollweide?.());
-  }
-
-  refreshMollweidePlanes(ctx);
   ctx.requestRender();
 }

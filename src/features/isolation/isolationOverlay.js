@@ -1,9 +1,7 @@
-// Isolation overlay implementation migrated from the legacy isolation filter module.
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
 import * as THREE from '../../vendor/three.js';
 import { lightenColor } from '../density/densityColorScale.js';
-import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, vectorToRaDec } from '../../shared/geometryUtils.js';
-import { minimalRADifference } from '../../shared/geometryUtils.js';
+import { radToSphere, getGreatCirclePoints, vectorToRaDec } from '../../shared/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries, loadConstellationFullNames } from '../constellations/constellationRenderer.js';
 import { getNearestCellDistance, populateCellDistanceCaches } from '../../shared/cellDistanceCache.js';
 import { disposeObject3D } from '../../render/engine/renderUtils.js';
@@ -92,12 +90,9 @@ class IsolationGridOverlay {
     this.regionClusters = [];
     this.regionLabelsGroupTC = new THREE.Group();
     this.regionLabelsGroupGlobe = new THREE.Group();
-    this.regionLabelsGroupMoll = new THREE.Group();
     this.revision = 0;
     this.tcCellLayer = null;
-    this.mollweideCellLayer = null;
     this.globeLineLayer = null;
-    this.mollweideLineLayer = null;
   }
 
   createGrid(stars) {
@@ -118,12 +113,10 @@ class IsolationGridOverlay {
           
           const cubeTC = createCellVisualState(posTC, 0x0000ff, 1);
           const squareGlobe = createCellVisualState(null, 0x0000ff, 1);
-          const squareMoll = createCellVisualState(null, 0x0000ff, 1);
           let projectedPos;
           let ra, dec;
           if (distFromCenter < 1e-6) {
             projectedPos = new THREE.Vector3(0, 0, 0);
-            squareMoll.position.set(0, 0, 0);
             ra = 0; dec = 0;
           } else {
             ra = Math.atan2(-posTC.z, -posTC.x);
@@ -134,20 +127,7 @@ class IsolationGridOverlay {
                radius * Math.sin(dec),
               -radius * Math.cos(dec) * Math.sin(ra)
             );
-            const projMoll = cachedRadToMollweide(ra, dec, 100, getMollweideLambda0());
-            squareMoll.position.copy(projMoll);
           }
-          let theta = dec;
-          for (let i = 0; i < 10; i++) {
-            const delta = (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(dec)) /
-              (2 + 2 * Math.cos(2 * theta));
-            theta -= delta;
-            if (Math.abs(delta) < 1e-10) break;
-          }
-          const cosT = Math.cos(theta);
-          const sinT = Math.sin(theta);
-          const mollXFactor = (2 * 100 / Math.PI) * cosT;
-          const mollY = 100 * sinT;
           squareGlobe.position.copy(projectedPos);
           const nrm = projectedPos.clone().normalize();
           let right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), nrm);
@@ -160,7 +140,6 @@ class IsolationGridOverlay {
           const cell = {
             tcMesh: cubeTC,
             globeMesh: squareGlobe,
-            mollweideMesh: squareMoll,
             tcPos: posTC,
             grid: {
               ix: Math.round(x / this.gridSize),
@@ -169,9 +148,7 @@ class IsolationGridOverlay {
             },
             active: false,
             raRad: ra,
-            decRad: dec,
-            mollXFactor: mollXFactor,
-            mollY: mollY
+            decRad: dec
           };
 
           cell.id = this.cubesData.length;
@@ -183,36 +160,23 @@ class IsolationGridOverlay {
       geometry: new THREE.BoxGeometry(this.gridSize, this.gridSize, this.gridSize),
       count: this.cubesData.length
     });
-    this.mollweideCellLayer = new InstancedCellLayer({
-      geometry: new THREE.PlaneGeometry(this.gridSize, this.gridSize),
-      count: this.cubesData.length,
-      side: THREE.DoubleSide
-    });
     populateCellDistanceCaches(this.cubesData, this.getExtendedStars(stars));
     this.computeAdjacentLines();
     this.globeLineLayer = createIsolationLineLayer();
-    this.mollweideLineLayer = createIsolationLineLayer();
   }
 
   getSceneObjects() {
     return {
       tc: this.tcCellLayer ? [this.tcCellLayer.mesh] : [],
-      globe: this.globeLineLayer ? [this.globeLineLayer] : [],
-      moll: [
-        ...(this.mollweideCellLayer ? [this.mollweideCellLayer.mesh] : []),
-        ...(this.mollweideLineLayer ? [this.mollweideLineLayer] : [])
-      ].filter(Boolean)
+      globe: this.globeLineLayer ? [this.globeLineLayer] : []
     };
   }
 
   dispose() {
     this.tcCellLayer?.dispose();
-    this.mollweideCellLayer?.dispose();
     disposeObject3D(this.globeLineLayer);
-    disposeObject3D(this.mollweideLineLayer);
     disposeObject3D(this.regionLabelsGroupTC);
     disposeObject3D(this.regionLabelsGroupGlobe);
-    disposeObject3D(this.regionLabelsGroupMoll);
   }
 
   getExtendedStars(stars) {
@@ -260,47 +224,16 @@ class IsolationGridOverlay {
     }
   }
 
-  appendMollweideEdge(buffers, cell1, cell2, lambda0 = getMollweideLambda0()) {
-    const mollweidePoints = getGreatCirclePoints(cell1.globeMesh.position, cell2.globeMesh.position, 100, 16)
-      .map(point => {
-        const { ra, dec } = vectorToRaDecRad(point, 100);
-        return radToMollweide(ra, dec, 100, lambda0);
-      });
-    const lastIndex = mollweidePoints.length - 1;
-    for (let index = 0; index < lastIndex; index += 1) {
-      const tStart = index / lastIndex;
-      const tEnd = (index + 1) / lastIndex;
-      splitMollweideWrap(mollweidePoints[index], mollweidePoints[index + 1])
-        .forEach(([start, end]) => {
-          pushInterpolatedLineVertex(buffers, start, cell1, cell2, tStart);
-          pushInterpolatedLineVertex(buffers, end, cell1, cell2, tEnd);
-        });
-    }
-  }
-
-  rebuildLineLayers(lambda0 = getMollweideLambda0()) {
+  rebuildLineLayers() {
     const globeBuffers = createLineBuffers();
-    const mollweideBuffers = createLineBuffers();
     this.adjacentLines.forEach(({ cell1, cell2 }) => {
       if (!cell1?.active || !cell2?.active) return;
       this.appendGlobeEdge(globeBuffers, cell1, cell2);
-      this.appendMollweideEdge(mollweideBuffers, cell1, cell2, lambda0);
     });
     replaceLineGeometry(this.globeLineLayer, globeBuffers.positions, globeBuffers.colors, globeBuffers.alphas);
-    replaceLineGeometry(this.mollweideLineLayer, mollweideBuffers.positions, mollweideBuffers.colors, mollweideBuffers.alphas);
   }
 
-  rebuildMollweideLineLayer(lambda0 = getMollweideLambda0()) {
-    const buffers = createLineBuffers();
-    this.adjacentLines.forEach(({ cell1, cell2 }) => {
-      if (!cell1?.active || !cell2?.active) return;
-      this.appendMollweideEdge(buffers, cell1, cell2, lambda0);
-    });
-    replaceLineGeometry(this.mollweideLineLayer, buffers.positions, buffers.colors, buffers.alphas);
-  }
-
-  // Updated update() method now accepts sceneTC, sceneGlobe, and sceneMoll to re-add new meshes.
-  update(stars, sceneTC, sceneGlobe, sceneMoll, options = {}) {
+  update(stars, sceneTC, sceneGlobe, options = {}) {
     const isolationVal = Number.isFinite(options.isolation) ? options.isolation : 7;
     const toleranceVal = Number.isFinite(options.isolationTolerance) ? options.isolationTolerance : 0;
 
@@ -340,40 +273,12 @@ class IsolationGridOverlay {
       cell.globeMesh.material.color.copy(color);
       cell.globeMesh.scale.set(scale, scale, 1);
 
-      cell.mollweideMesh.visible = cell.active;
-      cell.mollweideMesh.material.opacity = alpha;
-      cell.mollweideMesh.material.color.copy(color);
-      cell.mollweideMesh.scale.set(scale, scale, 1);
-
-      const lambda = minimalRADifference(cell.raRad - getMollweideLambda0());
-      cell.mollweideMesh.position.set(
-        cell.mollXFactor * lambda,
-        cell.mollY,
-        0
-      );
     });
     this.tcCellLayer?.update(this.cubesData, cell => cell.tcMesh);
-    this.mollweideCellLayer?.update(this.cubesData, cell => cell.mollweideMesh);
 
-    this.rebuildLineLayers(getMollweideLambda0());
+    this.rebuildLineLayers();
 
     // Re‑add the updated meshes to the scenes. Only the cubes are shown for
-    // True Coordinates, while the Globe and Mollweide maps display just the
-    // connecting lines.
-    this.revision += 1;
-  }
-
-  refreshMollweide(lambda0 = getMollweideLambda0()) {
-    this.cubesData.forEach(cell => {
-      const lambda = minimalRADifference(cell.raRad - lambda0);
-      cell.mollweideMesh.position.set(
-        cell.mollXFactor * lambda,
-        cell.mollY,
-        0
-      );
-    });
-    this.rebuildMollweideLineLayer(lambda0);
-    this.mollweideCellLayer?.update(this.cubesData, cell => cell.mollweideMesh);
     this.revision += 1;
   }
 
@@ -474,7 +379,7 @@ export function initIsolationFilter(minDistance, maxDistance, starArray, gridSiz
   return overlay;
 }
 
-export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe, sceneMoll, options = {}) {
+export function updateIsolationFilter(starArray, overlay, sceneTC, sceneGlobe, options = {}) {
   if (!overlay) return;
-  overlay.update(starArray, sceneTC, sceneGlobe, sceneMoll, options);
+  overlay.update(starArray, sceneTC, sceneGlobe, options);
 }

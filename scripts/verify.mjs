@@ -31,8 +31,7 @@ import {
 } from '../src/features/connections/connectionRenderState.js';
 import { buildPrintableSTLKitFiles } from '../src/features/export/stlKitExporter.js';
 import { collectSceneSnapshotModel, normalizeExportFilename } from '../src/features/export/exportSceneModel.js';
-import { getMollweideCropPixels, getMollweideSvgViewBox, getSceneSnapshotSize } from '../src/features/export/exportSizing.js';
-import { EDIT_SCHEMA, EDIT_SCHEMA_VERSION, createEditExportPayload, normalizeLabelEdits } from '../src/features/editing/editSchema.js';
+import { getSceneSnapshotSize } from '../src/features/export/exportSizing.js';
 import {
   buildFeatureLayerSignature,
   buildLabelLayerSignature,
@@ -74,9 +73,7 @@ import {
 } from '../src/app/uvOverlayCells.js';
 import { getProjectionContainer } from '../src/app/projectionVisibility.js';
 import { getElementByIdWithin } from '../src/shared/formUtils.js';
-import { readTextFile } from '../src/shared/fileUtils.js';
 import { readStorageItem, removeStorageItem, writeStorageItem } from '../src/shared/storageUtils.js';
-import { createEventListenerRegistry } from '../src/shared/eventListenerRegistry.js';
 import { configureRendererForCanvas, getCanvasDisplaySize, getClampedDevicePixelRatio } from '../src/shared/canvasSizing.js';
 import { cancelScheduledAnimationFrame, scheduleAfterPaint, scheduleAnimationFrame } from '../src/shared/renderScheduler.js';
 import { createMeasuredTextCanvas, parseFontPixelSize } from '../src/shared/textCanvas.js';
@@ -288,10 +285,6 @@ function checkCssBraces(files) {
 function checkRequiredHtmlControls() {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   [
-    'export-mollweide',
-    'export-png',
-    'export-pdf',
-    'export-svg',
     'export-stl',
     'export-stl-kit',
     'export-true-png',
@@ -299,9 +292,7 @@ function checkRequiredHtmlControls() {
     'export-uv-png',
     'export-uv-pdf',
     'export-globe-png',
-    'export-globe-pdf',
-    'export-legacy-globe-png',
-    'export-legacy-globe-pdf'
+    'export-globe-pdf'
   ]
     .forEach(id => {
       if (!html.includes(`id="${id}"`)) {
@@ -329,7 +320,7 @@ function checkRequiredHtmlControls() {
     }
   });
   if (!html.includes('href="favicon.ico"') || !existsSync(join(root, 'favicon.ico'))) {
-    addFailure('HTML should define a repo-served favicon.ico to satisfy legacy favicon requests.');
+    addFailure('HTML should define a repo-served favicon.ico to satisfy older favicon requests.');
   }
   if (!html.includes('href="favicon.svg"') || !existsSync(join(root, 'favicon.svg'))) {
     addFailure('HTML should define a repo-served favicon.svg for modern favicon rendering.');
@@ -369,15 +360,10 @@ function checkExportRendererConfiguration() {
     addFailure(`Shared CSS color parser must stay dependency-light and verifier-importable: ${cssColorHelper}`);
   }
 
-  [
-    join(root, 'src', 'features', 'export', 'exportManager.js'),
-    join(root, 'src', 'features', 'export', 'sceneSnapshotExporter.js')
-  ].forEach(file => {
-    const text = readFileSync(file, 'utf8');
-    if (!text.includes('configureExportRenderer')) {
-      addFailure(`Export renderer is not configured from the source renderer: ${file}`);
-    }
-  });
+  const snapshotExporter = join(root, 'src', 'features', 'export', 'sceneSnapshotExporter.js');
+  if (!readFileSync(snapshotExporter, 'utf8').includes('configureExportRenderer')) {
+    addFailure(`Export renderer is not configured from the source renderer: ${snapshotExporter}`);
+  }
 }
 
 function checkExportSizingSafety() {
@@ -385,33 +371,11 @@ function checkExportSizingSafety() {
   const sizingText = readFileSync(sizing, 'utf8');
   [
     'getSceneSnapshotSize',
-    'getMollweideCropPixels',
-    'getMollweideSvgViewBox',
     'getCanvasDisplaySize',
-    'Map canvas has no exportable size.',
-    'DEFAULT_MOLLWEIDE_VIEW_BOX',
-    'cropRight',
-    'cropBottom'
+    'Map canvas has no exportable size.'
   ].forEach(token => {
     if (!sizingText.includes(token)) {
-      addFailure(`Export sizing helper should own safe snapshot/crop/viewBox math (${token}): ${sizing}`);
-    }
-  });
-
-  const exportManager = join(root, 'src', 'features', 'export', 'exportManager.js');
-  const exportText = readFileSync(exportManager, 'utf8');
-  [
-    "from './exportSizing.js'",
-    'getMollweideCropPixels',
-    'getMollweideSvgViewBox'
-  ].forEach(token => {
-    if (!exportText.includes(token)) {
-      addFailure(`Mollweide export sizing should use safe canvas display dimensions (${token}): ${exportManager}`);
-    }
-  });
-  ['this.mollweideMap.canvas.clientWidth', 'this.mollweideMap.canvas.clientHeight', 'canvas.clientWidth', 'canvas.clientHeight'].forEach(token => {
-    if (exportText.includes(token)) {
-      addFailure(`Mollweide export sizing should not use raw client dimension token ${token}: ${exportManager}`);
+      addFailure(`Export sizing helper should own safe snapshot sizing (${token}): ${sizing}`);
     }
   });
 
@@ -503,87 +467,11 @@ function checkExportRuntimeDependencies() {
   }
 }
 
-function checkSvgExportFidelity() {
-  const exporter = join(root, 'src', 'features', 'export', 'exportManager.js');
-  const sceneModel = join(root, 'src', 'features', 'export', 'mollweideSvgSceneModel.js');
+function checkSceneSnapshotExportFidelity() {
   const sharedSceneModel = join(root, 'src', 'features', 'export', 'exportSceneModel.js');
   const snapshotExporter = join(root, 'src', 'features', 'export', 'sceneSnapshotExporter.js');
-  const text = readFileSync(exporter, 'utf8');
-  const modelText = readFileSync(sceneModel, 'utf8');
   const sharedModelText = readFileSync(sharedSceneModel, 'utf8');
   const snapshotText = readFileSync(snapshotExporter, 'utf8');
-  [
-    'getSvgStarLabelState',
-    'labelManager?.sprites?.get',
-    'mollLabelOffset',
-    'mollLabelRotation',
-    'mollLabelScale',
-    'transform=',
-    'dominant-baseline="central"'
-  ].forEach(token => {
-    if (!text.includes(token)) {
-      addFailure(`SVG export must preserve edited Mollweide label state (${token}): ${exporter}`);
-    }
-  });
-
-  [
-    'collectMollweideSvgSceneModel',
-    'appendSvgSceneModelLayers',
-    'appendSvgSceneModelLayer',
-    'sceneModel.clippedLayers',
-    'sceneModel.labelLayers',
-    'sceneModel.borderLayers',
-    'appendSvgLineSegments',
-    'appendSvgMeshTriangles',
-    'appendSvgOverlayCells',
-    'appendSvgCanvasImage',
-    'canvasToPngDataUrl(canvas)'
-  ].forEach(token => {
-    if (!text.includes(token)) {
-      addFailure(`Mollweide SVG export should render the collected scene model (${token}): ${exporter}`);
-    }
-  });
-
-  [
-    'createExportSceneModel',
-    'mollweide-svg-scene',
-    'vector-svg',
-    'collectMollweideSvgSceneModel',
-    'clippedLayers',
-    'labelLayers',
-    'borderLayers',
-    'state.constellationOverlayMoll',
-    'state.constellationLinesMoll',
-    'state.constellationLabelsMoll',
-    'state.galacticPlaneMoll',
-    'state.galacticDirectionLabelsMoll',
-    'state.eclipticPlaneMoll',
-    'state.celestialEquatorMoll',
-    'state.densityOverlay',
-    'state.isolationOverlay',
-    'state.cloudDensityOverlays',
-    'scene.userData.cloudOverlays',
-    'mollweideMap?.mollweideBorder',
-    "'constellation-overlay'",
-    "'constellation-boundaries'",
-    "'constellation-labels'",
-    "'galactic-plane'",
-    "'galactic-labels'",
-    "'ecliptic-plane'",
-    "'celestial-equator'",
-    "'density-heatmap'",
-    "'isolation-cells'",
-    "'isolation-lines'",
-    "'cloud-density-heatmap'",
-    "'cloud-density-cells'",
-    "'cloud-lines'",
-    "'mollweide-border'"
-  ].forEach(token => {
-    if (!modelText.includes(token)) {
-      addFailure(`Mollweide SVG scene model should include live overlay/state layer ${token}: ${sceneModel}`);
-    }
-  });
-
   [
     'createExportSceneModel',
     'collectSceneSnapshotModel',
@@ -608,13 +496,6 @@ function checkSvgExportFidelity() {
     }
   });
 
-  const decorations = join(root, 'src', 'app', 'mapDecorations.js');
-  const decorationText = readFileSync(decorations, 'utf8');
-  ['isMollweideBorder', 'baseRadius', 'baseColor', 'segments'].forEach(token => {
-    if (!decorationText.includes(token)) {
-      addFailure(`Mollweide border should expose export metadata ${token}: ${decorations}`);
-    }
-  });
 }
 
 function checkFullscreenCompatibility() {
@@ -680,9 +561,11 @@ function checkProjectionVisibilityRobustness() {
     }
   });
 
-  if (text.includes(".getElementById('legacySphereMap').parentElement") || text.includes(".getElementById('legacyMollweideMap').parentElement")) {
-    addFailure(`Projection visibility should not dereference optional legacy map containers directly: ${projection}`);
-  }
+  ['map3D', 'uvMap', 'sphereMap'].forEach(canvasId => {
+    if (!text.includes(canvasId)) {
+      addFailure(`Projection visibility should include active projection canvas ${canvasId}: ${projection}`);
+    }
+  });
 }
 
 function checkFilterOverlayStateScoped() {
@@ -794,7 +677,7 @@ function checkKeyboardMapAccessibility() {
   });
 
   const html = readFileSync(join(root, 'index.html'), 'utf8');
-  ['map3D', 'uvMap', 'sphereMap', 'legacySphereMap', 'legacyMollweideMap'].forEach(id => {
+  ['map3D', 'uvMap', 'sphereMap'].forEach(id => {
     const canvasPattern = new RegExp(`<canvas[^>]+id="${id}"[^>]+tabindex="0"[^>]+aria-label=`);
     if (!canvasPattern.test(html)) {
       addFailure(`Map canvas should be focusable and labelled for keyboard access: ${id}`);
@@ -932,8 +815,7 @@ function checkWebGLSupportGuardrails() {
   [
     join(root, 'src', 'app', 'mapManager.js'),
     join(root, 'src', 'app', 'uvMapManager.js'),
-    join(root, 'src', 'features', 'export', 'sceneSnapshotExporter.js'),
-    join(root, 'src', 'features', 'export', 'exportManager.js')
+    join(root, 'src', 'features', 'export', 'sceneSnapshotExporter.js')
   ].forEach(file => {
     const text = readFileSync(file, 'utf8');
     if (!text.includes('assertWebGLAvailable')) {
@@ -994,7 +876,6 @@ function checkRenderSchedulingCentralized(files) {
 
   [
     join(root, 'src', 'app', 'renderFrame.js'),
-    join(root, 'src', 'app', 'mollweideUpdater.js'),
     join(root, 'src', 'app', 'createApp.js')
   ].forEach(file => {
     const text = readFileSync(file, 'utf8');
@@ -1040,25 +921,6 @@ function checkTextCanvasCentralized() {
       addFailure(`Repeated text canvas renderer should use createMeasuredTextCanvas: ${file}`);
     }
   });
-}
-
-function checkLocalFileReadCompatibility() {
-  const helper = join(root, 'src', 'shared', 'fileUtils.js');
-  const helperText = readFileSync(helper, 'utf8');
-  ['readTextFile', 'file.text', 'globalThis.FileReader', 'readAsText', 'reader.onerror'].forEach(token => {
-    if (!helperText.includes(token)) {
-      addFailure(`Local file reader helper is missing ${token}: ${helper}`);
-    }
-  });
-
-  const editManager = join(root, 'src', 'features', 'editing', 'editManager.js');
-  const editManagerText = readFileSync(editManager, 'utf8');
-  if (!editManagerText.includes("from '../../shared/fileUtils.js'") || !editManagerText.includes('readTextFile(file)')) {
-    addFailure(`Edit import should read local files through readTextFile without requiring a separate startup module: ${editManager}`);
-  }
-  if (editManagerText.includes('file.text()')) {
-    addFailure(`Edit import must not depend directly on File.text browser support: ${editManager}`);
-  }
 }
 
 function checkStorageAccessCompatibility(files) {
@@ -1115,7 +977,6 @@ function checkSharedColorParsing() {
   const labelManager = join(root, 'src', 'features', 'labels', 'labelManager.js');
   const connectionPairs = join(root, 'src', 'features', 'connections', 'connectionPairs.js');
   const connectionSpatialIndex = join(root, 'src', 'features', 'connections', 'connectionSpatialIndex.js');
-  const exportManager = join(root, 'src', 'features', 'export', 'exportManager.js');
   const constellationStyle = join(root, 'src', 'features', 'constellations', 'constellationStyle.js');
   const helperText = readFileSync(helper, 'utf8');
   const mapText = readFileSync(mapManager, 'utf8');
@@ -1124,7 +985,6 @@ function checkSharedColorParsing() {
   const labelText = readFileSync(labelManager, 'utf8');
   const connectionText = readFileSync(connectionPairs, 'utf8');
   const connectionSpatialText = readFileSync(connectionSpatialIndex, 'utf8');
-  const exportText = readFileSync(exportManager, 'utf8');
   const constellationText = readFileSync(constellationStyle, 'utf8');
 
   [
@@ -1146,7 +1006,7 @@ function checkSharedColorParsing() {
   if (helperText.includes("from '../vendor/three.js'") || helperText.includes('new THREE.Color')) {
     addFailure(`Shared color parsing helper must stay dependency-light and verifier-importable: ${helper}`);
   }
-  ['normalizeHexColor', 'writeUnitRgb'].forEach(token => {
+  ['writeUnitRgb'].forEach(token => {
     if (!mapText.includes(token)) {
       addFailure(`Map manager should normalize star colors through shared color parsing helper ${token}: ${mapManager}`);
     }
@@ -1177,9 +1037,6 @@ function checkSharedColorParsing() {
   if (connectionSpatialText.includes('brute-force')) {
     addFailure(`K-nearest connection mode should not be documented as brute-force: ${connectionSpatialIndex}`);
   }
-  if (!exportText.includes("from '../../shared/colorParsing.js'") || !exportText.includes('normalizeHexColor(value, fallback)')) {
-    addFailure(`Mollweide SVG export should normalize colors through shared color parsing: ${exportManager}`);
-  }
   if (
     !constellationText.includes("from '../../shared/colorParsing.js'")
     || !constellationText.includes('clamp01')
@@ -1199,10 +1056,7 @@ function checkSharedColorParsing() {
     [connectionText, connectionPairs, 'new THREE.Color(starA.displayColor'],
     [connectionText, connectionPairs, 'new THREE.Color(starB.displayColor'],
     [connectionText, connectionPairs, 'new THREE.Color(pair.starA.displayColor'],
-    [connectionText, connectionPairs, 'new THREE.Color(pair.starB.displayColor'],
-    [exportText, exportManager, 'new THREE.Color(pair.starA?.displayColor'],
-    [exportText, exportManager, 'new THREE.Color(pair.starB?.displayColor'],
-    [exportText, exportManager, 'new THREE.Color(value || fallback']
+    [connectionText, connectionPairs, 'new THREE.Color(pair.starB.displayColor']
   ].forEach(([text, file, token]) => {
     if (text.includes(token)) {
       addFailure(`Render/export color path should not parse raw displayColor with token ${token}: ${file}`);
@@ -1218,7 +1072,6 @@ function checkSharedOpacityClamping() {
     filterPipeline: join(root, 'src', 'features', 'filters', 'pipeline', 'filterPipeline.js'),
     connectionPairs: join(root, 'src', 'features', 'connections', 'connectionPairs.js'),
     mapConnectionLabels: join(root, 'src', 'app', 'mapConnectionLabels.js'),
-    exportManager: join(root, 'src', 'features', 'export', 'exportManager.js'),
     constellationRenderer: join(root, 'src', 'features', 'constellations', 'constellationMapRenderer.js')
   };
   const texts = Object.fromEntries(
@@ -1226,11 +1079,10 @@ function checkSharedOpacityClamping() {
   );
 
   [
-    ['mapManager', 'clamp01, normalizeHexColor'],
+    ['mapManager', 'clamp01, writeUnitRgb'],
     ['labelManager', 'clamp01, normalizeHexColor'],
     ['connectionPairs', 'clamp01, normalizeHexColor'],
     ['mapConnectionLabels', 'clamp01, normalizeHexColor'],
-    ['exportManager', 'clamp01, normalizeHexColor'],
     ['filterPipeline', 'clamp01'],
     ['constellationRenderer', 'clamp01']
   ].forEach(([key, token]) => {
@@ -1241,20 +1093,17 @@ function checkSharedOpacityClamping() {
   if (!texts.uvMapManager.includes("from './uvCanvasLayers.js'") || !texts.uvMapManager.includes('clamp01(opacity)')) {
     addFailure(`UV map opacity setters should use shared clamp via uvCanvasLayers: ${files.uvMapManager}`);
   }
-  if (!texts.mapManager.includes('customOpacity') || !texts.mapManager.includes('instanceOpacity')) {
-    addFailure(`Map manager should pass per-star displayOpacity into both point and instanced star renderers: ${files.mapManager}`);
+  if (!texts.mapManager.includes('instanceOpacity')) {
+    addFailure(`Map manager should pass per-star displayOpacity into the instanced star renderer: ${files.mapManager}`);
   }
   if (!texts.uvMapManager.includes('getStarDisplayOpacity(star, this.starOpacity)')) {
     addFailure(`UV map star drawing should combine global and per-star opacity: ${files.uvMapManager}`);
-  }
-  if (!texts.exportManager.includes('getStarDisplayOpacity(star, starOpacity)')) {
-    addFailure(`Mollweide SVG export should combine global and per-star opacity: ${files.exportManager}`);
   }
   [
     [texts.mapManager, files.mapManager, 'this.starOpacity = safeOpacity'],
     [texts.mapManager, files.mapManager, 'this.connectionOpacity = safeOpacity'],
     [texts.mapManager, files.mapManager, 'this.labelOpacity = safeOpacity'],
-    [texts.mapManager, files.mapManager, 'clamp01(relativeOpacity * opacityFactor)'],
+    [texts.mapManager, files.mapManager, 'clamp01(opacityScale * safeOpacity)'],
     [texts.mapConnectionLabels, files.mapConnectionLabels, 'clamp01(lineOpacityScale * clamp01(opacityFactor))'],
     [texts.uvMapManager, files.uvMapManager, 'this.starOpacity = clamp01(opacity)'],
     [texts.uvMapManager, files.uvMapManager, 'this.connectionOpacity = clamp01(opacity)'],
@@ -1263,10 +1112,7 @@ function checkSharedOpacityClamping() {
     [texts.filterPipeline, files.filterPipeline, 'normalizeFilterOpacityOptions(filters)'],
     [texts.filterPipeline, files.filterPipeline, 'filters[key] = clamp01(filters[key])'],
     [texts.connectionPairs, files.connectionPairs, 'const safeOpacityFactor = clamp01(opacityFactor)'],
-    [texts.exportManager, files.exportManager, 'clamp01(sceneModel.connectionOpacity)'],
-    [texts.exportManager, files.exportManager, 'obj.material.opacity = clamp01'],
-    [texts.constellationRenderer, files.constellationRenderer, 'clamp01(baseOpacity)'],
-    [texts.constellationRenderer, files.constellationRenderer, 'clamp01(opacity)']
+    [texts.constellationRenderer, files.constellationRenderer, 'clamp01(baseOpacity)']
   ].forEach(([text, file, token]) => {
     if (!text.includes(token)) {
       addFailure(`Opacity path should use shared clamp token ${token}: ${file}`);
@@ -1281,9 +1127,7 @@ function checkSharedOpacityClamping() {
     [texts.uvMapManager, files.uvMapManager, 'this.connectionOpacity = opacity'],
     [texts.uvMapManager, files.uvMapManager, 'this.labelOpacity = opacity'],
     [texts.labelManager, files.labelManager, 'this.labelOpacity = opacity'],
-    [texts.filterPipeline, files.filterPipeline, 'Math.max(0, Math.min(1, filters.mollweideBorderOpacity))'],
     [texts.connectionPairs, files.connectionPairs, 'lineOpacityScale * opacityFactor'],
-    [texts.exportManager, files.exportManager, 'Math.min(1, obj.userData.baseOpacity * opFactor)'],
     [texts.constellationRenderer, files.constellationRenderer, 'Math.max(0, Math.min(1, baseOpacity))'],
     [texts.constellationRenderer, files.constellationRenderer, 'Math.max(0, Math.min(1, opacity))']
   ].forEach(([text, file, token]) => {
@@ -1310,7 +1154,7 @@ function checkExportBindingsExtracted() {
   if (!createAppText.includes("from './exportBindings.js'") || !createAppText.includes('setupExportBindings({')) {
     addFailure(`App bootstrap should delegate export wiring to exportBindings: ${createApp}`);
   }
-  ['ExportManager', 'exportSceneSnapshot', 'exportTrueCoordinatesSTL', 'exportPrintableSTLKit'].forEach(token => {
+  ['exportSceneSnapshot', 'exportTrueCoordinatesSTL', 'exportPrintableSTLKit'].forEach(token => {
     if (createAppText.includes(token)) {
       addFailure(`App bootstrap should not own export wiring token ${token}: ${createApp}`);
     }
@@ -1352,17 +1196,17 @@ function checkMapStarMaterialExtraction() {
   if (!managerText.includes("from './mapStarMaterials.js'")) {
     addFailure(`MapManager should import star material factories from helper: ${manager}`);
   }
-  ['createStarTexture()', 'createStarMaterial(texture', 'createInstancedStarMaterial(this.starOpacity)'].forEach(token => {
+  ['createInstancedStarMaterial(this.starOpacity)'].forEach(token => {
     if (!managerText.includes(token)) {
       addFailure(`MapManager should use extracted star material helper token ${token}: ${manager}`);
     }
   });
-  ['createStarTexture', 'createStarMaterial', 'createInstancedStarMaterial', 'STAR_TEXTURE_SIZE', 'new THREE.ShaderMaterial'].forEach(token => {
+  ['createInstancedStarMaterial', 'new THREE.ShaderMaterial'].forEach(token => {
     if (!helperText.includes(token)) {
       addFailure(`Star material helper should own star rendering token ${token}: ${helper}`);
     }
   });
-  ['STAR_TEXTURE_SIZE', 'new THREE.ShaderMaterial'].forEach(token => {
+  ['new THREE.ShaderMaterial'].forEach(token => {
     if (managerText.includes(token)) {
       addFailure(`MapManager should not own star material implementation token ${token}: ${manager}`);
     }
@@ -1789,97 +1633,6 @@ function checkStlKitMetadataExtraction() {
   });
 }
 
-function checkEditExportSchema() {
-  const schemaFile = join(root, 'src', 'features', 'editing', 'editSchema.js');
-  const schemaText = readFileSync(schemaFile, 'utf8');
-  [
-    "export const EDIT_SCHEMA",
-    "export const EDIT_SCHEMA_VERSION",
-    'createEditExportPayload',
-    'normalizeLabelEdits',
-    'lineEdits',
-    'removedLineSegments',
-    'hiddenLineKeys'
-  ].forEach(token => {
-    if (!schemaText.includes(token)) {
-      addFailure(`Edit export schema is missing ${token}: ${schemaFile}`);
-    }
-  });
-
-  const persistenceFile = join(root, 'src', 'features', 'editing', 'editPersistence.js');
-  const persistenceText = readFileSync(persistenceFile, 'utf8');
-  ['createEditExportPayload(manager)', 'normalizeLabelEdits', 'astrography-edits.json'].forEach(token => {
-    if (!persistenceText.includes(token)) {
-      addFailure(`Edit persistence adapter is missing ${token}: ${persistenceFile}`);
-    }
-  });
-}
-
-function checkEditControlLifecycle() {
-  const registryFile = join(root, 'src', 'shared', 'eventListenerRegistry.js');
-  const registryText = readFileSync(registryFile, 'utf8');
-  ['createEventListenerRegistry', 'addEventListener', 'removeEventListener', 'disposeAll', 'return dispose'].forEach(token => {
-    if (!registryText.includes(token)) {
-      addFailure(`Event listener registry is missing ${token}: ${registryFile}`);
-    }
-  });
-
-  const managerFile = join(root, 'src', 'features', 'editing', 'editManager.js');
-  const managerText = readFileSync(managerFile, 'utf8');
-  [
-    'createEventListenerRegistry',
-    '_eventListeners',
-    'addManagedEventListener',
-    'return this._eventListeners.add(target, type, handler, options)',
-    'this._eventListeners.disposeAll()',
-    'this.stopRotateTransformListeners?.()',
-    'this.stopScaleTransformListeners?.()',
-    'this.editOverlay?.remove?.()'
-  ].forEach(token => {
-    if (!managerText.includes(token)) {
-      addFailure(`Edit manager lifecycle cleanup is missing ${token}: ${managerFile}`);
-    }
-  });
-
-  if (!managerText.includes('function setupEditIOControls(manager)') || !managerText.includes('readTextFile(file)')) {
-    addFailure(`Edit manager should own edit import/export button wiring without a separate editIOControls module: ${managerFile}`);
-  }
-
-  [
-    join(root, 'src', 'features', 'editing', 'labelDragControls.js'),
-    join(root, 'src', 'features', 'editing', 'transformControls.js')
-  ].forEach(file => {
-    const text = readFileSync(file, 'utf8');
-    if (!text.includes('addManagedEventListener')) {
-      addFailure(`Edit control setup should use managed listener cleanup: ${file}`);
-    }
-  });
-
-  const transformFile = join(root, 'src', 'features', 'editing', 'transformControls.js');
-  const transformText = readFileSync(transformFile, 'utf8');
-  [
-    'replaceTransformDocumentListeners',
-    'stopRotateTransformListeners',
-    'stopScaleTransformListeners',
-    'globalThis.document',
-    'manager[key]?.()'
-  ].forEach(token => {
-    if (!transformText.includes(token)) {
-      addFailure(`Transform controls should use disposable managed document listeners (${token}): ${transformFile}`);
-    }
-  });
-  ['document.addEventListener', 'document.removeEventListener'].forEach(token => {
-    if (transformText.includes(token)) {
-      addFailure(`Transform controls should not manage document listeners directly (${token}): ${transformFile}`);
-    }
-  });
-
-  if (!managerText.includes("this.addManagedEventListener(btn, 'click'") ||
-      !managerText.includes("this.addManagedEventListener(this.mollweideMap.canvas, 'pointerdown', this.onLinePointerDown)")) {
-    addFailure(`Edit manager line/undo controls should use managed listener cleanup: ${managerFile}`);
-  }
-}
-
 function checkUvMapFilterDecoupling() {
   const file = join(root, 'src', 'app', 'uvMapManager.js');
   const text = readFileSync(file, 'utf8');
@@ -1967,8 +1720,8 @@ function checkUvCanvasLayerUtilityExtraction() {
   if (!managerText.includes('this.interactionSignature') || atlasStoreText.includes("interaction: ''")) {
     addFailure('UV atlas signatures may be shared, but projection-specific interaction geometry signatures must stay per manager.');
   }
-  if (!createAppText.includes('atlasStore: uvMap.atlasStore')) {
-    addFailure(`Primary UV map and globe should share one atlas store: ${createApp}`);
+  if (!createAppText.includes('uvMap.setGlobeSourceScene(globeMap.scene)')) {
+    addFailure(`UV map should use the primary globe scene as its overlay source: ${createApp}`);
   }
   ['function rgbaFromHex', 'function clamp01', 'function createLayerCanvas', 'const _rgbaColor'].forEach(token => {
     if (managerText.includes(token)) {
@@ -1986,12 +1739,12 @@ function checkUvSurfaceFactoryExtraction() {
   if (!managerText.includes("from './uvSurfaceFactory.js'") || !managerText.includes('createUvSurface({')) {
     addFailure(`UV map manager should use the extracted UV surface factory: ${manager}`);
   }
-  ['createUvSurface', 'createEquirectangularSurface', 'createUvGlobeSurface', 'TwoDControls', 'ThreeDControls', 'EQUIRECT_WIDTH', 'GLOBE_RADIUS'].forEach(token => {
+  ['createUvSurface', 'createEquirectangularSurface', 'TwoDControls', 'EQUIRECT_WIDTH', 'EQUIRECT_HEIGHT'].forEach(token => {
     if (!factoryText.includes(token)) {
       addFailure(`UV surface factory should own projection surface token ${token}: ${factory}`);
     }
   });
-  ['TwoDControls', 'ThreeDControls', 'new THREE.PlaneGeometry', 'new THREE.SphereGeometry(GLOBE_RADIUS'].forEach(token => {
+  ['TwoDControls', 'new THREE.PlaneGeometry'].forEach(token => {
     if (managerText.includes(token)) {
       addFailure(`UV map manager should not own projection surface implementation token ${token}: ${manager}`);
     }
@@ -2204,8 +1957,8 @@ function checkOverlayFilterOptionDecoupling() {
 
   const stateFile = join(root, 'src', 'features', 'filters', 'state', 'filterOverlayState.js');
   const stateText = readFileSync(stateFile, 'utf8');
-  if (!stateText.includes('updateIsolationFilter(allStars, isolationOverlay, normalizedScenes.tc, normalizedScenes.globe, normalizedScenes.moll, filters)') ||
-      !stateText.includes('updateDensityFilter(allStars, densityOverlay, normalizedScenes.tc, normalizedScenes.globe, normalizedScenes.moll, filters)')) {
+  if (!stateText.includes('updateIsolationFilter(allStars, isolationOverlay, normalizedScenes.tc, normalizedScenes.globe, filters)') ||
+      !stateText.includes('updateDensityFilter(allStars, densityOverlay, normalizedScenes.tc, normalizedScenes.globe, filters)')) {
     addFailure(`Overlay state manager must pass normalized filters into density/isolation updates: ${stateFile}`);
   }
 }
@@ -2257,7 +2010,7 @@ function checkOverlayInstancing() {
   });
   const isolationFile = join(root, 'src', 'features', 'isolation', 'isolationOverlay.js');
   const isolationText = readFileSync(isolationFile, 'utf8');
-  ['globeLineLayer', 'mollweideLineLayer', 'replaceLineGeometry'].forEach(token => {
+  ['globeLineLayer', 'replaceLineGeometry'].forEach(token => {
     if (!isolationText.includes(token)) {
       addFailure(`Isolation overlay should use merged line layers (${token}): ${isolationFile}`);
     }
@@ -2267,11 +2020,6 @@ function checkOverlayInstancing() {
       addFailure(`Isolation overlay should not rebuild per-edge line objects or geometry (${token}): ${isolationFile}`);
     }
   });
-  const lineEditor = join(root, 'src', 'features', 'editing', 'lineEditor.js');
-  if (!readFileSync(lineEditor, 'utf8').includes('manager.isolationOverlay?.mollweideLineLayer')) {
-    addFailure(`Line editor should register the merged isolation line layer: ${lineEditor}`);
-  }
-
   [
     join(root, 'src', 'features', 'filters', 'state', 'filterOverlayState.js'),
     join(root, 'src', 'features', 'filters', 'pipeline', 'filterPipeline.js')
@@ -2376,14 +2124,6 @@ function checkAuditQuickFixes() {
   if (!stlKitText.includes('validateBuiltStlFiles(built)')) {
     addFailure(`STL kit export should validate generated STL buffers before ZIP packaging: ${stlKitExporter}`);
   }
-
-  const exportManager = join(root, 'src', 'features', 'export', 'exportManager.js');
-  const exportManagerText = readFileSync(exportManager, 'utf8');
-  ['this.exportInProgress = false', 'A Mollweide export is already in progress', 'this.exportInProgress = true'].forEach(token => {
-    if (!exportManagerText.includes(token)) {
-      addFailure(`Mollweide raster/PDF export should be guarded against overlapping live-scene mutations (${token}): ${exportManager}`);
-    }
-  });
 
   const filterPipeline = join(root, 'src', 'features', 'filters', 'pipeline', 'filterPipeline.js');
   const filterPipelineText = readFileSync(filterPipeline, 'utf8');
@@ -2633,49 +2373,6 @@ async function checkBehavioralInvariants() {
       'Scene snapshot missing-canvas error should mention exportable size'
     );
   }
-  const exportSizingCanvas = {
-    clientWidth: 0,
-    clientHeight: 0,
-    width: 400,
-    height: 200,
-    getBoundingClientRect: () => ({ width: 800, height: 400 })
-  };
-  assertArrayEqual(
-    getMollweideCropPixels(
-      { x: 200, y: 100, width: 400, height: 200 },
-      exportSizingCanvas,
-      1600,
-      800
-    ),
-    { cropX: 400, cropY: 200, cropW: 800, cropH: 400 },
-    'Mollweide raster crop should convert display-space selections to backing pixels safely'
-  );
-  assertArrayEqual(
-    getMollweideCropPixels(
-      { x: -20, y: 100, width: 900, height: 400 },
-      exportSizingCanvas,
-      1600,
-      800
-    ),
-    { cropX: 0, cropY: 200, cropW: 1600, cropH: 600 },
-    'Mollweide raster crop should clamp selections to the export backing canvas'
-  );
-  assertArrayEqual(
-    getMollweideSvgViewBox(
-      { x: 200, y: 100, width: 400, height: 200 },
-      {
-        clientWidth: 0,
-        clientHeight: 0,
-        width: 400,
-        height: 200,
-        getBoundingClientRect: () => ({ width: 800, height: 400 })
-      },
-      200,
-      { x: 0, y: 0 }
-    ),
-    { minX: -100, minY: -50, width: 200, height: 100 },
-    'SVG export viewBox should use safe display dimensions for crop conversion'
-  );
   const originalWindowForSizing = globalThis.window;
   try {
     globalThis.window = { devicePixelRatio: 5 };
@@ -2777,31 +2474,6 @@ async function checkBehavioralInvariants() {
   assertEqual(textCanvas.canvas.width, 38, 'Text canvas helper should include horizontal padding in measured width');
   assertEqual(textCanvas.canvas.height, 34, 'Text canvas helper should derive height from font size and vertical padding');
   assertArrayEqual(textCanvasCalls, [['fillText', 'Ly', 10, 17]], 'Text canvas helper should draw default middle-baseline text');
-  assertEqual(
-    await readTextFile({ text: async () => 'modern file text' }),
-    'modern file text',
-    'Local file reader should use File.text when available'
-  );
-  class FakeFileReader {
-    readAsText(file) {
-      this.result = file.value;
-      this.onload();
-    }
-  }
-  assertEqual(
-    await readTextFile({ value: 'fallback file text' }, { FileReaderCtor: FakeFileReader }),
-    'fallback file text',
-    'Local file reader should fall back to FileReader'
-  );
-  try {
-    await readTextFile({});
-    addFailure('Local file reader should reject when no file APIs are available.');
-  } catch (error) {
-    assert(
-      String(error.message).includes('cannot read local text files'),
-      'Local file reader unsupported error should mention local text files'
-    );
-  }
   class FakeDataUrlReader {
     readAsDataURL(blob) {
       this.result = `data:${blob.type};base64,ZmFrZQ==`;
@@ -2872,45 +2544,6 @@ async function checkBehavioralInvariants() {
     ],
     'Download helper should append, click, remove, and revoke via injectable browser APIs'
   );
-  const listenerLog = [];
-  const fakeTarget = {
-    addEventListener: (type, handler, options) => listenerLog.push(['add', type, handler, options]),
-    removeEventListener: (type, handler, options) => listenerLog.push(['remove', type, handler, options])
-  };
-  const managedHandler = () => {};
-  const listenerRegistry = createEventListenerRegistry();
-  const disposeManagedClick = listenerRegistry.add(fakeTarget, 'click', managedHandler, { passive: true });
-  assert(disposeManagedClick, 'Event listener registry should accept valid targets');
-  assertEqual(listenerRegistry.size, 1, 'Event listener registry should track listener count');
-  disposeManagedClick();
-  disposeManagedClick();
-  assertEqual(listenerRegistry.size, 0, 'Event listener registry should let individual disposers remove one listener once');
-  assertEqual(listenerLog.length, 2, 'Managed listener individual disposer add/remove count');
-  assertArrayEqual(
-    listenerLog.map(([action, type]) => [action, type]),
-    [['add', 'click'], ['remove', 'click']],
-    'Managed listener individual disposer should remove listeners exactly once'
-  );
-  listenerRegistry.add(fakeTarget, 'pointermove', managedHandler);
-  listenerRegistry.add(fakeTarget, 'pointerup', managedHandler);
-  assertEqual(listenerRegistry.size, 2, 'Event listener registry should track listeners after individual disposal');
-  listenerRegistry.disposeAll();
-  assertEqual(listenerRegistry.size, 0, 'Event listener registry should clear listener count after dispose');
-  assertEqual(listenerLog.length, 6, 'Managed listener add/remove count');
-  assertArrayEqual(
-    listenerLog.map(([action, type]) => [action, type]),
-    [
-      ['add', 'click'],
-      ['remove', 'click'],
-      ['add', 'pointermove'],
-      ['add', 'pointerup'],
-      ['remove', 'pointerup'],
-      ['remove', 'pointermove']
-    ],
-    'Managed listener registry should remove listeners on dispose'
-  );
-  assert(listenerLog[1][2] === managedHandler, 'Managed listener registry should remove the same listener reference');
-
   const stars = [
     { starId: 'a', distance: 1, viewpointDistance: 3, apparentMagnitude: 1.2, absoluteMagnitude: 4, z_coordinate: -2 },
     { starId: 'b', distance: 8, viewpointDistance: 8, apparentMagnitude: 7.1, absoluteMagnitude: 1, z_coordinate: 5 },
@@ -3044,7 +2677,7 @@ async function checkBehavioralInvariants() {
   assertEqual(filters.minDistance, 2, 'Filter state min distance');
   assertEqual(filters.maxDistance, 30, 'Filter state max distance');
   assertEqual(filters.showCloudDensity, true, 'Filter state cloud-density mode');
-  assertEqual(filters.showClouds, false, 'Filter state legacy cloud mode');
+  assertEqual(filters.showClouds, false, 'Filter state cloud-line mode');
   assertEqual(filters.cloudDensityRadius, 6.5, 'Filter state cloud-density radius');
   assertEqual(filters.cloudDensityOpacity, 0.75, 'Filter state cloud-density opacity');
   assertEqual(filters.enableDensityFilter, true, 'Filter state density toggle');
@@ -3147,8 +2780,8 @@ async function checkBehavioralInvariants() {
     viewpointStarId: 'sol'
   };
   assertEqual(
-    getDustCloudSignature({ selectedDustClouds: ['a', 'b'], dustCloudMode: 'legacy' }),
-    'legacy:a|b',
+    getDustCloudSignature({ selectedDustClouds: ['a', 'b'], dustCloudMode: 'lines' }),
+    'lines:a|b',
     'UV dust cloud signature'
   );
   assertArrayEqual(
@@ -3582,59 +3215,6 @@ async function checkBehavioralInvariants() {
     'STL feature direction should avoid occupied opposing X tube directions'
   );
 
-  const editManager = {
-    starLabelOffsets: new Map([['sol', { x: 1.25, y: -2.5 }]]),
-    starLabelRotations: new Map([['sol', 0.75]]),
-    starLabelScales: new Map([['sol', { x: 1.1, y: 0.9 }]]),
-    constellationLabelOffsets: new Map([['ori', { x: 3, y: 4 }]]),
-    galacticLabelOffsets: new Map([['north', { x: -1, y: 2 }]]),
-    removedLineSegments: new Set(['0,0,0,1,1,1']),
-    hiddenLineKeys: new Set(['line:sol:sirius'])
-  };
-  const editPayload = createEditExportPayload(editManager, '2026-01-02T03:04:05.000Z');
-  assertEqual(editPayload.schema, EDIT_SCHEMA, 'Edit export schema id');
-  assertEqual(editPayload.version, EDIT_SCHEMA_VERSION, 'Edit export schema version');
-  assertEqual(editPayload.exportedAt, '2026-01-02T03:04:05.000Z', 'Edit export timestamp override');
-  assertArrayEqual(editPayload.edits.lineEdits.removedSegments, ['0,0,0,1,1,1'], 'Edit export removed line segments');
-  assertArrayEqual(editPayload.edits.lineEdits.hiddenLines, ['line:sol:sirius'], 'Edit export hidden line keys');
-
-  const normalizedEdits = normalizeLabelEdits(editPayload);
-  assertArrayEqual(normalizedEdits.starOffsets, [['sol', { x: 1.25, y: -2.5 }]], 'Edit import star offsets');
-  assertArrayEqual(normalizedEdits.starRotations, [['sol', 0.75]], 'Edit import star rotations');
-  assertArrayEqual(normalizedEdits.starScales, [['sol', { x: 1.1, y: 0.9 }]], 'Edit import star scales');
-  assertArrayEqual(normalizedEdits.constellationOffsets, [['ori', { x: 3, y: 4 }]], 'Edit import constellation offsets');
-  assertArrayEqual(normalizedEdits.galacticOffsets, [['north', { x: -1, y: 2 }]], 'Edit import galactic offsets');
-  assertArrayEqual(normalizedEdits.removedLineSegments, ['0,0,0,1,1,1'], 'Edit import removed line segments');
-  assertArrayEqual(normalizedEdits.hiddenLineKeys, ['line:sol:sirius'], 'Edit import hidden line keys');
-
-  const legacyEdits = normalizeLabelEdits({
-    schema: 'astrography-label-edits',
-    edits: {
-      starOffsets: [['legacy-star', { x: 5, y: 6 }]]
-    }
-  });
-  assertArrayEqual(legacyEdits.starOffsets, [['legacy-star', { x: 5, y: 6 }]], 'Legacy edit import star offsets');
-  assertArrayEqual(legacyEdits.removedLineSegments, [], 'Legacy edit import missing line edits');
-
-  try {
-    normalizeLabelEdits({ schema: 'unknown-edit-schema', edits: {} });
-    addFailure('Edit import should reject unsupported schema ids.');
-  } catch (error) {
-    assert(
-      String(error.message).includes('Unsupported edit file schema'),
-      'Edit import unsupported schema error should mention schema'
-    );
-  }
-
-  try {
-    normalizeLabelEdits({ edits: { starOffsets: [['bad', { x: Infinity, y: 0 }]] } });
-    addFailure('Edit import should reject non-finite label offsets.');
-  } catch (error) {
-    assert(
-      String(error.message).includes('finite x and y'),
-      'Edit import non-finite offset error should mention finite x and y'
-    );
-  }
 }
 
 function getHtmlScriptEntries() {
@@ -3689,7 +3269,7 @@ checkRequiredHtmlControls();
 checkExportRendererConfiguration();
 checkExportSizingSafety();
 checkExportRuntimeDependencies();
-checkSvgExportFidelity();
+checkSceneSnapshotExportFidelity();
 checkFullscreenCompatibility();
 checkSidebarAccessibility();
 checkProjectionVisibilityRobustness();
@@ -3706,7 +3286,6 @@ checkWebGLSupportGuardrails();
 checkCentralizedObjectChildDisposal();
 checkRenderSchedulingCentralized(jsFiles);
 checkTextCanvasCentralized();
-checkLocalFileReadCompatibility();
 checkStorageAccessCompatibility(jsFiles);
 checkCentralizedHashing();
 checkSharedColorParsing();
@@ -3725,8 +3304,6 @@ checkStlFacetGeometryExtraction();
 checkStlSocketPlanningExtraction();
 checkStlVectorMathExtraction();
 checkStlKitMetadataExtraction();
-checkEditExportSchema();
-checkEditControlLifecycle();
 checkUvMapFilterDecoupling();
 checkUvLayerSignatureExtraction();
 checkUvCanvasLayerUtilityExtraction();

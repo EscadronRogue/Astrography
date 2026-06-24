@@ -1,19 +1,9 @@
-// Cloud overlay rendering migrated from the legacy clouds filter module.
 import * as THREE from '../../vendor/three.js';
-import {
-  getGreatCirclePoints,
-  radToSphere,
-  radToMollweide,
-  degToRad,
-  getMollweideLambda0,
-  greatCircleToMollweide,
-  splitMollweideWrap
-} from '../../shared/geometryUtils.js';
-import { getDustCloudColor } from './dustCloudColors.js';
+import { getGreatCirclePoints } from '../../shared/geometryUtils.js';
 import { loadCachedCloudData } from './cloudDataCache.js';
-import { createWideLineMaterial, buildWideLineGeometry, disposeObject3D } from '../../render/engine/renderUtils.js';
+import { disposeObject3D } from '../../render/engine/renderUtils.js';
 import { uniqueColorFromName, getCloudNameFromFileUrl } from '../../shared/colorUtils.js';
-import { GLOBE_RADIUS, CIRCLE_SEGMENTS } from '../../shared/constants.js';
+import { GLOBE_RADIUS } from '../../shared/constants.js';
 import { normalizeCloudStarName } from './cloudNameUtils.js';
 import { logError } from '../../shared/logger.js';
 
@@ -141,7 +131,7 @@ function findNearestCloudNeighbors(cloudStars, currentIndex, spatialIndex, limit
  * is drawn as a series of small segments following the great‑circle path on a sphere.
  * @param {Array} cloudData - Array of star objects from the cloud file.
  * @param {Array} completeStarList - Complete array of star objects.
- * @param {string} mapType - Either 'TrueCoordinates', 'Globe', or 'Mollweide'.
+ * @param {string} mapType - Either 'TrueCoordinates' or 'Globe'.
  * @param {THREE.Color} cloudColor - Unique color for the cloud overlay.
  * @returns {THREE.LineSegments|null} - A THREE.LineSegments object representing the cloud overlay, or null if too few points.
  */
@@ -163,9 +153,6 @@ export async function createCloudOverlay(
         cloudStars.push({ star, pos: star.truePosition });
       } else if (mapType === 'Globe' && star.spherePosition) {
         cloudStars.push({ star, pos: star.spherePosition });
-      } else if (mapType === 'Mollweide' && star.spherePosition) {
-        // store sphere position; projection handled later
-        cloudStars.push({ star, pos: star.spherePosition });
       }
     }
   });
@@ -181,11 +168,6 @@ export async function createCloudOverlay(
     for (let n = 0; n < k; n++) {
       pairs.push({ starA: cloudStars[i].star, starB: neighbors[n].other.star });
     }
-  }
-
-  if (mapType === 'Mollweide') {
-    const segs = createMollweideCloudSegments(pairs, cloudColor, opacityFactor);
-    return segs;
   }
 
   const vertices = [];
@@ -221,42 +203,6 @@ export async function createCloudOverlay(
   return lineSegments;
 }
 
-const GC_SEGMENTS = CIRCLE_SEGMENTS;
-
-export function createMollweideCloudSegments(pairs, color, opacityFactor = 1.0, width = 30) {
-  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), createWideLineMaterial(color));
-  mesh.material.uniforms.opacityFactor.value = opacityFactor;
-  mesh.renderOrder = 2;
-  mesh.userData = { pairs, segments: GC_SEGMENTS, lineWidth: width, isMollweideCloud: true };
-  updateMollweideCloudSegments(mesh);
-  return mesh;
-}
-
-export function updateMollweideCloudSegments(lineSegs) {
-  const pairs = lineSegs.userData.pairs || [];
-  const segsCount = lineSegs.userData.segments || GC_SEGMENTS;
-  const width = lineSegs.userData.lineWidth || 30;
-  const pts = [];
-  pairs.forEach(pair => {
-    const p1 = pair.starA.spherePosition;
-    const p2 = pair.starB.spherePosition;
-    if (!p1 || !p2) return;
-    const gcPts = greatCircleToMollweide(
-      p1,
-      p2,
-      100,
-      segsCount,
-      getMollweideLambda0()
-    );
-    for (let j = 0; j < gcPts.length - 1; j++) {
-      const segs = splitMollweideWrap(gcPts[j], gcPts[j + 1]);
-      segs.forEach(([s, e]) => { pts.push(s, e); });
-    }
-  });
-  lineSegs.geometry.dispose();
-  lineSegs.geometry = buildWideLineGeometry(pts, width);
-}
-
 /**
  * Updates the cloud overlays.
  * For each checked cloud file, it loads the cloud data and creates connecting lines
@@ -264,7 +210,7 @@ export function updateMollweideCloudSegments(lineSegs) {
  * Each cloud is rendered with a unique color.
  * @param {Array} completeStarList - Complete array of star objects.
  * @param {THREE.Scene} scene - The scene to add the cloud overlays.
- * @param {string} mapType - 'TrueCoordinates', 'Globe', or 'Mollweide'.
+ * @param {string} mapType - 'TrueCoordinates' or 'Globe'.
  * @param {Array} cloudDataFiles - Array of file URLs for cloud data.
  */
 export async function updateCloudsOverlay(completeStarList, scene, mapType, cloudDataFiles, opacityFactor = 1.0) {

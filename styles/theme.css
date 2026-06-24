@@ -67,8 +67,7 @@ input[type="number"],
 #density-value, #density-top-value, #density-bottom-value, #density-opacity-value,
 #isolation-value, #isolation-tolerance-value, #density-tolerance-value,
 #constellation-line-opacity-value, #constellation-line-width-value,
-#constellation-name-opacity-value, #mollweide-border-width-value,
-#mollweide-border-opacity-value, #plane-opacity-value,
+#constellation-name-opacity-value, #plane-opacity-value,
 #tooltip-distance, #tooltip-apparentMag, #tooltip-absoluteMag, #tooltip-mass {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -221,25 +220,6 @@ header h1::before {
   background: var(--bg-elev-1);
   border-radius: var(--radius);
   border: 1px solid var(--hairline);
-}
-
-/* Legacy ribbon restyle */
-.legacy-map-container {
-  opacity: 0.96;
-}
-.legacy-map-container h2::after {
-  content: "Legacy";
-  margin-left: 8px;
-  font-family: var(--font-ui);
-  font-size: 9px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--fg-muted);
-  border: 1px solid var(--hairline-strong);
-  padding: 2px 7px;
-  border-radius: 999px;
-  vertical-align: middle;
-  background: transparent;
 }
 
 /* ---------- Fullscreen button ----------------------------------------- */
@@ -613,8 +593,7 @@ header h1::before {
 #density-value, #density-top-value, #density-bottom-value,
 #isolation-value, #isolation-tolerance-value, #density-tolerance-value,
 #constellation-line-opacity-value, #constellation-line-width-value,
-#constellation-name-opacity-value, #mollweide-border-width-value,
-#mollweide-border-opacity-value, #plane-opacity-value {
+#constellation-name-opacity-value, #plane-opacity-value {
   color: var(--accent);
   font-weight: 500;
   font-size: 11px;
@@ -635,9 +614,7 @@ header h1::before {
 
 /* Buttons inside filter items */
 .filter-item button,
-#clear-saved-presets,
-#download-edits,
-#upload-edits {
+#clear-saved-presets {
   background: var(--bg-elev-2);
   color: var(--fg);
   border: 1px solid var(--hairline-strong);
@@ -651,9 +628,7 @@ header h1::before {
   transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
 }
 .filter-item button:hover,
-#clear-saved-presets:hover,
-#download-edits:hover,
-#upload-edits:hover {
+#clear-saved-presets:hover {
   color: var(--accent);
   border-color: var(--accent);
   border-color: color-mix(in oklab, var(--accent) 55%, var(--hairline-strong));
