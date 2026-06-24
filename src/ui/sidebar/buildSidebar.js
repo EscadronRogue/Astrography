@@ -153,6 +153,21 @@ function bindDustCloudModeControls() {
   syncMode();
 }
 
+function bindDensityPreferencesShortcut() {
+  const button = document.getElementById('open-density-preferences');
+  const target = document.getElementById('density-preferences-fieldset');
+  if (!button || !target || button.dataset.bound === 'true') return;
+
+  button.dataset.bound = 'true';
+  button.addEventListener('click', () => {
+    const legend = target.querySelector('legend.collapsible');
+    if (legend && !legend.classList.contains('active')) {
+      legend.click();
+    }
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
+
 function getFullscreenElement() {
   return document.fullscreenElement
     || document.webkitFullscreenElement
@@ -331,6 +346,7 @@ function initSliderSync() {
   syncSliderPair('density-top-slider', 'density-top-number', 'density-top-value');
   syncSliderPair('density-grid-slider', 'density-grid-number');
   syncSliderPair('density-opacity-slider', 'density-opacity-number', 'density-opacity-value');
+  bindDensityPreferencesShortcut();
 
   syncSliderPair('star-opacity-slider', 'star-opacity-number', 'star-opacity-value');
   syncSliderPair('star-name-opacity-slider', 'star-name-opacity-number', 'star-name-opacity-value');
