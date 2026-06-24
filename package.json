@@ -2,7 +2,10 @@
   "type": "module",
   "scripts": {
     "test": "node scripts/verify.mjs",
-    "test:browser": "node scripts/browserSmoke.mjs"
+    "test:browser": "node scripts/browserSmoke.mjs",
+    "vendor:sync": "node scripts/syncVendor.mjs --write",
+    "vendor:check": "node scripts/syncVendor.mjs --check",
+    "data:preprocess": "node scripts/buildPreprocessedData.mjs"
   },
   "dependencies": {
     "jspdf": "4.2.1",

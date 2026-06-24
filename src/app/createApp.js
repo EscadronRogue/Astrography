@@ -26,6 +26,7 @@ import { preprocessStarData, reprojectAllStars } from './starPreprocessor.js';
 import { clearConnectionPositionCache } from '../features/connections/connectionPairs.js';
 import { setViewpointStar, isDefaultViewpoint } from '../shared/viewpoint.js';
 import { clearRadToSphereCache } from '../shared/geometryUtils.js';
+import { endPerformanceMeasure, startPerformanceMeasure } from '../shared/performanceMetrics.js';
 
 // ---------------------------------------------------------------------------
 // Map managers and render coordination
@@ -95,7 +96,12 @@ const appContext = {
 };
 
 async function buildAndApplyFilters() {
-  return runFilterPipeline(appContext);
+  const timer = startPerformanceMeasure('filters.apply');
+  try {
+    return await runFilterPipeline(appContext);
+  } finally {
+    endPerformanceMeasure(timer);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +160,7 @@ function updateViewpointDisabledControls(disabled) {
 // Bootstrap — progressive, non-blocking
 // ---------------------------------------------------------------------------
 export async function bootstrapApp() {
+  const timer = startPerformanceMeasure('app.bootstrap');
   try {
     updateProgress(0, 'Loading star data…');
 
@@ -282,7 +289,9 @@ export async function bootstrapApp() {
     updateProgress(100, 'Ready');
     // Brief pause so the user sees "Ready" before the bar disappears
     setTimeout(hideProgress, 800);
+    endPerformanceMeasure(timer, { stars: stars.length, failed: false });
   } catch (err) {
+    endPerformanceMeasure(timer, { failed: true });
     const errorDetail = err?.message || String(err);
     logError('Starmap initialization failed:', err);
     markProgressError(errorDetail);

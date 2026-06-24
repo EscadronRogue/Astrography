@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createWriteStream, existsSync } from 'node:fs';
 import { basename, extname, join, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -269,6 +269,20 @@ async function enableDensityFilter(page) {
   await page.waitForTimeout(1500);
 }
 
+async function capturePerformanceMeasures(page, label) {
+  const entries = await page.evaluate(() => globalThis.__astrographyPerformance || []);
+  const outputPath = join(artifactsDir, `${label}-performance.json`);
+  await writeFile(outputPath, `${JSON.stringify(entries, null, 2)}\n`);
+
+  const names = new Set(entries.map(entry => entry.name));
+  ['app.bootstrap', 'data.loadStarData', 'filters.apply'].forEach(name => {
+    if (!names.has(name)) {
+      throw new Error(`${label} did not record required performance measure: ${name}`);
+    }
+  });
+  return basename(outputPath);
+}
+
 async function runTarget(browserType, browserName, target, baseUrl, exportButtons) {
   let browser;
   let context;
@@ -329,6 +343,7 @@ async function runTarget(browserType, browserName, target, baseUrl, exportButton
   if (!savedDownloads.length) {
     throw new Error(`${browserName}/${target.name} did not expose any requested export buttons.`);
   }
+  savedDownloads.push(await capturePerformanceMeasures(page, `${browserName}-${target.name}`));
 
   await browser.close();
   if (consoleErrors.length) {

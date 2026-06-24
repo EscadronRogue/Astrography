@@ -1,6 +1,10 @@
 import { fetchWithTimeout } from '../fetchWithTimeout.js';
 import { validateManifestFiles, validateStarBatch } from '../dataValidation.js';
 import { logError, logWarn } from '../../shared/logger.js';
+import { endPerformanceMeasure, startPerformanceMeasure } from '../../shared/performanceMetrics.js';
+
+const RAW_MANIFEST_URL = 'data/manifest.json';
+const PREPROCESSED_MANIFEST_URL = 'data/preprocessed/manifest.json';
 
 function normalizeNumber(value) {
   const num = typeof value === 'string' ? Number.parseFloat(value) : value;
@@ -46,10 +50,15 @@ export function normalizeStarRecord(star) {
   const absoluteMagnitude = normalizeNumber(star.absoluteMagnitude ?? star.Absolute_magnitude);
   const stellarClass = star.stellarClass ?? star.Stellar_class ?? '';
   const constellation = star.constellation ?? star.Constellation ?? '';
-  const derivedCoordinates = deriveCartesianCoordinates(star, distance);
-  const x = normalizeNumber(star.x_coordinate) ?? derivedCoordinates.x;
-  const y = normalizeNumber(star.y_coordinate) ?? derivedCoordinates.y;
-  const z = normalizeNumber(star.z_coordinate) ?? derivedCoordinates.z;
+  let x = normalizeNumber(star.x_coordinate);
+  let y = normalizeNumber(star.y_coordinate);
+  let z = normalizeNumber(star.z_coordinate);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+    const derivedCoordinates = deriveCartesianCoordinates(star, distance);
+    x = Number.isFinite(x) ? x : derivedCoordinates.x;
+    y = Number.isFinite(y) ? y : derivedCoordinates.y;
+    z = Number.isFinite(z) ? z : derivedCoordinates.z;
+  }
   return {
     ...star,
     distance,
@@ -62,6 +71,72 @@ export function normalizeStarRecord(star) {
     z_coordinate: z,
     starId: star.starId || buildStableStarId(star)
   };
+}
+
+function validatePreprocessedManifestFiles(manifest, source = PREPROCESSED_MANIFEST_URL) {
+  const entries = Array.isArray(manifest?.files) ? manifest.files : [];
+  return entries
+    .map(entry => typeof entry === 'string' ? { file: entry } : entry)
+    .filter((entry, index) => {
+      const valid = entry &&
+        typeof entry.file === 'string' &&
+        /^[a-z0-9_.-]+\.json$/i.test(entry.file) &&
+        !entry.file.includes('..');
+      if (!valid) {
+        logWarn(`Invalid ${source} at index ${index}: file must be a local JSON file name.`);
+      }
+      return valid;
+    });
+}
+
+async function loadStarFiles({ fileNames, baseUrl, sourceLabel, onProgress, onBatchReady }) {
+  const total = fileNames.length;
+  const allStars = [];
+
+  for (let i = 0; i < total; i++) {
+    const entry = fileNames[i];
+    const name = typeof entry === 'string' ? entry : entry.file;
+    try {
+      const resp = await fetchWithTimeout(`${baseUrl}/${name}`);
+      if (!resp.ok) {
+        logWarn(`Missing star data file: ${baseUrl}/${name} (HTTP ${resp.status})`);
+      } else {
+        const batch = validateStarBatch(await resp.json(), `${baseUrl}/${name}`);
+        const normalized = batch.map(normalizeStarRecord);
+        allStars.push(...normalized);
+      }
+    } catch (fileErr) {
+      logWarn(`Error loading ${baseUrl}/${name}:`, fileErr);
+    }
+
+    if (onProgress) onProgress(i + 1, total);
+    if (onBatchReady) onBatchReady(allStars);
+  }
+
+  if (!allStars.length && total) {
+    throw new Error(`${sourceLabel} did not produce any valid star records.`);
+  }
+
+  return allStars;
+}
+
+async function tryLoadPreprocessedStarData(options) {
+  try {
+    const manifestResp = await fetchWithTimeout(PREPROCESSED_MANIFEST_URL);
+    if (!manifestResp.ok) return null;
+    const manifest = await manifestResp.json();
+    const fileNames = validatePreprocessedManifestFiles(manifest);
+    if (!fileNames.length) return null;
+    return await loadStarFiles({
+      ...options,
+      fileNames,
+      baseUrl: 'data/preprocessed',
+      sourceLabel: PREPROCESSED_MANIFEST_URL
+    });
+  } catch (error) {
+    logWarn('Preprocessed star data unavailable, falling back to raw data:', error);
+    return null;
+  }
 }
 
 /**
@@ -77,42 +152,34 @@ export function normalizeStarRecord(star) {
  * @returns {Promise<Array>} All loaded and normalized star records.
  */
 export async function loadStarData({ onProgress, onBatchReady } = {}) {
-  const manifestUrl = 'data/manifest.json';
+  const timer = startPerformanceMeasure('data.loadStarData');
   try {
-    const manifestResp = await fetchWithTimeout(manifestUrl);
+    const preprocessedStars = await tryLoadPreprocessedStarData({ onProgress, onBatchReady });
+    if (preprocessedStars) {
+      endPerformanceMeasure(timer, { source: 'preprocessed', stars: preprocessedStars.length });
+      return preprocessedStars;
+    }
+
+    const manifestResp = await fetchWithTimeout(RAW_MANIFEST_URL);
     if (!manifestResp.ok) {
-      logWarn(`Could not load manifest at ${manifestUrl} (HTTP ${manifestResp.status})`);
+      logWarn(`Could not load manifest at ${RAW_MANIFEST_URL} (HTTP ${manifestResp.status})`);
+      endPerformanceMeasure(timer, { source: 'raw', stars: 0, failed: true });
       return [];
     }
 
     const manifest = await manifestResp.json();
-    const fileNames = validateManifestFiles(manifest, manifestUrl);
-
-    const total = fileNames.length;
-    const allStars = [];
-
-    // Load files one by one so the UI can update progressively
-    for (let i = 0; i < total; i++) {
-      const name = fileNames[i];
-      try {
-        const resp = await fetchWithTimeout(`data/${name}`);
-        if (!resp.ok) {
-          logWarn(`Missing star data file: data/${name} (HTTP ${resp.status})`);
-        } else {
-          const batch = validateStarBatch(await resp.json(), `data/${name}`);
-          const normalized = batch.map(normalizeStarRecord);
-          allStars.push(...normalized);
-        }
-      } catch (fileErr) {
-        logWarn(`Error loading data/${name}:`, fileErr);
-      }
-
-      if (onProgress) onProgress(i + 1, total);
-      if (onBatchReady) onBatchReady(allStars);
-    }
-
-    return allStars;
+    const fileNames = validateManifestFiles(manifest, RAW_MANIFEST_URL);
+    const stars = await loadStarFiles({
+      fileNames,
+      baseUrl: 'data',
+      sourceLabel: RAW_MANIFEST_URL,
+      onProgress,
+      onBatchReady
+    });
+    endPerformanceMeasure(timer, { source: 'raw', stars: stars.length });
+    return stars;
   } catch (error) {
+    endPerformanceMeasure(timer, { failed: true });
     logError('Error loading star data:', error);
     return [];
   }

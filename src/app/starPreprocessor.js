@@ -15,6 +15,7 @@ import {
   getApparentRaDec,
   getDistanceFromViewpoint
 } from '../shared/viewpoint.js';
+import { endPerformanceMeasure, startPerformanceMeasure } from '../shared/performanceMetrics.js';
 
 /**
  * Calculates all derived positions for each star.
@@ -24,6 +25,7 @@ import {
  * @param {Array} stars - Array of star records.
  */
 export function preprocessStarData(stars) {
+  const timer = startPerformanceMeasure('data.preprocessStars', { stars: stars?.length || 0 });
   stars.forEach(star => {
     star.spherePosition = getStarGlobePosition(star);
     star.truePosition = getStarTruePosition(star);
@@ -37,6 +39,7 @@ export function preprocessStarData(stars) {
     star.viewpointDistance = star.distance; // initially same as heliocentric
 
   });
+  endPerformanceMeasure(timer, { stars: stars?.length || 0 });
 }
 
 /**
@@ -49,6 +52,7 @@ export function preprocessStarData(stars) {
  * @param {Array} stars - Array of star records (must have helioPosition/helioRA/helioDec set).
  */
 export function reprojectAllStars(stars) {
+  const timer = startPerformanceMeasure('data.reprojectStars', { stars: stars?.length || 0 });
   const atSol = isDefaultViewpoint();
 
   stars.forEach(star => {
@@ -92,4 +96,5 @@ export function reprojectAllStars(stars) {
       star.equirectPosition = new THREE.Vector3((u - 0.5) * 200, (0.5 - v) * 100, 0);
     }
   });
+  endPerformanceMeasure(timer, { stars: stars?.length || 0, viewpoint: atSol ? 'sol' : 'custom' });
 }

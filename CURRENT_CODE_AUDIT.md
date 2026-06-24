@@ -4,8 +4,9 @@ Date: 2026-06-24
 
 ## Verification Baseline
 
-- `npm.cmd test` passes: 137 JavaScript files and 7 CSS files.
-- `npm.cmd run test:browser` passes Chromium and WebKit on desktop and phone, including nonblank canvas checks, phone density-toggle coverage, and PNG/PDF/STL/UV/globe export downloads.
+- `npm.cmd test` passes: 127 JavaScript files and 7 CSS files.
+- `npm.cmd run vendor:check` passes for Three.js, jsPDF, and JSZip vendored runtime files.
+- `npm.cmd run test:browser` passes Chromium and WebKit on desktop and phone, including nonblank canvas checks, phone density-toggle coverage, PNG/PDF/STL/UV/globe export downloads, and performance JSON artifacts.
 - Firefox automation still skips before Astrography loads: Playwright fails at `browserContext.newPage` with `Cannot read properties of undefined (reading '_page')`. Re-running `npx.cmd playwright install firefox` completed, but the failure remained.
 - `npm.cmd audit --audit-level=moderate` was not run because the approval reviewer rejected sending dependency metadata to the external npm advisory service. Run it locally or approve that disclosure explicitly if registry-backed dependency audit evidence is required.
 
@@ -41,6 +42,27 @@ Date: 2026-06-24
 
 8. Audit guardrails did not cover the above regressions.
    - Fix method: extended `scripts/verify.mjs` to enforce shared UV atlas usage, projection-local interaction signatures, merged isolation line layers, one Density fieldset plus separate Isolation fieldset, mobile CSS cleanup, and startup module preloads.
+
+9. Browser smoke and vendor checks were local-only.
+   - Fix method: added `.github/workflows/verify.yml` to run `npm ci`, Playwright browser installation, `npm.cmd run vendor:check`, `npm.cmd test`, and `npm.cmd run test:browser` in CI.
+
+10. `UVMapManager` still owned atlas canvas drawing.
+    - Fix method: added `src/app/uvAtlasLayerRenderer.js` for graticule, stars, labels, connections, constellation, density/isolation, cloud-density, cloud, and plane atlas drawing. `UVMapManager` now delegates atlas layers and focuses on lifecycle, signatures, async metadata, and interaction geometry.
+
+11. STL kit printable planning was embedded in the CSG exporter.
+    - Fix method: added `src/features/export/stlKitPlanning.js` for printable system metadata, connection de-duplication, missing endpoint skips, and printable tube threshold checks. The verifier now behavior-checks the planning helper directly.
+
+12. STL kit CSG construction was still coupled to ZIP/export orchestration.
+    - Fix method: added `src/features/export/stlKitCsg.js` for reusable CSG construction of engraved star facets, socket holes, text cuts, and tube components. `stlKitExporter.js` now orchestrates planning, progress, validation, and file assembly.
+
+13. Startup/performance timing was not captured by automated smoke tests.
+    - Fix method: added `src/shared/performanceMetrics.js`, instrumentation for app bootstrap, star loading/preprocessing/reprojection, filter application, UV atlas updates, and STL kit export phases. Browser smoke writes `*-performance.json` artifacts and asserts required measures are recorded.
+
+14. Runtime star loading always normalized raw catalog buckets in-browser.
+    - Fix method: added `scripts/buildPreprocessedData.mjs`, generated `data/preprocessed/*.normalized.json`, and updated `loadStarData()` to prefer preprocessed buckets before falling back to raw `data/manifest.json`.
+
+15. Vendored browser runtime files had no local drift check.
+    - Fix method: added `scripts/syncVendor.mjs` plus `npm.cmd run vendor:sync` and `npm.cmd run vendor:check`.
 
 ## Current Residual Gaps
 

@@ -34,6 +34,14 @@ Run:
 npm.cmd test
 ```
 
+For browser rendering/export smoke tests, run:
+
+```bash
+npm.cmd run test:browser
+```
+
+The smoke harness starts a local static server, checks nonblank canvases on desktop and phone viewports, verifies export downloads, and writes screenshots/downloads/performance JSON under `artifacts/browser-smoke/`.
+
 The verifier checks:
 
 - JavaScript syntax for all `src/**/*.js` files.
@@ -67,8 +75,14 @@ The verifier checks:
 - Map canvases use shared safe sizing and pixel-ratio clamping so hidden/mobile layout transitions do not create zero-size or infinite-aspect renderers.
 - Hot density/isolation/cloud-density overlays use shared instanced grid-cell rendering instead of one scene mesh per cell.
 - UV cloud-density rendering skips inactive cells so canvas/PDF/PNG output matches current filter state.
+- Optional preprocessed star-data files are generated through `npm.cmd run data:preprocess` and loaded before raw buckets when present.
+- Startup/filter/data/UV/STL-kit performance measurements are recorded through `window.__astrographyPerformance`.
+- STL printable system/connection planning is extracted into a pure helper and behavior-checked.
+- UV atlas canvas drawing is delegated to `src/app/uvAtlasLayerRenderer.js`.
 
 Manual browser verification is still required after rendering or UI changes. Use `MANUAL_VERIFICATION_CHECKLIST.md` for scenario coverage.
+
+CI runs the static verifier, vendored runtime check, and browser smoke harness through `.github/workflows/verify.yml`.
 
 ## Runtime Dependencies
 
@@ -76,6 +90,9 @@ The repository is still a no-build browser ES module app. Runtime dependencies a
 
 - Three.js is centralized through `src/vendor/three.js`.
 - jsPDF and JSZip are provided by `index.html` for PDF and ZIP exports.
+- Vendored runtime files are checked against installed npm packages with `npm.cmd run vendor:check`.
+- Refresh vendored runtime files after dependency updates with `npm.cmd run vendor:sync`.
+- Generated normalized star buckets live in `data/preprocessed/` and are preferred at runtime when present; raw `data/manifest.json` buckets remain the fallback source.
 
 ## Source Layout
 
@@ -96,6 +113,7 @@ The repository is still a no-build browser ES module app. Runtime dependencies a
 - True Coordinates supports STL export and a ZIP-based 3D-print kit.
 - STL scale is centralized in `src/features/export/stlScale.js`.
 - STL kit metadata, filename sanitation, rank maps, and README manifest text live in `src/features/export/stlKitMetadata.js`.
+- STL kit CSG construction for engraved stars, socket holes, and tube parts lives in `src/features/export/stlKitCsg.js`.
 - STL kit worker payload serialization and transferable-buffer selection live in `src/features/export/stlKitWorkerPayload.js`.
 - STL kit vector math lives in `src/features/export/stlVectorMath.js` and is shared by geometry generation and feature-direction selection.
 - STL kit vector glyph data and digit layout metrics live in `src/features/export/stlTextGlyphs.js`.
@@ -128,6 +146,7 @@ The repository is still a no-build browser ES module app. Runtime dependencies a
 - Local text-file reading lives in `src/shared/fileUtils.js` so edit import is not tied to only modern File APIs.
 - Repeated canvas text-label measurement lives in `src/shared/textCanvas.js` so distance and plane labels share sizing behavior.
 - UV atlas color conversion, alpha clamping, and layer canvas creation live in `src/app/uvCanvasLayers.js` so export-layer assumptions are directly testable.
+- UV atlas canvas drawing lives in `src/app/uvAtlasLayerRenderer.js`, keeping `UVMapManager` focused on lifecycle, signatures, async metadata, and interaction geometry.
 - Edit-manager UI listener lifecycle is centralized through `EditManager.addManagedEventListener`, including disposable document listeners for rotate/scale drags.
 - Dynamic map star layers clear children through `src/render/engine/renderUtils.js` so geometry, materials, texture maps, and shader-uniform textures are disposed consistently.
 - Canvas sizing and renderer pixel-ratio setup live in `src/shared/canvasSizing.js`.
@@ -135,6 +154,7 @@ The repository is still a no-build browser ES module app. Runtime dependencies a
 - UV atlas invalidation signatures live in `src/app/uvLayerSignatures.js` so redraw decisions can be tested without the renderer.
 - UV overlay-cell projection, alpha, color, and radius calculations live in `src/app/uvOverlayCells.js` so density/isolation/cloud-density atlas behavior can be tested directly.
 - STL kit metadata and manifest formatting are isolated from CSG generation so export naming and ranking can be tested directly.
+- STL kit reusable CSG construction is isolated from ZIP/download orchestration in `src/features/export/stlKitCsg.js`.
 - STL kit worker payload serialization is isolated so structured-clone compatibility can be tested without spawning a Worker.
 - STL vector math is isolated from CSG generation so geometry basis calculations share one tested implementation.
 - STL text glyph/layout data is isolated from CSG generation so engraving behavior can be tested without running the full exporter.
@@ -143,7 +163,9 @@ The repository is still a no-build browser ES module app. Runtime dependencies a
 - STL print orientation and build-plate placement are isolated from CSG generation so exported part orientation can be tested directly.
 - STL star-facet geometry is isolated from CSG generation so rank-engraving surface dimensions can be tested directly.
 - STL socket planning is isolated from CSG generation so overlapping holes, forced merges, and component graph assembly can be tested directly.
-- Runtime data fetching now uses an aborting timeout helper, but the app still normalizes data in the browser.
+- STL printable system and connection planning lives in `src/features/export/stlKitPlanning.js` so de-duplication, skipped endpoints, and printable tube thresholds can be tested without CSG.
+- Runtime data fetching now uses an aborting timeout helper, and preprocessed normalized star buckets are preferred when present.
+- When `data/preprocessed/manifest.json` exists, runtime star loading uses pre-derived normalized buckets before falling back to raw source buckets.
 - Runtime data payloads are validated before being normalized or cached.
 - Star buckets no longer include records with unknown distance/coordinates, which cannot be rendered.
 - Render signatures and generated fallback colors share `src/shared/hashUtils.js`.
@@ -163,6 +185,6 @@ The repository is still a no-build browser ES module app. Runtime dependencies a
 
 The largest remaining engineering work is:
 
-- Full browser smoke and visual tests across Chromium, Firefox, and WebKit/Safari-sized viewports.
+- Keep CI browser smoke green across Chromium, Firefox, and WebKit/Safari-sized viewports; local Firefox may still skip on machines with the known Playwright `_page` startup issue.
 - Further decomposition of the large map/export managers.
 - Broader automated coverage for rendered output, editing, export downloads, and browser-only interactions.

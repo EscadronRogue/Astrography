@@ -1,0 +1,49 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  verify:
+    name: Static and Browser Smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Verify vendored runtime files
+        run: npm run vendor:check
+
+      - name: Run verifier
+        run: npm test
+
+      - name: Run browser smoke tests
+        run: npm run test:browser
+        env:
+          ASTROGRAPHY_BROWSERS: chromium,firefox,webkit
+
+      - name: Upload browser smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-artifacts
+          path: artifacts/browser-smoke
+          if-no-files-found: ignore

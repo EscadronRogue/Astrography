@@ -132,6 +132,11 @@ import {
   getSystemName,
   sanitizeSTLFilename
 } from '../src/features/export/stlKitMetadata.js';
+import {
+  buildPrintableConnectionPlan,
+  buildPrintableSystemInfo,
+  MIN_PRINTABLE_TUBE_LENGTH
+} from '../src/features/export/stlKitPlanning.js';
 import { validateBinarySTL } from '../src/features/export/stlValidation.js';
 import {
   HOLE_CLUSTER_CLEARANCE,
@@ -160,6 +165,11 @@ import {
 import { canvasToPngDataUrl, downloadBlob, removeElement } from '../src/features/export/downloadUtils.js';
 import { formatUserError } from '../src/shared/userNotifications.js';
 import { ATLAS_HEIGHT, ATLAS_WIDTH } from '../src/shared/constants.js';
+import {
+  endPerformanceMeasure,
+  getStoredPerformanceMeasures,
+  startPerformanceMeasure
+} from '../src/shared/performanceMetrics.js';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const failures = [];
@@ -698,6 +708,8 @@ function checkBrowserSmokeHarness() {
     'viewportMatrix',
     'assertCanvasNonblank',
     'verifyDownload',
+    'capturePerformanceMeasures',
+    '__astrographyPerformance',
     'ASTROGRAPHY_BROWSERS',
     'ASTROGRAPHY_INCLUDE_STL_KIT',
     'export-stl-kit'
@@ -1068,6 +1080,7 @@ function checkSharedOpacityClamping() {
   const files = {
     mapManager: join(root, 'src', 'app', 'mapManager.js'),
     uvMapManager: join(root, 'src', 'app', 'uvMapManager.js'),
+    uvAtlasRenderer: join(root, 'src', 'app', 'uvAtlasLayerRenderer.js'),
     labelManager: join(root, 'src', 'features', 'labels', 'labelManager.js'),
     filterPipeline: join(root, 'src', 'features', 'filters', 'pipeline', 'filterPipeline.js'),
     connectionPairs: join(root, 'src', 'features', 'connections', 'connectionPairs.js'),
@@ -1096,8 +1109,8 @@ function checkSharedOpacityClamping() {
   if (!texts.mapManager.includes('instanceOpacity')) {
     addFailure(`Map manager should pass per-star displayOpacity into the instanced star renderer: ${files.mapManager}`);
   }
-  if (!texts.uvMapManager.includes('getStarDisplayOpacity(star, this.starOpacity)')) {
-    addFailure(`UV map star drawing should combine global and per-star opacity: ${files.uvMapManager}`);
+  if (!texts.uvAtlasRenderer.includes('getStarDisplayOpacity(star, this.starOpacity)')) {
+    addFailure(`UV map star drawing should combine global and per-star opacity: ${files.uvAtlasRenderer}`);
   }
   [
     [texts.mapManager, files.mapManager, 'this.starOpacity = safeOpacity'],
@@ -1260,7 +1273,7 @@ function checkStlKitWorkerSplit() {
   }
 
   const buildSection = exporterText.slice(buildIndex, workerIndex);
-  ['const files = []', 'files.push({', "path: 'README.txt'", 'return {'].forEach(token => {
+  ['const files = []', 'files.push({', "path: 'README.txt'", 'return result'].forEach(token => {
     if (!buildSection.includes(token)) {
       addFailure(`STL kit pure build path is missing ${token}: ${exporter}`);
     }
@@ -1343,8 +1356,10 @@ function checkStlKitWorkerSplit() {
 
 function checkStlTextGlyphExtraction() {
   const exporter = join(root, 'src', 'features', 'export', 'stlKitExporter.js');
+  const csg = join(root, 'src', 'features', 'export', 'stlKitCsg.js');
   const glyphs = join(root, 'src', 'features', 'export', 'stlTextGlyphs.js');
   const exporterText = readFileSync(exporter, 'utf8');
+  const csgText = readFileSync(csg, 'utf8');
   const glyphText = readFileSync(glyphs, 'utf8');
 
   [
@@ -1357,16 +1372,16 @@ function checkStlTextGlyphExtraction() {
     if (!glyphText.includes(token)) {
       addFailure(`STL text glyph helper is missing ${token}: ${glyphs}`);
     }
-    if (!exporterText.includes(token)) {
-      addFailure(`STL kit exporter is not wired to text glyph helper token ${token}: ${exporter}`);
+    if (!csgText.includes(token)) {
+      addFailure(`STL kit CSG helper is not wired to text glyph helper token ${token}: ${csg}`);
     }
   });
 
   if (exporterText.includes('const VECTOR_GLYPHS') || exporterText.includes('function splitBalanced') || exporterText.includes('function layoutDigits')) {
     addFailure(`STL kit exporter must not keep inline glyph definitions or digit layout helpers: ${exporter}`);
   }
-  if (!exporterText.includes("} from './stlTextGlyphs.js'")) {
-    addFailure(`STL kit exporter must import glyph helpers from stlTextGlyphs.js: ${exporter}`);
+  if (!csgText.includes("} from './stlTextGlyphs.js'")) {
+    addFailure(`STL kit CSG helper must import glyph helpers from stlTextGlyphs.js: ${csg}`);
   }
 }
 
@@ -1391,8 +1406,10 @@ function checkStlFeatureDirectionExtraction() {
 
 function checkStlTubeLabelLayoutExtraction() {
   const exporter = join(root, 'src', 'features', 'export', 'stlKitExporter.js');
+  const csg = join(root, 'src', 'features', 'export', 'stlKitCsg.js');
   const helper = join(root, 'src', 'features', 'export', 'stlTubeLabelLayout.js');
   const exporterText = readFileSync(exporter, 'utf8');
+  const csgText = readFileSync(csg, 'utf8');
   const helperText = readFileSync(helper, 'utf8');
 
   [
@@ -1411,8 +1428,8 @@ function checkStlTubeLabelLayoutExtraction() {
   if (!helperText.includes("from './stlVectorMath.js'") || !helperText.includes("from './stlTextGlyphs.js'")) {
     addFailure(`STL tube label-layout helper must depend on shared vector/glyph helpers: ${helper}`);
   }
-  if (!exporterText.includes("from './stlTubeLabelLayout.js'")) {
-    addFailure(`STL kit exporter must import tube label-layout helper: ${exporter}`);
+  if (!csgText.includes("from './stlTubeLabelLayout.js'")) {
+    addFailure(`STL kit CSG helper must import tube label-layout helper: ${csg}`);
   }
   ['function buildSegmentLabelBasis', 'function computeLabelLayout', 'const TUBE_FLAT_WIDTH', 'const LABEL_TEXT_WIDTH_FACTOR'].forEach(token => {
     if (exporterText.includes(token)) {
@@ -1460,8 +1477,10 @@ function checkStlPrintOrientationExtraction() {
 
 function checkStlFacetGeometryExtraction() {
   const exporter = join(root, 'src', 'features', 'export', 'stlKitExporter.js');
+  const csg = join(root, 'src', 'features', 'export', 'stlKitCsg.js');
   const helper = join(root, 'src', 'features', 'export', 'stlFacetGeometry.js');
   const exporterText = readFileSync(exporter, 'utf8');
+  const csgText = readFileSync(csg, 'utf8');
   const helperText = readFileSync(helper, 'utf8');
 
   [
@@ -1482,8 +1501,8 @@ function checkStlFacetGeometryExtraction() {
   if (helperText.includes('CSG') || helperText.includes('buildTubeTriangles')) {
     addFailure(`STL facet-geometry helper must stay pure and independent of mesh construction: ${helper}`);
   }
-  if (!exporterText.includes("from './stlFacetGeometry.js'")) {
-    addFailure(`STL kit exporter must import facet-geometry helpers: ${exporter}`);
+  if (!csgText.includes("from './stlFacetGeometry.js'")) {
+    addFailure(`STL kit CSG helper must import facet-geometry helpers: ${csg}`);
   }
   [
     'const FACET_DEPTH_FACTOR',
@@ -1557,9 +1576,11 @@ function checkStlSocketPlanningExtraction() {
 function checkStlVectorMathExtraction() {
   const exporter = join(root, 'src', 'features', 'export', 'stlKitExporter.js');
   const featureDirections = join(root, 'src', 'features', 'export', 'stlFeatureDirections.js');
+  const csg = join(root, 'src', 'features', 'export', 'stlKitCsg.js');
   const vectorMath = join(root, 'src', 'features', 'export', 'stlVectorMath.js');
   const exporterText = readFileSync(exporter, 'utf8');
   const featureText = readFileSync(featureDirections, 'utf8');
+  const csgText = readFileSync(csg, 'utf8');
   const vectorText = readFileSync(vectorMath, 'utf8');
 
   [
@@ -1576,8 +1597,8 @@ function checkStlVectorMathExtraction() {
       addFailure(`STL vector math helper is missing ${token}: ${vectorMath}`);
     }
   });
-  if (!exporterText.includes("from './stlVectorMath.js'")) {
-    addFailure(`STL kit exporter must import shared vector math: ${exporter}`);
+  if (!csgText.includes("from './stlVectorMath.js'")) {
+    addFailure(`STL kit CSG helper must import shared vector math: ${csg}`);
   }
   if (!featureText.includes("from './stlVectorMath.js'")) {
     addFailure(`STL feature-direction helper must import shared vector math: ${featureDirections}`);
@@ -1633,19 +1654,119 @@ function checkStlKitMetadataExtraction() {
   });
 }
 
+function checkStlKitPlanningExtraction() {
+  const exporter = join(root, 'src', 'features', 'export', 'stlKitExporter.js');
+  const planning = join(root, 'src', 'features', 'export', 'stlKitPlanning.js');
+  const exporterText = readFileSync(exporter, 'utf8');
+  const planningText = readFileSync(planning, 'utf8');
+
+  [
+    'buildPrintableSystemInfo',
+    'buildPrintableConnectionPlan',
+    'MIN_PRINTABLE_TUBE_LENGTH'
+  ].forEach(token => {
+    if (!planningText.includes(token)) {
+      addFailure(`STL kit planning helper is missing ${token}: ${planning}`);
+    }
+  });
+  if (!exporterText.includes("from './stlKitPlanning.js'")) {
+    addFailure(`STL kit exporter must import printable planning helpers: ${exporter}`);
+  }
+  ['const seenPairs = new Set()', 'tube would be', 'one or both systems were not exported'].forEach(token => {
+    if (exporterText.includes(token)) {
+      addFailure(`STL kit exporter should not keep inline printable connection planning token ${token}: ${exporter}`);
+    }
+  });
+}
+
+function checkUvAtlasRendererExtraction() {
+  const manager = join(root, 'src', 'app', 'uvMapManager.js');
+  const renderer = join(root, 'src', 'app', 'uvAtlasLayerRenderer.js');
+  const managerText = readFileSync(manager, 'utf8');
+  const rendererText = readFileSync(renderer, 'utf8');
+
+  if (!managerText.includes("from './uvAtlasLayerRenderer.js'") || !managerText.includes('new UvAtlasLayerRenderer(this)')) {
+    addFailure(`UV map manager must delegate atlas drawing to UvAtlasLayerRenderer: ${manager}`);
+  }
+  [
+    'drawGraticule',
+    'drawConnections',
+    'drawStars',
+    'drawStarLabels',
+    'drawDensityOverlay',
+    'drawIsolationOverlay',
+    'drawCloudDensityOverlay'
+  ].forEach(token => {
+    if (!rendererText.includes(`${token}(`)) {
+      addFailure(`UV atlas renderer is missing ${token}: ${renderer}`);
+    }
+    if (managerText.includes(`${token}(`) && !managerText.includes(`atlasRenderer.${token}(`)) {
+      addFailure(`UV map manager should not keep atlas drawing method ${token}: ${manager}`);
+    }
+  });
+}
+
+function checkPreprocessedDataPath() {
+  const loader = join(root, 'src', 'data', 'loaders', 'loadStarData.js');
+  const script = join(root, 'scripts', 'buildPreprocessedData.mjs');
+  const packageJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const loaderText = readFileSync(loader, 'utf8');
+  const scriptText = readFileSync(script, 'utf8');
+
+  ['PREPROCESSED_MANIFEST_URL', 'tryLoadPreprocessedStarData', 'data/preprocessed'].forEach(token => {
+    if (!loaderText.includes(token)) {
+      addFailure(`Star data loader should support optional preprocessed data (${token}): ${loader}`);
+    }
+  });
+  ['normalizeStarRecord', 'sha256', 'data/preprocessed'].forEach(token => {
+    if (!scriptText.includes(token)) {
+      addFailure(`Preprocessed data generator should normalize and fingerprint star batches (${token}): ${script}`);
+    }
+  });
+  if (packageJson.scripts?.['data:preprocess'] !== 'node scripts/buildPreprocessedData.mjs') {
+    addFailure('package.json should expose npm run data:preprocess');
+  }
+}
+
+function checkPerformanceInstrumentation() {
+  const helper = join(root, 'src', 'shared', 'performanceMetrics.js');
+  const helperText = readFileSync(helper, 'utf8');
+  ['startPerformanceMeasure', 'endPerformanceMeasure', '__astrographyPerformance'].forEach(token => {
+    if (!helperText.includes(token)) {
+      addFailure(`Performance metrics helper is missing ${token}: ${helper}`);
+    }
+  });
+
+  [
+    ['src/app/createApp.js', 'app.bootstrap'],
+    ['src/data/loaders/loadStarData.js', 'data.loadStarData'],
+    ['src/app/starPreprocessor.js', 'data.preprocessStars'],
+    ['src/app/uvMapManager.js', 'uv.updateMap'],
+    ['src/features/export/stlKitExporter.js', 'export.stlKit.build']
+  ].forEach(([relativePath, marker]) => {
+    const file = join(root, relativePath);
+    const text = readFileSync(file, 'utf8');
+    if (!text.includes(marker) || !text.includes('startPerformanceMeasure')) {
+      addFailure(`Expected performance instrumentation ${marker}: ${file}`);
+    }
+  });
+}
+
 function checkUvMapFilterDecoupling() {
   const file = join(root, 'src', 'app', 'uvMapManager.js');
   const text = readFileSync(file, 'utf8');
+  const renderer = join(root, 'src', 'app', 'uvAtlasLayerRenderer.js');
+  const rendererText = readFileSync(renderer, 'utf8');
   ['readNumberInput', "getElementById('filters-form')", 'new FormData', '_inputCache', '_formDataCache'].forEach(token => {
-    if (text.includes(token)) {
-      addFailure(`UV map rendering should use filter options instead of DOM form reads (${token}): ${file}`);
+    if (text.includes(token) || rendererText.includes(token)) {
+      addFailure(`UV map rendering should use filter options instead of DOM form reads (${token}): ${file} / ${renderer}`);
     }
   });
   if (!text.includes('filterOptions = this.filterOptions') || !text.includes('getFilterNumber')) {
     addFailure(`UV map rendering is missing filter option snapshot plumbing: ${file}`);
   }
-  if (!text.includes('!cell?.active || !cell?.globeMesh')) {
-    addFailure(`UV cloud-density rendering must skip inactive overlay cells: ${file}`);
+  if (!rendererText.includes('!cell?.active || !cell?.globeMesh')) {
+    addFailure(`UV cloud-density rendering must skip inactive overlay cells: ${renderer}`);
   }
 
   const pipeline = join(root, 'src', 'features', 'filters', 'pipeline', 'filterPipeline.js');
@@ -1753,12 +1874,14 @@ function checkUvSurfaceFactoryExtraction() {
 
 function checkUvPlaneDrawingExtraction() {
   const manager = join(root, 'src', 'app', 'uvMapManager.js');
+  const renderer = join(root, 'src', 'app', 'uvAtlasLayerRenderer.js');
   const helper = join(root, 'src', 'app', 'uvPlaneDrawing.js');
   const managerText = readFileSync(manager, 'utf8');
+  const rendererText = readFileSync(renderer, 'utf8');
   const helperText = readFileSync(helper, 'utf8');
 
-  if (!managerText.includes("from './uvPlaneDrawing.js'") || !managerText.includes('drawUvPlanes(ctx, this.state')) {
-    addFailure(`UV map manager should delegate plane drawing to helper: ${manager}`);
+  if (!rendererText.includes("from './uvPlaneDrawing.js'") || !rendererText.includes('drawUvPlanes(ctx, this.state')) {
+    addFailure(`UV atlas renderer should delegate plane drawing to helper: ${renderer}`);
   }
   [
     'drawUvPlanes',
@@ -1784,12 +1907,14 @@ function checkUvPlaneDrawingExtraction() {
 
 function checkUvCloudOverlayDrawingExtraction() {
   const manager = join(root, 'src', 'app', 'uvMapManager.js');
+  const renderer = join(root, 'src', 'app', 'uvAtlasLayerRenderer.js');
   const helper = join(root, 'src', 'app', 'uvCloudOverlayDrawing.js');
   const managerText = readFileSync(manager, 'utf8');
+  const rendererText = readFileSync(renderer, 'utf8');
   const helperText = readFileSync(helper, 'utf8');
 
-  if (!managerText.includes("from './uvCloudOverlayDrawing.js'") || !managerText.includes('drawUvCloudsOverlay(ctx, {')) {
-    addFailure(`UV map manager should delegate cloud overlay drawing to helper: ${manager}`);
+  if (!rendererText.includes("from './uvCloudOverlayDrawing.js'") || !rendererText.includes('drawUvCloudsOverlay(ctx, {')) {
+    addFailure(`UV atlas renderer should delegate cloud overlay drawing to helper: ${renderer}`);
   }
   [
     'drawUvCloudsOverlay',
@@ -1813,8 +1938,10 @@ function checkUvCloudOverlayDrawingExtraction() {
 
 function checkUvOverlayCellUtilityExtraction() {
   const manager = join(root, 'src', 'app', 'uvMapManager.js');
+  const renderer = join(root, 'src', 'app', 'uvAtlasLayerRenderer.js');
   const helper = join(root, 'src', 'app', 'uvOverlayCells.js');
   const managerText = readFileSync(manager, 'utf8');
+  const rendererText = readFileSync(renderer, 'utf8');
   const helperText = readFileSync(helper, 'utf8');
 
   [
@@ -1838,8 +1965,8 @@ function checkUvOverlayCellUtilityExtraction() {
   if (helperText.includes("from '../vendor/three.js'") || helperText.includes('MathUtils')) {
     addFailure(`UV overlay-cell helper must stay dependency-light and testable without Three.js: ${helper}`);
   }
-  if (!managerText.includes("from './uvOverlayCells.js'")) {
-    addFailure(`UV map manager must import overlay-cell utilities: ${manager}`);
+  if (!rendererText.includes("from './uvOverlayCells.js'")) {
+    addFailure(`UV atlas renderer must import overlay-cell utilities: ${renderer}`);
   }
   [
     'cell1.raRad ?? 0',
@@ -1850,8 +1977,8 @@ function checkUvOverlayCellUtilityExtraction() {
     'cell.tcMesh?.material?.opacity ?? 0.35',
     'cell.globeMesh.material?.opacity ?? 0.2'
   ].forEach(token => {
-    if (managerText.includes(token)) {
-      addFailure(`UV overlay drawing should use overlay-cell helpers instead of inline fallback token ${token}: ${manager}`);
+    if (managerText.includes(token) || rendererText.includes(token)) {
+      addFailure(`UV overlay drawing should use overlay-cell helpers instead of inline fallback token ${token}: ${manager} / ${renderer}`);
     }
   });
 }
@@ -2446,6 +2573,16 @@ async function checkBehavioralInvariants() {
     });
   });
   assertArrayEqual(afterPaintCalls, ['raf', 0, 'paint'], 'After-paint scheduling should yield through RAF then timeout');
+  const perfMeasureCount = getStoredPerformanceMeasures().length;
+  const perfToken = startPerformanceMeasure('verify.performance', { phase: 'start' });
+  const perfEntry = endPerformanceMeasure(perfToken, { phase: 'end' });
+  assertEqual(perfEntry.name, 'verify.performance', 'Performance helper should preserve measure name');
+  assert(perfEntry.durationMs >= 0, 'Performance helper should record non-negative durations');
+  assertEqual(
+    getStoredPerformanceMeasures().length,
+    perfMeasureCount + 1,
+    'Performance helper should store completed measures'
+  );
   assertEqual(parseFontPixelSize('300 72.5px Oswald'), 72.5, 'Text canvas helper should parse decimal font pixel sizes');
   const textCanvasCalls = [];
   const fakeTextCanvasDocument = {
@@ -3016,6 +3153,42 @@ async function checkBehavioralInvariants() {
   ]);
   assertEqual(rankMap.get('Near'), 1, 'STL system rank map should rank nearer systems first');
   assertEqual(rankMap.get('Far'), 2, 'STL system rank map should retain farther systems');
+  const planStars = [
+    {
+      starId: 'pa',
+      Common_name_of_the_star_system: 'Plan A',
+      Stellar_class: 'G2V',
+      distance: 1,
+      truePosition: { x: 0, y: 0, z: 0 }
+    },
+    {
+      starId: 'pb',
+      Common_name_of_the_star_system: 'Plan B',
+      Stellar_class: 'G2V',
+      distance: 20,
+      truePosition: { x: 20, y: 0, z: 0 }
+    }
+  ];
+  const { systemInfo: plannedSystems } = buildPrintableSystemInfo(
+    planStars,
+    buildSystemRankMap(planStars),
+    { mmPerLy: 5 }
+  );
+  assertEqual(plannedSystems.size, 2, 'STL planning should build printable system metadata');
+  const connectionPlan = buildPrintableConnectionPlan([
+    { starA: planStars[0], starB: planStars[1] },
+    { starA: planStars[1], starB: planStars[0] },
+    { starA: planStars[0], starB: { Common_name_of_the_star_system: 'Missing', starId: 'missing' } }
+  ], plannedSystems);
+  assertEqual(connectionPlan.candidateConnections.length, 1, 'STL planning should deduplicate printable connections');
+  assertEqual(connectionPlan.skippedConnections.length, 1, 'STL planning should report unexported connection endpoints');
+  assertArrayEqual(connectionPlan.candidateConnections[0].dirA, [1, 0, 0], 'STL planning should orient connection direction');
+  const forcedShortPlan = buildPrintableConnectionPlan([
+    { starA: planStars[0], starB: planStars[1] }
+  ], plannedSystems, { minTubeLength: 500 });
+  assertEqual(forcedShortPlan.candidateConnections.length, 0, 'STL planning should skip connections shorter than the printable threshold');
+  assert(forcedShortPlan.skippedConnections[0].reason.includes('500'), 'STL planning skip reason should include tube threshold');
+  assert(MIN_PRINTABLE_TUBE_LENGTH > 0, 'STL printable tube length threshold should be positive');
   const manifest = buildKitManifest({
     sourceStarCount: 2,
     inputConnectionCount: 1,
@@ -3304,6 +3477,10 @@ checkStlFacetGeometryExtraction();
 checkStlSocketPlanningExtraction();
 checkStlVectorMathExtraction();
 checkStlKitMetadataExtraction();
+checkStlKitPlanningExtraction();
+checkUvAtlasRendererExtraction();
+checkPreprocessedDataPath();
+checkPerformanceInstrumentation();
 checkUvMapFilterDecoupling();
 checkUvLayerSignatureExtraction();
 checkUvCanvasLayerUtilityExtraction();
