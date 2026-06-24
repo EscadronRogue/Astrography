@@ -144,6 +144,7 @@ function updateViewpointBanner(star) {
   const banner = document.getElementById('viewpoint-banner');
   const text = document.getElementById('viewpoint-banner-text');
   const distLabel = document.getElementById('distance-viewpoint-label');
+  document.body?.classList.toggle('viewpoint-active', Boolean(star));
   if (!banner || !text) return;
   if (!star) {
     banner.setAttribute('hidden', '');
@@ -217,7 +218,7 @@ export async function bootstrapApp() {
     globeMap = new MapManager({ canvasId: 'legacySphereMap', mapType: 'Globe', state, scheduleMollweideUpdate, getEditManager: () => editManager });
     mollweideMap = new MapManager({ canvasId: 'legacyMollweideMap', mapType: 'Mollweide', state, scheduleMollweideUpdate, getEditManager: () => editManager });
     uvMap = new UVMapManager({ canvasId: 'uvMap', mapType: 'Equirectangular', state });
-    uvGlobeMap = new UVMapManager({ canvasId: 'sphereMap', mapType: 'UVGlobe', state });
+    uvGlobeMap = new UVMapManager({ canvasId: 'sphereMap', mapType: 'UVGlobe', state, atlasStore: uvMap.atlasStore });
     uvMap.setLegacySourceScene(globeMap.scene);
     uvGlobeMap.setLegacySourceScene(globeMap.scene);
     mapManagers.push(trueCoordinatesMap, globeMap, mollweideMap, uvMap, uvGlobeMap);

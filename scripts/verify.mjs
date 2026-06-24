@@ -1929,8 +1929,12 @@ function checkUvLayerSignatureExtraction() {
 function checkUvCanvasLayerUtilityExtraction() {
   const manager = join(root, 'src', 'app', 'uvMapManager.js');
   const helper = join(root, 'src', 'app', 'uvCanvasLayers.js');
+  const atlasStore = join(root, 'src', 'app', 'uvAtlasStore.js');
+  const createApp = join(root, 'src', 'app', 'createApp.js');
   const managerText = readFileSync(manager, 'utf8');
   const helperText = readFileSync(helper, 'utf8');
+  const atlasStoreText = readFileSync(atlasStore, 'utf8');
+  const createAppText = readFileSync(createApp, 'utf8');
 
   ['rgbaFromHex', 'createLayerCanvas'].forEach(token => {
     if (!helperText.includes(`export function ${token}`)) {
@@ -1948,6 +1952,20 @@ function checkUvCanvasLayerUtilityExtraction() {
   }
   if (!managerText.includes("from './uvCanvasLayers.js'")) {
     addFailure(`UV map manager must import canvas-layer utilities: ${manager}`);
+  }
+  if (!managerText.includes("from './uvAtlasStore.js'") || !managerText.includes('this.atlasStore =')) {
+    addFailure(`UV map manager must use the shared UV atlas store: ${manager}`);
+  }
+  ['createUvAtlasStore', 'layerSignatures', 'references', 'atlasTexture'].forEach(token => {
+    if (!atlasStoreText.includes(token)) {
+      addFailure(`Shared UV atlas store is missing token ${token}: ${atlasStore}`);
+    }
+  });
+  if (!managerText.includes('this.interactionSignature') || atlasStoreText.includes("interaction: ''")) {
+    addFailure('UV atlas signatures may be shared, but projection-specific interaction geometry signatures must stay per manager.');
+  }
+  if (!createAppText.includes('atlasStore: uvMap.atlasStore')) {
+    addFailure(`Primary UV map and globe should share one atlas store: ${createApp}`);
   }
   ['function rgbaFromHex', 'function clamp01', 'function createLayerCanvas', 'const _rgbaColor'].forEach(token => {
     if (managerText.includes(token)) {
@@ -2234,6 +2252,22 @@ function checkOverlayInstancing() {
       addFailure(`Density overlay must not rebuild per-cell adjacency line geometry (${token}): ${densityFile}`);
     }
   });
+  const isolationFile = join(root, 'src', 'features', 'isolation', 'isolationOverlay.js');
+  const isolationText = readFileSync(isolationFile, 'utf8');
+  ['globeLineLayer', 'mollweideLineLayer', 'replaceLineGeometry'].forEach(token => {
+    if (!isolationText.includes(token)) {
+      addFailure(`Isolation overlay should use merged line layers (${token}): ${isolationFile}`);
+    }
+  });
+  ['new THREE.Line(', 'lineM.geometry.setAttribute', 'line.geometry.setAttribute'].forEach(token => {
+    if (isolationText.includes(token)) {
+      addFailure(`Isolation overlay should not rebuild per-edge line objects or geometry (${token}): ${isolationFile}`);
+    }
+  });
+  const lineEditor = join(root, 'src', 'features', 'editing', 'lineEditor.js');
+  if (!readFileSync(lineEditor, 'utf8').includes('manager.isolationOverlay?.mollweideLineLayer')) {
+    addFailure(`Line editor should register the merged isolation line layer: ${lineEditor}`);
+  }
 
   [
     join(root, 'src', 'features', 'filters', 'state', 'filterOverlayState.js'),
@@ -2283,10 +2317,42 @@ function checkRuntimeDataValidation() {
 }
 
 function checkAuditQuickFixes() {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const densityLegendCount = (html.match(/<legend class="collapsible" aria-expanded="false">Density<\/legend>/g) || []).length;
+  if (densityLegendCount !== 1 || !html.includes('>Isolation</legend>')) {
+    addFailure('Sidebar should expose one consolidated Density fieldset plus a separate Isolation fieldset.');
+  }
+  [
+    'src/main.js',
+    'src/app/createApp.js',
+    'src/app/mapManager.js',
+    'src/app/uvMapManager.js',
+    'src/features/filters/pipeline/filterPipeline.js'
+  ].forEach(path => {
+    if (!html.includes(`<link rel="modulepreload" href="${path}" />`)) {
+      addFailure(`HTML should modulepreload startup module: ${path}`);
+    }
+  });
+  const responsiveCss = readFileSync(join(root, 'styles', 'responsive.css'), 'utf8');
+  ['width: 220px', 'font-size: 36px', 'fieldset {\r\n    padding:12px'].forEach(token => {
+    if (responsiveCss.includes(token)) {
+      addFailure(`Responsive CSS should not keep stale theme-overridden mobile token: ${token}`);
+    }
+  });
+
   const tooltipFile = join(root, 'src', 'render', 'interactions', 'tooltips.js');
   const tooltipText = readFileSync(tooltipFile, 'utf8');
   if (!tooltipText.includes('star.constellation || star.Constellation')) {
     addFailure(`Tooltip constellation display should support normalized lowercase constellation data: ${tooltipFile}`);
+  }
+  const createAppText = readFileSync(join(root, 'src', 'app', 'createApp.js'), 'utf8');
+  const themeText = readFileSync(join(root, 'styles', 'theme.css'), 'utf8');
+  if (
+    !createAppText.includes("classList.toggle('viewpoint-active'") ||
+    !themeText.includes('body.viewpoint-active .maps-section') ||
+    !themeText.includes('#viewpoint-banner[hidden]')
+  ) {
+    addFailure('Visible viewpoint banner should reserve map content space instead of covering the first map heading.');
   }
 
   const stlExporter = join(root, 'src', 'features', 'export', 'stlExporter.js');

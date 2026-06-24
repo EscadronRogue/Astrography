@@ -1,7 +1,7 @@
 // Isolation overlay implementation migrated from the legacy isolation filter module.
 // This module implements the Isolation Filter using a uniform grid (formerly the low density filter).
 import * as THREE from '../../vendor/three.js';
-import { getDoubleSidedLabelMaterial, getBlueColor, lightenColor } from '../density/densityColorScale.js';
+import { lightenColor } from '../density/densityColorScale.js';
 import { radToSphere, getGreatCirclePoints, cachedRadToMollweide, getMollweideLambda0, splitMollweideWrap, vectorToRaDecRad, radToMollweide, vectorToRaDec } from '../../shared/geometryUtils.js';
 import { minimalRADifference } from '../../shared/geometryUtils.js';
 import { loadConstellationCenters, getConstellationCenters, loadConstellationBoundaries, getConstellationBoundaries, loadConstellationFullNames } from '../constellations/constellationRenderer.js';
@@ -33,6 +33,49 @@ function createGradientLineMaterial() {
   });
 }
 
+function createIsolationLineLayer() {
+  const line = new THREE.LineSegments(new THREE.BufferGeometry(), createGradientLineMaterial());
+  line.renderOrder = 2;
+  line.frustumCulled = false;
+  line.visible = false;
+  return line;
+}
+
+function replaceLineGeometry(line, positions, colors, alphas) {
+  if (!line) return;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas, 1));
+  line.geometry?.dispose?.();
+  line.geometry = geometry;
+  line.visible = positions.length > 0;
+}
+
+function createLineBuffers() {
+  return {
+    positions: [],
+    colors: [],
+    alphas: []
+  };
+}
+
+function pushInterpolatedLineVertex(buffers, point, cell1, cell2, t) {
+  const c1 = cell1.tcMesh.material.color;
+  const c2 = cell2.tcMesh.material.color;
+  buffers.positions.push(point.x, point.y, point.z);
+  buffers.colors.push(
+    THREE.MathUtils.lerp(c1.r, c2.r, t),
+    THREE.MathUtils.lerp(c1.g, c2.g, t),
+    THREE.MathUtils.lerp(c1.b, c2.b, t)
+  );
+  buffers.alphas.push(THREE.MathUtils.lerp(
+    cell1.tcMesh.material.opacity,
+    cell2.tcMesh.material.opacity,
+    t
+  ));
+}
+
 // IsolationGridOverlay encapsulates the uniform grid logic for the Isolation Filter.
 class IsolationGridOverlay {
   /**
@@ -53,6 +96,8 @@ class IsolationGridOverlay {
     this.revision = 0;
     this.tcCellLayer = null;
     this.mollweideCellLayer = null;
+    this.globeLineLayer = null;
+    this.mollweideLineLayer = null;
   }
 
   createGrid(stars) {
@@ -145,26 +190,26 @@ class IsolationGridOverlay {
     });
     populateCellDistanceCaches(this.cubesData, this.getExtendedStars(stars));
     this.computeAdjacentLines();
+    this.globeLineLayer = createIsolationLineLayer();
+    this.mollweideLineLayer = createIsolationLineLayer();
   }
 
   getSceneObjects() {
     return {
       tc: this.tcCellLayer ? [this.tcCellLayer.mesh] : [],
-      globe: this.adjacentLines.map(obj => obj.line),
+      globe: this.globeLineLayer ? [this.globeLineLayer] : [],
       moll: [
         ...(this.mollweideCellLayer ? [this.mollweideCellLayer.mesh] : []),
-        ...this.adjacentLines.map(obj => obj.lineM)
-      ]
+        ...(this.mollweideLineLayer ? [this.mollweideLineLayer] : [])
+      ].filter(Boolean)
     };
   }
 
   dispose() {
     this.tcCellLayer?.dispose();
     this.mollweideCellLayer?.dispose();
-    this.adjacentLines.forEach(obj => {
-      disposeObject3D(obj.line);
-      disposeObject3D(obj.lineM);
-    });
+    disposeObject3D(this.globeLineLayer);
+    disposeObject3D(this.mollweideLineLayer);
     disposeObject3D(this.regionLabelsGroupTC);
     disposeObject3D(this.regionLabelsGroupGlobe);
     disposeObject3D(this.regionLabelsGroupMoll);
@@ -200,67 +245,58 @@ class IsolationGridOverlay {
         const neighborKey = `${cell.grid.ix + dir.dx},${cell.grid.iy + dir.dy},${cell.grid.iz + dir.dz}`;
         if (cellMap.has(neighborKey)) {
           const neighbor = cellMap.get(neighborKey);
-          const points = getGreatCirclePoints(cell.globeMesh.position, neighbor.globeMesh.position, 100, 16);
-          const positions = [];
-          const colors = [];
-          const alphas = [];
-          const mollPts = getGreatCirclePoints(cell.globeMesh.position,
-            neighbor.globeMesh.position, 100, 16).map(v => {
-              const { ra, dec } = vectorToRaDecRad(v, 100);
-              return radToMollweide(ra, dec, 100, getMollweideLambda0());
-            });
-          const pointsM = [];
-          const alphasM = [];
-          for (let m = 0; m < mollPts.length - 1; m++) {
-            const segsM = splitMollweideWrap(mollPts[m], mollPts[m + 1]);
-            segsM.forEach(([s,e]) => { pointsM.push(s, e); });
-          }
-          const c1 = cell.tcMesh.material.color; // use cube color
-          const c2 = neighbor.tcMesh.material.color;
-          const colorsM = [];
-          for (let i = 0; i < pointsM.length; i++) {
-            const t = i / (pointsM.length - 1);
-            colorsM.push(
-              THREE.MathUtils.lerp(c1.r, c2.r, t),
-              THREE.MathUtils.lerp(c1.g, c2.g, t),
-              THREE.MathUtils.lerp(c1.b, c2.b, t)
-            );
-            alphasM.push(
-              THREE.MathUtils.lerp(cell.tcMesh.material.opacity, neighbor.tcMesh.material.opacity, t)
-            );
-          }
-          const geomM = new THREE.BufferGeometry();
-          geomM.setAttribute('position', new THREE.Float32BufferAttribute(pointsM.flatMap(p=>[p.x,p.y,p.z]), 3));
-          geomM.setAttribute('color', new THREE.Float32BufferAttribute(colorsM,3));
-          geomM.setAttribute('alpha', new THREE.Float32BufferAttribute(alphasM,1));
-          for (let i = 0; i < points.length; i++) {
-            positions.push(points[i].x, points[i].y, points[i].z);
-            const t = i / (points.length - 1);
-            colors.push(
-              THREE.MathUtils.lerp(c1.r, c2.r, t),
-              THREE.MathUtils.lerp(c1.g, c2.g, t),
-              THREE.MathUtils.lerp(c1.b, c2.b, t)
-            );
-            alphas.push(
-              THREE.MathUtils.lerp(cell.tcMesh.material.opacity, neighbor.tcMesh.material.opacity, t)
-            );
-          }
-          const geom = new THREE.BufferGeometry();
-          geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-          geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-          geom.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas,1));
-
-          const mat = createGradientLineMaterial();
-          const line = new THREE.Line(geom, mat);
-          line.renderOrder = 2;
-
-          const mollMat = createGradientLineMaterial();
-          const lineM = new THREE.LineSegments(geomM, mollMat);
-          lineM.renderOrder = 2;
-          this.adjacentLines.push({ line, lineM, cell1: cell, cell2: neighbor });
+          this.adjacentLines.push({ cell1: cell, cell2: neighbor });
         }
       });
     });
+  }
+
+  appendGlobeEdge(buffers, cell1, cell2) {
+    const points = getGreatCirclePoints(cell1.globeMesh.position, cell2.globeMesh.position, 100, 16);
+    const lastIndex = points.length - 1;
+    for (let index = 0; index < lastIndex; index += 1) {
+      pushInterpolatedLineVertex(buffers, points[index], cell1, cell2, index / lastIndex);
+      pushInterpolatedLineVertex(buffers, points[index + 1], cell1, cell2, (index + 1) / lastIndex);
+    }
+  }
+
+  appendMollweideEdge(buffers, cell1, cell2, lambda0 = getMollweideLambda0()) {
+    const mollweidePoints = getGreatCirclePoints(cell1.globeMesh.position, cell2.globeMesh.position, 100, 16)
+      .map(point => {
+        const { ra, dec } = vectorToRaDecRad(point, 100);
+        return radToMollweide(ra, dec, 100, lambda0);
+      });
+    const lastIndex = mollweidePoints.length - 1;
+    for (let index = 0; index < lastIndex; index += 1) {
+      const tStart = index / lastIndex;
+      const tEnd = (index + 1) / lastIndex;
+      splitMollweideWrap(mollweidePoints[index], mollweidePoints[index + 1])
+        .forEach(([start, end]) => {
+          pushInterpolatedLineVertex(buffers, start, cell1, cell2, tStart);
+          pushInterpolatedLineVertex(buffers, end, cell1, cell2, tEnd);
+        });
+    }
+  }
+
+  rebuildLineLayers(lambda0 = getMollweideLambda0()) {
+    const globeBuffers = createLineBuffers();
+    const mollweideBuffers = createLineBuffers();
+    this.adjacentLines.forEach(({ cell1, cell2 }) => {
+      if (!cell1?.active || !cell2?.active) return;
+      this.appendGlobeEdge(globeBuffers, cell1, cell2);
+      this.appendMollweideEdge(mollweideBuffers, cell1, cell2, lambda0);
+    });
+    replaceLineGeometry(this.globeLineLayer, globeBuffers.positions, globeBuffers.colors, globeBuffers.alphas);
+    replaceLineGeometry(this.mollweideLineLayer, mollweideBuffers.positions, mollweideBuffers.colors, mollweideBuffers.alphas);
+  }
+
+  rebuildMollweideLineLayer(lambda0 = getMollweideLambda0()) {
+    const buffers = createLineBuffers();
+    this.adjacentLines.forEach(({ cell1, cell2 }) => {
+      if (!cell1?.active || !cell2?.active) return;
+      this.appendMollweideEdge(buffers, cell1, cell2, lambda0);
+    });
+    replaceLineGeometry(this.mollweideLineLayer, buffers.positions, buffers.colors, buffers.alphas);
   }
 
   // Updated update() method now accepts sceneTC, sceneGlobe, and sceneMoll to re-add new meshes.
@@ -319,73 +355,7 @@ class IsolationGridOverlay {
     this.tcCellLayer?.update(this.cubesData, cell => cell.tcMesh);
     this.mollweideCellLayer?.update(this.cubesData, cell => cell.mollweideMesh);
 
-    // Update the adjacent lines.
-    this.adjacentLines.forEach(obj => {
-      const { line, lineM, cell1, cell2 } = obj;
-      if (cell1.globeMesh.visible && cell2.globeMesh.visible) {
-        const points = getGreatCirclePoints(cell1.globeMesh.position, cell2.globeMesh.position, 100, 16);
-        const positions = [];
-        const colors = [];
-        const mollPoints = getGreatCirclePoints(cell1.globeMesh.position,
-          cell2.globeMesh.position, 100, 16).map(v => {
-            const { ra, dec } = vectorToRaDecRad(v, 100);
-            return radToMollweide(ra, dec, 100, getMollweideLambda0());
-          });
-        const ptsM = [];
-        for (let mi = 0; mi < mollPoints.length - 1; mi++) {
-          const segs = splitMollweideWrap(mollPoints[mi], mollPoints[mi + 1]);
-          segs.forEach(([s,e]) => { ptsM.push(s, e); });
-        }
-        const c1 = cell1.tcMesh.material.color;
-        const c2 = cell2.tcMesh.material.color;
-        const alphasLine = [];
-        for (let i = 0; i < points.length; i++) {
-          positions.push(points[i].x, points[i].y, points[i].z);
-          const t = i / (points.length - 1);
-          colors.push(
-            THREE.MathUtils.lerp(c1.r, c2.r, t),
-            THREE.MathUtils.lerp(c1.g, c2.g, t),
-            THREE.MathUtils.lerp(c1.b, c2.b, t)
-          );
-          alphasLine.push(
-            THREE.MathUtils.lerp(cell1.tcMesh.material.opacity, cell2.tcMesh.material.opacity, t)
-          );
-        }
-        line.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        line.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-        line.geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphasLine, 1));
-        line.geometry.attributes.position.needsUpdate = true;
-        line.geometry.attributes.color.needsUpdate = true;
-        line.geometry.attributes.alpha.needsUpdate = true;
-        const avgScale = (cell1.globeMesh.scale.x + cell2.globeMesh.scale.x) / 2;
-        line.material.linewidth = avgScale;
-        line.visible = true;
-        const flatPtsM = ptsM.flatMap(p=>[p.x,p.y,p.z]);
-        const colorsM = [];
-        const alphasLineM = [];
-        for (let mi = 0; mi < ptsM.length; mi++) {
-          const t = mi / (ptsM.length - 1);
-          colorsM.push(
-            THREE.MathUtils.lerp(c1.r, c2.r, t),
-            THREE.MathUtils.lerp(c1.g, c2.g, t),
-            THREE.MathUtils.lerp(c1.b, c2.b, t)
-          );
-          alphasLineM.push(
-            THREE.MathUtils.lerp(cell1.tcMesh.material.opacity, cell2.tcMesh.material.opacity, t)
-          );
-        }
-        lineM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(flatPtsM, 3));
-        lineM.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colorsM, 3));
-        lineM.geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphasLineM, 1));
-        lineM.geometry.attributes.position.needsUpdate = true;
-        lineM.geometry.attributes.color.needsUpdate = true;
-        lineM.geometry.attributes.alpha.needsUpdate = true;
-        lineM.visible = true;
-      } else {
-        line.visible = false;
-        lineM.visible = false;
-      }
-    });
+    this.rebuildLineLayers(getMollweideLambda0());
 
     // Re‑add the updated meshes to the scenes. Only the cubes are shown for
     // True Coordinates, while the Globe and Mollweide maps display just the
@@ -402,40 +372,7 @@ class IsolationGridOverlay {
         0
       );
     });
-    this.adjacentLines.forEach(obj => {
-      const gcPts = getGreatCirclePoints(obj.cell1.globeMesh.position,
-        obj.cell2.globeMesh.position, 100, 16).map(v => {
-          const { ra, dec } = vectorToRaDecRad(v, 100);
-          return radToMollweide(ra, dec, 100, lambda0);
-        });
-      const pts = [];
-      for (let i = 0; i < gcPts.length - 1; i++) {
-        const segs = splitMollweideWrap(gcPts[i], gcPts[i + 1]);
-        segs.forEach(([s,e]) => { pts.push(s, e); });
-      }
-      const flat = pts.flatMap(p=>[p.x,p.y,p.z]);
-      const c1 = obj.cell1.tcMesh.material.color;
-      const c2 = obj.cell2.tcMesh.material.color;
-      const cols = [];
-      const alphas = [];
-      for (let i = 0; i < pts.length; i++) {
-        const t = i / (pts.length - 1);
-        cols.push(
-          THREE.MathUtils.lerp(c1.r, c2.r, t),
-          THREE.MathUtils.lerp(c1.g, c2.g, t),
-          THREE.MathUtils.lerp(c1.b, c2.b, t)
-        );
-        alphas.push(
-          THREE.MathUtils.lerp(obj.cell1.tcMesh.material.opacity, obj.cell2.tcMesh.material.opacity, t)
-        );
-      }
-      obj.lineM.geometry.setAttribute('position', new THREE.Float32BufferAttribute(flat,3));
-      obj.lineM.geometry.setAttribute('color', new THREE.Float32BufferAttribute(cols,3));
-      obj.lineM.geometry.setAttribute('alpha', new THREE.Float32BufferAttribute(alphas,1));
-      obj.lineM.geometry.attributes.position.needsUpdate = true;
-      obj.lineM.geometry.attributes.color.needsUpdate = true;
-      obj.lineM.geometry.attributes.alpha.needsUpdate = true;
-    });
+    this.rebuildMollweideLineLayer(lambda0);
     this.mollweideCellLayer?.update(this.cubesData, cell => cell.mollweideMesh);
     this.revision += 1;
   }

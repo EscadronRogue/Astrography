@@ -823,7 +823,7 @@ fieldset.ag-hidden,
 /* ---------- Viewpoint banner ----------------------------------------- */
 #viewpoint-banner {
   position: fixed;
-  top: var(--header-height);
+  top: calc(var(--header-height) + 10px);
   left: 50%;
   z-index: 1100;
   display: flex;
@@ -841,6 +841,13 @@ fieldset.ag-hidden,
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 8px 18px;
+  max-width: min(520px, calc(100vw - 32px));
+}
+#viewpoint-banner[hidden] {
+  display: none;
+}
+body.viewpoint-active .maps-section {
+  padding-top: 88px;
 }
 #viewpoint-banner-reset {
   background: var(--accent);
@@ -951,6 +958,7 @@ fieldset.ag-hidden,
 @media (max-width: 800px) {
   .sidebar { width: 86vw; max-width: 340px; }
   .maps-section { padding: 16px 14px 40px; }
+  body.viewpoint-active .maps-section { padding-top: 76px; }
   .map-container { padding: 16px 14px 14px; }
   .ag-header-tools { gap: 6px; }
   #app-notification-region {

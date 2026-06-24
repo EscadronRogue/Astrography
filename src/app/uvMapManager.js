@@ -43,7 +43,7 @@ import {
   buildStarLayerSignature,
   buildStarTopologySignature
 } from './uvLayerSignatures.js';
-import { clamp01, createLayerCanvas, rgbaFromHex } from './uvCanvasLayers.js';
+import { clamp01, rgbaFromHex } from './uvCanvasLayers.js';
 import { createUvSurface } from './uvSurfaceFactory.js';
 import { drawUvPlanes } from './uvPlaneDrawing.js';
 import { drawUvCloudsOverlay } from './uvCloudOverlayDrawing.js';
@@ -57,10 +57,10 @@ import {
 } from './uvOverlayCells.js';
 import { getStarDisplayOpacity } from '../features/filters/logic/displayMetrics.js';
 import {
-  configureRuntimeAtlasDimensions,
   getAtlasHeight,
   getAtlasWidth
 } from './uvAtlasConfig.js';
+import { createUvAtlasStore } from './uvAtlasStore.js';
 
 function createHiddenPointsMaterial() {
   return new THREE.PointsMaterial({
@@ -73,7 +73,7 @@ function createHiddenPointsMaterial() {
 }
 
 export class UVMapManager {
-  constructor({ canvasId, mapType, state }) {
+  constructor({ canvasId, mapType, state, atlasStore = null }) {
     this.canvas = document.getElementById(canvasId);
     this.mapType = mapType;
     this.state = state;
@@ -98,31 +98,22 @@ export class UVMapManager {
     this.sourceGlobeScene = null;
     this.updateToken = 0;
 
-    const atlasDimensions = configureRuntimeAtlasDimensions({
+    this.atlasStore = (atlasStore || createUvAtlasStore({
       maxTextureSize: this.renderer.capabilities?.maxTextureSize
-    });
-    this.atlasCanvas = document.createElement('canvas');
-    this.atlasCanvas.width = atlasDimensions.width;
-    this.atlasCanvas.height = atlasDimensions.height;
-    this.atlasCtx = this.atlasCanvas.getContext('2d');
-    this.atlasTexture = new THREE.CanvasTexture(this.atlasCanvas);
-    this.atlasTexture.wrapS = THREE.RepeatWrapping;
-    this.atlasTexture.wrapT = THREE.ClampToEdgeWrapping;
-    this.atlasTexture.minFilter = THREE.LinearFilter;
-    this.atlasTexture.magFilter = THREE.LinearFilter;
-    this.atlasTexture.generateMipmaps = true;
-    this.atlasTexture.needsUpdate = true;
-    this.baseLayer = createLayerCanvas();
-    this.featureLayer = createLayerCanvas();
-    this.starLayer = createLayerCanvas();
-    this.labelLayer = createLayerCanvas();
-    this.layerSignatures = {
-      features: '',
-      stars: '',
-      labels: '',
-      interaction: ''
-    };
-    this.redrawBaseLayer();
+    })).acquire();
+    this.atlasCanvas = this.atlasStore.atlasCanvas;
+    this.atlasCtx = this.atlasStore.atlasCtx;
+    this.atlasTexture = this.atlasStore.atlasTexture;
+    this.baseLayer = this.atlasStore.baseLayer;
+    this.featureLayer = this.atlasStore.featureLayer;
+    this.starLayer = this.atlasStore.starLayer;
+    this.labelLayer = this.atlasStore.labelLayer;
+    this.layerSignatures = this.atlasStore.layerSignatures;
+    this.interactionSignature = '';
+    if (!this.atlasStore.isBaseLayerReady) {
+      this.redrawBaseLayer();
+      this.atlasStore.isBaseLayerReady = true;
+    }
 
     const surface = createUvSurface({
       mapType,
@@ -308,9 +299,9 @@ export class UVMapManager {
       this.composeAtlas();
     }
 
-    if (this.layerSignatures.interaction !== interactionSignature) {
+    if (this.interactionSignature !== interactionSignature) {
       this.updateInteractionGeometry(safeStars);
-      this.layerSignatures.interaction = interactionSignature;
+      this.interactionSignature = interactionSignature;
     }
     requestRenderIfAvailable(this);
   }
@@ -331,7 +322,7 @@ export class UVMapManager {
     this.layerSignatures.features = buildFeatureLayerSignature(safeConnections, signatureContext);
     this.layerSignatures.stars = buildStarLayerSignature(safeStars, signatureContext);
     this.layerSignatures.labels = buildLabelLayerSignature(safeStars, signatureContext);
-    this.layerSignatures.interaction = buildStarTopologySignature(safeStars, signatureContext);
+    this.interactionSignature = buildStarTopologySignature(safeStars, signatureContext);
   }
 
   drawGraticule(ctx) {
@@ -732,10 +723,9 @@ export class UVMapManager {
     this.labelManager?.removeAllLabels?.();
     this.webglContextDisposer?.();
 
-    if (this.atlasTexture) {
-      this.atlasTexture.dispose();
-      this.atlasTexture = null;
-    }
+    this.atlasStore?.release?.();
+    this.atlasStore = null;
+    this.atlasTexture = null;
 
     this.scene.children.slice().forEach(child => {
       this.scene.remove(child);

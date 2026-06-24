@@ -57,8 +57,12 @@ export function registerEditableLines(manager) {
   if (manager.constellationLinesMoll && Array.isArray(manager.constellationLinesMoll)) {
     manager.constellationLinesMoll.forEach(line => manager.editableLines.push(line));
   }
-  if (manager.isolationOverlay && manager.isolationOverlay.adjacentLines) {
-    manager.isolationOverlay.adjacentLines.forEach(obj => manager.editableLines.push(obj.lineM));
+  if (manager.isolationOverlay?.mollweideLineLayer) {
+    manager.editableLines.push(manager.isolationOverlay.mollweideLineLayer);
+  } else if (manager.isolationOverlay && manager.isolationOverlay.adjacentLines) {
+    manager.isolationOverlay.adjacentLines.forEach(obj => {
+      if (obj.lineM) manager.editableLines.push(obj.lineM);
+    });
   }
   manager.editableLines.forEach(line => applyStoredLineEdits(manager, line));
 }

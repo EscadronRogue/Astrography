@@ -5,29 +5,11 @@
   }
 }
 @media (max-width:800px) {
-  .sidebar {
-    width: 220px;
-  }
   .map-container {
     max-width: 100%;
   }
   .map-container canvas {
     height: clamp(360px, 68svh, 640px);
-  }
-  header h1 {
-    font-size: 20px;
-  }
-  #menu-toggle {
-    font-size: 36px;
-  }
-  .sidebar h2 {
-    font-size: 20px;
-  }
-  .sidebar fieldset {
-    padding:12px;
-  }
-  .filter-item label {
-    font-size:13px;
   }
   #tooltip {
     font-size:13px;

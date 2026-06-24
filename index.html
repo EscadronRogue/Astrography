@@ -15,6 +15,11 @@
   <link rel="stylesheet" href="styles/overlays.css?v=1776519673389" />
   <link rel="stylesheet" href="styles/responsive.css?v=1776519673389" />
   <link rel="stylesheet" href="styles/theme.css?v=1776519673389" />
+  <link rel="modulepreload" href="src/main.js" />
+  <link rel="modulepreload" href="src/app/createApp.js" />
+  <link rel="modulepreload" href="src/app/mapManager.js" />
+  <link rel="modulepreload" href="src/app/uvMapManager.js" />
+  <link rel="modulepreload" href="src/features/filters/pipeline/filterPipeline.js" />
   <script>
     document.documentElement.setAttribute("data-theme", "observatory");
   </script>
@@ -138,6 +143,59 @@
               <input type="number" id="density-number" name="density" min="1" max="20" value="10" disabled />
               <span id="density-value">10</span>
             </div>
+            <div class="filter-subhead">Advanced</div>
+            <div class="filter-item">
+              <label>Ignore closest stars: <span id="density-tolerance-value">0</span></label>
+              <input type="range" id="density-tolerance-slider" name="density-tolerance" min="0" max="10" value="0" disabled />
+            </div>
+            <div class="filter-item">
+              <label for="density-bottom-slider">Bottom Cells %:</label>
+              <input type="range" id="density-bottom-slider" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
+              <input type="number" id="density-bottom-number" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
+              <span id="density-bottom-value">10</span>%
+            </div>
+            <div class="filter-item">
+              <label for="density-top-slider">Top Cells %:</label>
+              <input type="range" id="density-top-slider" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
+              <input type="number" id="density-top-number" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
+              <span id="density-top-value">10</span>%
+            </div>
+            <div class="filter-item">
+              <label for="density-grid-slider">Grid Subdivision:</label>
+              <input type="range" id="density-grid-slider" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
+              <input type="number" id="density-grid-number" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
+            </div>
+            <div class="filter-item">
+              <label for="density-opacity-slider">Overlay Opacity:</label>
+              <input type="range" id="density-opacity-slider" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
+              <input type="number" id="density-opacity-number" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
+              <span id="density-opacity-value">100</span>%
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend class="collapsible" aria-expanded="false">Isolation</legend>
+          <div class="filter-content">
+            <div class="filter-item">
+              <input type="checkbox" id="enable-isolation-filter" name="enable-isolation-filter" />
+              <label for="enable-isolation-filter">Enable Isolation Filter</label>
+            </div>
+            <div class="filter-item">
+              <label for="isolation-slider">Isolation Distance (LY):</label>
+              <input type="range" id="isolation-slider" name="isolation" min="1" max="20" value="5" disabled />
+              <input type="number" id="isolation-number" name="isolation" min="1" max="20" value="5" disabled />
+              <span id="isolation-value">5</span>
+            </div>
+            <div class="filter-item">
+              <label>Ignore closest stars: <span id="isolation-tolerance-value">0</span></label>
+              <input type="range" id="isolation-tolerance-slider" name="isolation-tolerance" min="0" max="10" value="0" disabled />
+            </div>
+            <div class="filter-item">
+              <label for="isolation-grid-slider">Grid Subdivision:</label>
+              <input type="range" id="isolation-grid-slider" name="isolation-grid-size" min="-10" max="10" step="1" value="1" disabled />
+              <input type="number" id="isolation-grid-number" name="isolation-grid-size" min="-10" max="10" step="1" value="1" disabled />
+            </div>
           </div>
         </fieldset>
 
@@ -256,60 +314,6 @@
               <label for="connection-label-size-slider">Label Size:</label>
               <input type="range" id="connection-label-size-slider" name="connection-label-size" min="0.5" max="5" value="1" step="0.1" disabled />
               <input type="number" id="connection-label-size-number" name="connection-label-size" min="0.5" max="5" value="1" step="0.1" disabled />
-            </div>
-          </div>
-        </fieldset>
-
-        <fieldset>
-          <legend class="collapsible" aria-expanded="false">Density</legend>
-          <div class="filter-content">
-            <div class="filter-subhead">Density</div>
-            <div class="filter-item">
-              <label>Ignore closest stars: <span id="density-tolerance-value">0</span></label>
-              <input type="range" id="density-tolerance-slider" name="density-tolerance" min="0" max="10" value="0" disabled />
-            </div>
-            <div class="filter-item">
-              <label for="density-bottom-slider">Bottom Cells %:</label>
-              <input type="range" id="density-bottom-slider" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
-              <input type="number" id="density-bottom-number" name="density-bottom-percent" min="1" max="50" value="10" step="1" disabled />
-              <span id="density-bottom-value">10</span>%
-            </div>
-            <div class="filter-item">
-              <label for="density-top-slider">Top Cells %:</label>
-              <input type="range" id="density-top-slider" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
-              <input type="number" id="density-top-number" name="density-top-percent" min="1" max="50" value="10" step="1" disabled />
-              <span id="density-top-value">10</span>%
-            </div>
-            <div class="filter-item">
-              <label for="density-grid-slider">Grid Subdivision:</label>
-              <input type="range" id="density-grid-slider" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
-              <input type="number" id="density-grid-number" name="density-grid-size" min="-10" max="10" step="1" value="1" disabled />
-            </div>
-            <div class="filter-item">
-              <label for="density-opacity-slider">Overlay Opacity:</label>
-              <input type="range" id="density-opacity-slider" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
-              <input type="number" id="density-opacity-number" name="density-opacity" min="0" max="100" value="100" step="1" disabled />
-              <span id="density-opacity-value">100</span>%
-            </div>
-            <div class="filter-subhead">Isolation</div>
-            <div class="filter-item">
-              <input type="checkbox" id="enable-isolation-filter" name="enable-isolation-filter" />
-              <label for="enable-isolation-filter">Enable Isolation Filter</label>
-            </div>
-            <div class="filter-item">
-              <label for="isolation-slider">Isolation Distance (LY):</label>
-              <input type="range" id="isolation-slider" name="isolation" min="1" max="20" value="5" disabled />
-              <input type="number" id="isolation-number" name="isolation" min="1" max="20" value="5" disabled />
-              <span id="isolation-value">5</span>
-            </div>
-            <div class="filter-item">
-              <label>Ignore closest stars: <span id="isolation-tolerance-value">0</span></label>
-              <input type="range" id="isolation-tolerance-slider" name="isolation-tolerance" min="0" max="10" value="0" disabled />
-            </div>
-            <div class="filter-item">
-              <label for="isolation-grid-slider">Grid Subdivision:</label>
-              <input type="range" id="isolation-grid-slider" name="isolation-grid-size" min="-10" max="10" step="1" value="1" disabled />
-              <input type="number" id="isolation-grid-number" name="isolation-grid-size" min="-10" max="10" step="1" value="1" disabled />
             </div>
           </div>
         </fieldset>
